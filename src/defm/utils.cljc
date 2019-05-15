@@ -1,7 +1,8 @@
 (ns defm.utils
   (:require
    [clojure.math.combinatorics :as combo]
-   [clojure.spec-alpha2 :as s]))
+   [clojure.spec-alpha2 :as s])
+  (:refer-clojure :exclude [rest]))
 
 (def dispatch-tag "__dispatch__")
 
@@ -25,3 +26,24 @@
 (defn init
   [x]
   [#{x}])
+
+(defn rest
+  [x]
+  (if (errored? (set (apply concat x)))
+    x
+    (clojure.core/rest x)))
+
+(comment
+
+  (require '[defm.macros :refer [defm]])
+  (require '[defm.utils :as defm])
+  (require '[clojure.spec-alpha2 :as s])
+
+  (s/def ::n number?)
+
+  (defm m-inc [::n] (inc n))
+  (defm m-sq {x ::n} (* x x))
+
+  (map (comp ffirst defm/rest m-sq defm/rest m-inc defm/init) (range 1 5))
+
+  )
