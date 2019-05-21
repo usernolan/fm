@@ -1,8 +1,7 @@
 (ns defm.utils
   (:require
    [clojure.math.combinatorics :as combo]
-   [clojure.spec-alpha2 :as s])
-  (:refer-clojure :exclude [rest]))
+   [clojure.spec-alpha2 :as s]))
 
 (def dispatch-tag "__dispatch__")
 
@@ -17,21 +16,18 @@
               (or (contains? % :clojure.spec.alpha/problems)
                   (contains? % :defm/anomaly))) x))
 
+(defn wrap
+  [f]
+  (fn [x]
+    (if (errored? (set (apply concat x)))
+      x
+      (f x))))
+
 (defn group-by-conform
   [spec x]
   (->> (s/conform spec x)
        (group-by first)
        (into {} (map (fn [[k v]] [k (mapv second v)])))))
-
-(defn init
-  [x]
-  [#{x}])
-
-(defn rest
-  [x]
-  (if (errored? (set (apply concat x)))
-    x
-    (clojure.core/rest x)))
 
 (comment
 
