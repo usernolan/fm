@@ -1,56 +1,41 @@
 (ns defm.macros
   (:require
-   [clojure.spec-alpha2 :as s]
-   [defm.utils :as utils]))
+   [clojure.spec-alpha2 :as s]))
 
 (defmacro defm
   "The `defm` macro."
-  [fname in-specs out-specs & body]
-  (let [in-dispatch (keyword (str *ns*) (str fname utils/dispatch-tag "in__"))
-        in-syms (if (map? in-specs) (map first in-specs) (map symbol in-specs))
-        in-specs (if (map? in-specs) (vals in-specs) in-specs)
-        out-dispatch (keyword (str *ns*) (str fname utils/dispatch-tag "out__"))
-        out-syms (if (map? out-specs) (map first out-specs) (map symbol out-specs))
-        out-specs (if (map? out-specs) (vals out-specs) out-specs)]
-    `(do (s/def ~in-dispatch (s/* (s/or ~@(interleave in-syms in-specs)
-                                        :clojure.spec.alpha/problems :clojure.spec.alpha/problemed
-                                        :defm/anomalies :defm/anomalied
-                                        nil identity)))
-         (s/def ~out-dispatch (s/or ~@(interleave out-syms out-specs)
-                                    :clojure.spec.alpha/problems :clojure.spec.alpha/problemed
-                                    :defm/anomalies :defm/anomalied
-                                    nil identity))
+  [fname args-schema return-spec & body]
+  (let [qualified-fname (symbol (str *ns*) (str fname))
+        schema-name (keyword (str *ns*) (str fname "__schema__"))]
+    `(do (s/def ~schema-name (s/schema ~args-schema))
          (defn ~(symbol (name fname))
-           [~@(when (empty? in-specs) '(&)) in#]
-           (let [m# (utils/group-by-conform
-                     ~in-dispatch
-                     (seq (cond (map? in#)  (apply concat (vals in#))
-                                (coll? in#) in#
-                                :else       [in#])))
-                 mf# (or ~(:defm/merge (meta in-specs))
-                         (partial utils/deep-merge-with conj))]
-             (if (utils/errored? m#)
-               m#
+           [args#]
+           (if (s/valid? (s/select ~schema-name [~'*]) args#)
+             (let [{:keys ~args-schema} args#]
                (try
-                 (let [missing# (filter #(not (contains? m# %)) '(~@in-syms))]
-                   (if (empty? missing#)
-                     (map (comp (partial s/conform ~out-dispatch)
-                                (fn [{:syms ~(vec in-syms) :as args#}]
-                                  (try
-                                    ~@body
-                                    (catch Exception e#
-                                      {:defm/fname ~(keyword (str *ns*) (str fname))
-                                       :defm/args args#
-                                       :defm/anomaly e#}))))
-                          (utils/cartesian-product (dissoc m# nil)))
-                     (let [missing# (select-keys '~(zipmap in-syms in-specs) missing#)
-                           sp# (s/spec* (cons `s/or (interleave (keys missing#) (vals missing#))))
-                           out# [:clojure.spec.alpha/problems
-                                 (mapv (partial s/explain-data sp#) (get m# nil))]]
-                       (seq [(mf# m# out#)]))))
+                 (let [ret# (do ~@body)]
+                   (if (s/valid? ~return-spec ret#)
+                     (assoc args# ~return-spec ret#)
+                     #:defm{:fname '~qualified-fname
+                            :args args#
+                            :anomaly (s/explain-data ~return-spec ret#)}))
                  (catch Exception e#
-                   (let [out# [:defm/anomalies
-                               [{:defm/fname ~(keyword (str *ns*) (str fname))
-                                 :defm/args in#
-                                 :defm/anomaly e#}]]
-                     (seq [(mf# m# out#)]))))))))))
+                   #:defm{:fname '~qualified-fname
+                          :args args#
+                          :anomaly e#})))
+             #:defm{:fname '~qualified-fname
+                    :args args#
+                    :anomaly (s/explain-data (s/select ~schema-name [~'*]) args#)})))))
+
+
+(comment
+  ;; worth doing schema implicitly?
+  ;; make work with more flexible schema
+  ;; merge fn
+  (defm
+    ^{:defm/merge (fn [] nil)}
+    [::si1 ::si2]
+    ::so
+    ;; (si1 si2 => so)
+    )
+  )
