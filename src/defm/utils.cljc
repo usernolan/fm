@@ -10,24 +10,36 @@
   (map (partial zipmap (keys m))
        (apply combo/cartesian-product (vals m))))
 
+(s/def :clojure.spec.alpha/problemed (s/and map? #(contains? % :clojure.spec.alpha/problems)))
+(s/def :defm/anomalied (s/and map? #(contains? % :defm/anomalies)))
+
 (defn errored?
-  [x]
-  (some #(and (or (map? %) (set? %))
-              (or (contains? % :clojure.spec.alpha/problems)
-                  (contains? % :defm/anomaly))) x))
+  [m]
+  (and (or (map? m) (set? m))
+       (or (contains? m :clojure.spec.alpha/problems)
+           (contains? m :defm/anomalies))))
 
 (defn wrap
   [f]
-  (fn [x]
-    (if (errored? (set (apply concat x)))
-      x
-      (f x))))
+  (fn [m & rest]
+    (if (errored? m)
+      m
+      (apply f m rest))))
 
 (defn group-by-conform
   [spec x]
   (->> (s/conform spec x)
        (group-by first)
        (into {} (map (fn [[k v]] [k (mapv second v)])))))
+
+(defn deep-merge-with
+  [f & ms]
+  (apply merge-with
+         (fn [a b]
+           (if (and (map? a) (map? b))
+             (deep-merge-with f a b)
+             (f a b)))
+         ms))
 
 (comment
 
