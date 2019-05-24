@@ -5,19 +5,22 @@
 
 (defmacro defm
   "The `defm` macro."
-  [fname args-schema ret-spec & body]
+  [fname args-schema ret-schema & body]
   (let [qualified-fname-sym (symbol (str *ns*) (str fname))
         f (or (:defm/f (meta args-schema)) `merge)
         comment (:defm/comment (meta args-schema))
-        doc-string (apply str (let [x [args-schema " -> " ret-spec]]
-                                (if comment (concat x ["\n\n" comment]) x)))
+        doc-string (apply str [args-schema " -> " ret-schema
+                               (when comment (str "\n\n" comment))])
         args-ks (vec (utils/schema-keys args-schema))
-        metadata (let [x {:defm/args `(s/schema ~args-schema)
-                          :defm/ret ret-spec
-                          :defm/f f
-                          :doc doc-string}]
-                   (if comment (conj x {:defm/comment comment}) x))]
-    `(let [args-select# (s/select ~(:defm/args metadata) ~args-ks)]
+        ret-ks (vec (utils/schema-keys ret-schema))
+        res (or (:defm/res (meta ret-schema)) (first ret-ks))
+        metadata {:defm/args `(s/schema ~args-schema)
+                  :defm/ret `(s/schema ~ret-schema)
+                  :defm/res res
+                  :defm/f f
+                  :doc doc-string}]
+    `(let [args-select# (s/select ~(:defm/args metadata) ~args-ks)
+           ret-select# (s/select ~(:defm/ret metadata) ~ret-ks)]
        (defn ~(symbol (name fname))
          ~metadata
          [{:keys ~args-ks :as args#}]
@@ -25,12 +28,18 @@
            args#
            (if (s/valid? args-select# args#)
              (try
-               (let [ret# (do ~@body)]
-                 (if (s/valid? ~ret-spec ret#)
-                   (~f args# {~ret-spec ret#})
+               (let [res# (do ~@body)]
+                 (if (s/valid? ~res res#)
+                   (let [ret# (~f args# {~res res#})]
+                     (if (s/valid? ret-select# ret#)
+                       ret#
+                       #:defm{:fname '~qualified-fname-sym
+                              :args args#
+                              :res {~res res#}
+                              :anomaly (s/explain-data ret-select# ret#)}))
                    #:defm{:fname '~qualified-fname-sym
                           :args args#
-                          :anomaly (s/explain-data ~ret-spec ret#)}))
+                          :anomaly (s/explain-data ~res res#)}))
                (catch Exception e#
                  #:defm{:fname '~qualified-fname-sym
                         :args args#
