@@ -16,9 +16,9 @@
 
 (defn spec-form
   [x]
-  (cond (or (vector? x) (map? x)) `(s/select (s/schema ~x) ~(vec (schema-keys x)))
-        (keyword? x)              `(when (s/form ~x) (s/get-spec ~x))
-        (seqable? x)              `(s/spec ~x)))
+  (cond (or (vector? x) (map? x))     `(s/select (s/schema ~x) ~(vec (schema-keys x)))
+        (keyword? x)                  `(when (s/form ~x) (s/get-spec ~x))
+        (or (seqable? x) (symbol? x)) `(s/spec ~x)))
 
 (defn args-form
   [x sym]
