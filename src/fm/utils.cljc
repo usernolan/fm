@@ -23,7 +23,7 @@
 (defn args-form
   [x sym]
   (if (or (vector? x) (map? x))
-    `{:keys ~(vec (schema-keys x))
+    `{:keys ~(mapv symbol (schema-keys x))
       :as ~sym}
     sym))
 
@@ -50,9 +50,23 @@
                    #:fm{:fname '~name-sym
                         :args ~args-sym
                         :anomaly (s/explain-data ret# res#)}))
-               (catch Exception e#
+               (catch Throwable e#
                  #:fm{:fname '~name-sym
                       :args ~args-sym
                       :anomaly e#}))
              #:fm{:fname '~name-sym
                   :anomaly (s/explain-data args# ~args-sym)}))))))
+
+(comment
+
+  (require '[clojure.spec-alpha2 :as s])
+  (require '[fm.utils :as fm])
+  (require '[fm.macros :refer [fm defm]])
+
+  (s/def ::n number?)
+
+  (defm minc ::n ::n (inc n))
+  (minc 1)
+  (minc 'a)
+
+  )
