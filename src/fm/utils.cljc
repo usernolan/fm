@@ -16,7 +16,7 @@
 
 (defn spec-form
   [x]
-  (cond (or (vector? x) (map? x))     `(s/select (s/schema ~x) ~(vec (schema-keys x)))
+  (cond (or (vector? x) (map? x))     `(s/select ~x ~(vec (schema-keys x)))
         (keyword? x)                  `(when (s/form ~x) (s/get-spec ~x))
         (or (seqable? x) (symbol? x)) `(s/spec ~x)))
 
@@ -67,12 +67,10 @@
              (anom# #:fm{:fname '~name-sym
                          :anomaly (s/explain-data args# ~args-sym)})))))))
 
-
 (comment
 
   (require '[clojure.spec-alpha2 :as s])
   (require '[clojure.spec-alpha2.gen :as gen])
-  (require '[fm.utils :as fm])
   (require '[fm.macros :refer [fm defm]])
 
   ;; inline fn specs, default arg symbol $
@@ -121,9 +119,11 @@
   (gen/sample (s/gen (:fm/ret (meta echo))))
   (map echo (gen/sample (s/gen (:fm/args (meta echo)))))
 
+  ;; experimental (broken)
+  ;; defining ret spec dynamically as a function of args
   (defm echo-refined
     ::http-req
-    ^:fm/dynamic [{:body #(= % (str "echo " http-req))}]
+    [{:body #(= % (str "echo " http-req))}]
     (let [{:keys [body] :as resp} http-req]
       {:body (str "echo " body)}))
 
