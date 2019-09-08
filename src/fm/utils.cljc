@@ -27,46 +27,104 @@
       :as ~sym}
     sym))
 
+(defn anomaly-form
+  [x]
+  (cond (and (list? x)
+             (= 'fn (first x))) `~x
+        (symbol? x) x
+        :else `(fn [~'_] ~x)))
+
 (defn fm-form
   [{:keys [fm/fname fm/args fm/ret fm/body]}]
   (let [name-sym (or fname (gensym "fm__"))
         args-sym (or (:fm/as (meta (first body)))
                      (if (keyword? args)
                        (symbol (name args))
-                       '_args_))]
+                       '$))
+        anomaly  (or (:fm/anomaly (meta (first body)))
+                     `identity)]
     `(let [args# ~(spec-form args)
-           ret# ~(spec-form ret)]
+           ret# ~(spec-form ret)
+           anom# ~(anomaly-form anomaly)]
        ^{:fm/args args#
          :fm/ret ret#}
        (fn ~(symbol (name name-sym))
          [~(args-form args args-sym)]
          (if (s/valid? :fm/anomaly ~args-sym)
-           ~args-sym
+           (anom# ~args-sym)
            (if (s/valid? args# ~args-sym)
              (try
                (let [res# (do ~@body)]
                  (if (s/valid? ret# res#)
                    res#
-                   #:fm{:fname '~name-sym
-                        :args ~args-sym
-                        :anomaly (s/explain-data ret# res#)}))
+                   (anom# #:fm{:fname '~name-sym
+                               :args ~args-sym
+                               :anomaly (s/explain-data ret# res#)})))
                (catch Throwable e#
-                 #:fm{:fname '~name-sym
-                      :args ~args-sym
-                      :anomaly e#}))
-             #:fm{:fname '~name-sym
-                  :anomaly (s/explain-data args# ~args-sym)}))))))
+                 (anom# #:fm{:fname '~name-sym
+                             :args ~args-sym
+                             :anomaly e#})))
+             (anom# #:fm{:fname '~name-sym
+                         :anomaly (s/explain-data args# ~args-sym)})))))))
+
 
 (comment
 
   (require '[clojure.spec-alpha2 :as s])
+  (require '[clojure.spec-alpha2.gen :as gen])
   (require '[fm.utils :as fm])
   (require '[fm.macros :refer [fm defm]])
 
-  (s/def ::n number?)
+  ;; inline fn specs, default arg symbol $
+  (defm inc_ number? number? (inc $))
+  (inc_ 1)
 
-  (defm minc ::n ::n (inc n))
-  (minc 1)
-  (minc 'a)
+  ;; anomaly 1: bad input
+  (inc_ 'a)
+
+  ;; rebind arg symbol
+  (defm inc_ number? number? ^{:fm/as n} (inc n))
+  (inc_ 1)
+  (inc_ 'a)
+
+  ;; anomaly 2: bad output
+  (defm bad-return number? symbol? (inc $))
+  (bad-return 1)
+
+  ;; anomaly 3: throws
+  (defm throws
+    fn?
+    any?
+    ^{:fm/as f}
+    (f))
+
+  (throws #(throw (Exception. "darn!")))
+
+  (s/def ::http-req
+    (s/select
+     [{:body string?}]
+     [*]))
+
+  (gen/generate (s/gen ::http-req))
+  (gen/sample (s/gen ::http-req))
+
+  (defm echo
+    ::http-req        ; from registry
+    [{:body string?}] ; inline select [*]
+    (let [{:keys [body] :as resp} http-req]
+      {:body (str "echo " body)}))
+
+  ;; compiled args and ret specs accessible via metadata
+  (:fm/args (meta echo))
+  (:fm/ret (meta echo))
+  (gen/sample (s/gen (:fm/args (meta echo))))
+  (gen/sample (s/gen (:fm/ret (meta echo))))
+  (map echo (gen/sample (s/gen (:fm/args (meta echo)))))
+
+  (defm echo-refined
+    ::http-req
+    ^:fm/dynamic [{:body #(= % (str "echo " http-req))}]
+    (let [{:keys [body] :as resp} http-req]
+      {:body (str "echo " body)}))
 
   )
