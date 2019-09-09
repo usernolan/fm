@@ -73,16 +73,11 @@
   (require '[clojure.spec-alpha2.gen :as gen])
   (require '[fm.macros :refer [fm defm]])
 
-  ;; inline fn specs, default arg symbol $
+  ;; inline fn specs, default args symbol $
   (defm inc_ number? number? (inc $))
   (inc_ 1)
 
   ;; anomaly 1: bad input
-  (inc_ 'a)
-
-  ;; rebind arg symbol
-  (defm inc_ number? number? ^{:fm/as n} (inc n))
-  (inc_ 1)
   (inc_ 'a)
 
   ;; anomaly 2: bad output
@@ -95,8 +90,23 @@
     any?
     ^{:fm/as f}
     (f))
-
   (throws #(throw (Exception. "darn!")))
+
+  ;; anonymous fm
+  ((fm number? number? (inc $)) 1)
+  ((fm number? number? (inc $)) 'a)
+
+  ;; rebind args symbol
+  (defm inc_ number? number? ^{:fm/as n} (inc n))
+
+  ;; custom anomaly handling
+  (defm throws2
+    fn?
+    any?
+    ^{:fm/anomaly "dang!" ; implicit `do`
+      :fm/as f}
+    (f))
+  (throws2 #(throw (Exception. "shoot!")))
 
   (s/def ::http-req
     (s/select
@@ -115,9 +125,52 @@
   ;; compiled args and ret specs accessible via metadata
   (:fm/args (meta echo))
   (:fm/ret (meta echo))
+
+  ;; toward properties
   (gen/sample (s/gen (:fm/args (meta echo))))
   (gen/sample (s/gen (:fm/ret (meta echo))))
   (map echo (gen/sample (s/gen (:fm/args (meta echo)))))
+
+  (defm exclaim
+    [{:body string?}]
+    [{:body string?}]
+    {:body (str body "!")})
+
+  ;; "wire up"
+  (-> {:body "hi"}
+      (echo)
+      (exclaim))
+
+  ;; anomaly pass-through
+  (-> {:causes :anomaly}
+      (echo)
+      (exclaim)
+      #_(:fm/fname) ; source of anomaly
+      )
+
+  (s/def ::http-resp
+    (s/select
+     [{:statusCode #{200 503}
+       :body string?}]
+     [*]))
+
+  ;; `sink`
+  (defm sink ::http-req ::http-resp
+    ^{:fm/anomaly (fn [anom]
+                    (prn "Bad happened! Logging somewhere...")
+                    #_(logger/log! anom)
+                    {:statusCode 503 :body "I failed!"})}
+    (assoc http-req :statusCode 200))
+
+  (-> {:body "hi"}
+      (echo)
+      (exclaim)
+      (sink))
+
+  (-> {:causes :anomaly}
+      (echo)
+      (exclaim)
+      (sink))
 
   ;; experimental (broken)
   ;; defining ret spec dynamically as a function of args
