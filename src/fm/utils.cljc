@@ -2,8 +2,8 @@
   (:require
    [clojure.spec-alpha2 :as s]))
 
-(s/def :fm/anomaly (s/and map? #(contains? % :fm/anomaly)))
-(def anomaly? (partial s/valid? :fm/anomaly))
+(s/def ::anomaly (s/select [{:fm/anomaly any?}] [*]))
+(def anomaly? (partial s/valid? ::anomaly))
 
 (defn schema-keys
   [schema]
@@ -50,7 +50,7 @@
          :fm/ret ret#}
        (fn ~(symbol (name name-sym))
          [~(args-form args args-sym)]
-         (if (s/valid? :fm/anomaly ~args-sym)
+         (if (s/valid? ::anomaly ~args-sym)
            (anom# ~args-sym)
            (if (s/valid? args# ~args-sym)
              (try
@@ -69,9 +69,11 @@
 
 (comment
 
-  (require '[clojure.spec-alpha2 :as s])
-  (require '[clojure.spec-alpha2.gen :as gen])
-  (require '[fm.macros :refer [fm defm]])
+  (require
+   '[clojure.spec-alpha2 :as s]
+   '[clojure.spec-alpha2.gen :as gen]
+   '[fm.macros :refer [fm defm]]
+   :reload-all)
 
   ;; inline fn specs, default args symbol $
   (defm inc_ number? number? (inc $))
@@ -80,33 +82,53 @@
   ;; anomaly 1: bad input
   (inc_ 'a)
 
+  ;; anomalies are data
+  (:fm/anomaly (inc_ 'a)) ; output of s/explain-data
+  (:fm/fname (inc_ 'a))   ; qualified name of function
+
   ;; anomaly 2: bad output
-  (defm bad-return number? symbol? (inc $))
-  (bad-return 1)
+  (defm bad-output number? symbol? (inc $))
+  (bad-output 1)
+
+  ;; anomaly contains the input and output values
+  (:fm/anomaly (bad-output 1))    ; output of s/explain-data
+  (:fm/fname (bad-output 1))      ; qualified name of function
+  (:fm/args (bad-output 1))       ; args that caused anomalistic output
+  (:clojure.spec.alpha/value      ; output that triggered anomaly
+   (:fm/anomaly (bad-output 1)))
 
   ;; anomaly 3: throws
-  (defm throws
-    fn?
-    any?
-    ^{:fm/as f}
-    (f))
-  (throws #(throw (Exception. "darn!")))
+  (defm throws any? any? (throw (Exception. "darn!")))
+  (throws nil)
+
+  (:fm/anomaly (throws [])) ; an #error { ... }
+  (:fm/fname (throws []))   ; qualified name of function
+  (:fm/args (throws []))    ; args that caused throw
 
   ;; anonymous fm
   ((fm number? number? (inc $)) 1)
   ((fm number? number? (inc $)) 'a)
 
   ;; rebind args symbol
-  (defm inc_ number? number? ^{:fm/as n} (inc n))
+  (defm inc_ number? number?
+    ^{:fm/as n}
+    (inc n))
 
   ;; custom anomaly handling
-  (defm throws2
-    fn?
-    any?
-    ^{:fm/anomaly "dang!" ; implicit `do`
-      :fm/as f}
-    (f))
-  (throws2 #(throw (Exception. "shoot!")))
+  (defm custom-anomaly any? any?
+    ^{:fm/anomaly "dang!"}
+    (throw (Exception.)))
+
+  (custom-anomaly nil)
+
+  (defm custom-anomaly2 any? any?
+    ^{:fm/anomaly (fn [a]
+                    (prn (:fm/fname a))
+                    (prn (:fm/args a))
+                    a)}
+    (throw (Exception.)))
+
+  (custom-anomaly2 'xyz)
 
   (s/def ::http-req
     (s/select
@@ -117,7 +139,7 @@
   (gen/sample (s/gen ::http-req))
 
   (defm echo
-    ::http-req        ; from registry
+    ::http-req        ; spec from registry
     [{:body string?}] ; inline select [*]
     (let [{:keys [body] :as resp} http-req]
       {:body (str "echo " body)}))
@@ -137,15 +159,16 @@
     {:body (str body "!")})
 
   ;; "wire up"
-  (-> {:body "hi"}
-      (echo)
-      (exclaim))
-
-  ;; anomaly pass-through
-  (-> {:causes :anomaly}
+  (-> (gen/generate (s/gen ::http-req))
       (echo)
       (exclaim)
-      #_(:fm/fname) ; source of anomaly
+      )
+
+  ;; anomaly pass-through
+  (-> {:causes :anomaly :in :echo}
+      (echo)
+      (exclaim)
+      #_(:fm/fname) ;; anomaly source
       )
 
   (s/def ::http-resp
@@ -155,22 +178,22 @@
      [*]))
 
   ;; `sink`
-  (defm sink ::http-req ::http-resp
-    ^{:fm/anomaly (fn [anom]
-                    (prn "Bad happened! Logging somewhere...")
-                    #_(logger/log! anom)
+  (defm response ::http-req ::http-resp
+    ^{:fm/anomaly (fn [{:keys [fm/fname] :as anomaly}]
+                    (prn (str "Bad happened in " fname "!"))
+                    #_(logger/log! anomaly)
                     {:statusCode 503 :body "I failed!"})}
     (assoc http-req :statusCode 200))
 
   (-> {:body "hi"}
       (echo)
       (exclaim)
-      (sink))
+      (response))
 
   (-> {:causes :anomaly}
       (echo)
       (exclaim)
-      (sink))
+      (response))
 
   ;; experimental (broken)
   ;; defining ret spec dynamically as a function of args
