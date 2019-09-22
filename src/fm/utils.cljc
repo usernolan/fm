@@ -31,8 +31,8 @@
   [x]
   (cond (and (list? x)
              (= 'fn (first x))) `~x
-        (symbol? x) x
-        :else `(fn [~'_] ~x)))
+        (symbol? x)             x
+        :else                   `(fn [~'_] ~x)))
 
 (defn fm-form
   [{:keys [fm/fname fm/args fm/ret fm/body]}]
@@ -55,7 +55,8 @@
            (if (s/valid? args# ~args-sym)
              (try
                (let [res# (do ~@body)]
-                 (if (s/valid? ret# res#)
+                 (if (or (s/valid? ret# res#)
+                         (s/valid? ::anomaly res#))
                    res#
                    (anom# #:fm{:fname '~name-sym
                                :args ~args-sym
