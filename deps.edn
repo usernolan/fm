@@ -2,7 +2,7 @@
  {org.clojure/clojurescript {:mvn/version "1.10.520"},
   org.clojure/clojure {:mvn/version "1.10.1"},
   org.clojure/spec-alpha2
-  {:git/url "https://github.com/clojure/spec-alpha2.git"
+  {:git/url "https://github.com/clojure/spec-alpha2.git",
    :sha "683e507a9647b65a248a5e00d314f9cfaaa2ce56"},
   org.clojure/test.check {:mvn/version "0.10.0"}},
  :aliases
@@ -21,5 +21,5 @@
   {:extra-deps
    {nuid/deps
     {:git/url "https://github.com/nuid/deps.git",
-     :sha "1cf5069bc708adf9f2809f3917cc9c5e971f28a0"}}}},
+     :sha "343a267df77b08124caf001c0a49916c4b2b7a8a"}}}},
  :paths ["src"]}
