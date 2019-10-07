@@ -1,10 +1,18 @@
 (ns fm.utils
   (:require
+   [clojure.spec-alpha2.gen :as gen]
    [clojure.spec-alpha2 :as s]))
 
 (s/def ::anomaly (s/select [{:fm/anomaly any?}] [*]))
 (def anomaly? (partial s/valid? ::anomaly))
 
+(s/def ::args-anomaly (s/and ::anomaly (fn [{:keys [fm/args]}] (nil? args))))
+(def args-anomaly? (partial s/valid? ::args-anomaly))
+
+;; TODO: Improve clarity of form handling
+;; TODO: Improve destructuring support
+;; e.g. (s/and ::ns1/k ::ns2/xyz)
+;; e.g. (s/cat ...)
 (defn schema-keys
   [schema]
   (let [f #(cond (keyword? %) [%] (map? %) (keys %))]
@@ -55,9 +63,14 @@
            (if (s/valid? args# ~args-sym)
              (try
                (let [res# (do ~@body)]
-                 (if (or (s/valid? ret# res#)
-                         (s/valid? ::anomaly res#))
+                 (cond
+                   (s/valid? ::anomaly res#)
+                   (anom# res#)
+
+                   (s/valid? ret# res#)
                    res#
+
+                   :else
                    (anom# #:fm{:fname '~name-sym
                                :args ~args-sym
                                :anomaly (s/explain-data ret# res#)})))
@@ -67,6 +80,13 @@
                              :anomaly e#})))
              (anom# #:fm{:fname '~name-sym
                          :anomaly (s/explain-data args# ~args-sym)})))))))
+
+(defn genform
+  [spec x]
+  (let [c (s/conform spec x)]
+    (if (s/invalid? c)
+      x
+      (gen/generate (s/gen (first c))))))
 
 (comment
 
