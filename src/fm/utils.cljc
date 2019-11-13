@@ -371,8 +371,8 @@
 
   (s/def ::http-resp
     (s/select
-     [{:body   (s/and string? not-empty)
-       :status #{200 400 503}}]
+     [{:status #{200 400 503}
+       :body   (s/and string? not-empty)}]
      [*]))
 
   (gen/generate (s/gen ::http-req))
@@ -393,6 +393,10 @@
     {:status 200
      :body   (str "echo: " body)})
 
+  (echo nil)
+  (echo {})
+  (echo {:body nil})
+  (echo {:body ""})
   (echo {:body "hi"})
 
   ;; fm metadata; AdS/CFT
@@ -401,12 +405,9 @@
   ;; toward properties
   (->>
    (:fm/args (meta echo))
-   (map (comp gen/sample s/gen))
-   (apply map echo))
-
-  (->>
-   (gen/sample (gen/string))
-   (map (partial assoc {} :body))
+   (first)
+   (s/gen)
+   (gen/sample)
    (map echo))
 
   (s/def ::exclaim-resp
@@ -542,13 +543,6 @@
 
   (traced3)
   (traced3)
-
-  (defm traced4
-    ^{:fm/trace (fm [x] (prn x))}
-    []
-    (rand))
-
-  (traced4)
 
   ;; experimental (broken)
   ;; defining ret spec dynamically as a function of args
