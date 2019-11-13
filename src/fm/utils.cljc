@@ -54,7 +54,7 @@
     (vector? arg) (mapv fmt-arg arg)
     (map? arg)    (if (:as arg)
                     arg
-                    (assoc arg :as (gensym "fm__arg__")))
+                    (assoc arg :as (gensym "arg__")))
     :else         arg))
 
 (defn args-syms-walk
@@ -63,14 +63,28 @@
     (:as x)
     x))
 
+(def fn-symbols-set
+  #{'fn 'fn* `fn 'fm})
+
+(s/def ::fn-form
+  (fn [x]
+    (and
+     (seqable? x)
+     (fn-symbols-set (first x)))))
+
 (defn anomaly-form
   [x]
   (cond
-    (and
-     (seqable? x)
-     (= 'fn (first x))) `~x
-    (symbol? x)         x
-    :else               `(fn [~'_] ~x)))
+    (s/valid? ::fn-form x) `~x
+    (symbol? x)            x
+    :else                  `(fn [~'_] ~x)))
+
+(defn trace-form
+  [x]
+  (cond
+    (s/valid? ::fn-form x) `~x
+    (symbol? x)            x
+    :else                  `(fn [~'_] (prn ~x))))
 
 (defn zip-syms-specs
   [syms specs]
@@ -172,7 +186,12 @@
                     (spec-form))
         anomaly    (->>
                     (or (:fm/anomaly metadata) `identity)
-                    (anomaly-form))]
+                    (anomaly-form))
+        trace      (when-let [trace (:fm/trace metadata)]
+                     (->>
+                      (if (true? trace) `prn trace)
+                      (trace-form)))
+        res-sym    (gensym "res__")]
 
     `(let [args# ~args-specs
            ret#  ~ret-spec
@@ -186,24 +205,32 @@
        (fn ~(symbol (name sym))
          ~args-fmt
 
+         ~(when (:fm/trace metadata)
+            `(~trace {:fm/sym  '~sym
+                      :fm/args ~args-syms}))
+
          (if (args-anomaly?* ~args-syms)
            (anom# ~args-syms)
 
            (if (args-valid?* ~zipped)
              (try
-               (let [res# (do ~@body)]
+               (let [~res-sym (do ~@body)]
+
+                 ~(when (:fm/trace metadata)
+                    `(~trace {:fm/sym '~sym
+                              :fm/res ~res-sym}))
 
                  (cond
-                   (s/valid? ::anomaly res#)
-                   (anom# res#)
+                   (s/valid? ::anomaly ~res-sym)
+                   (anom# ~res-sym)
 
-                   (s/valid? ret# res#)
-                   res#
+                   (s/valid? ret# ~res-sym)
+                   ~res-sym
 
                    :else
                    (anom# #:fm{:sym     '~sym
                                :args    ~args-syms
-                               :anomaly (s/explain-data ret# res#)})))
+                               :anomaly (s/explain-data ret# ~res-sym)})))
 
                (catch Throwable e#
                  (anom# #:fm{:sym     '~sym
@@ -273,11 +300,11 @@
   (bad-output 1)
 
   ;; anomaly contains the input and output values
-  (:fm/sym (bad-output 1))        ; qualified function symbol
-  (:fm/args (bad-output 1))       ; args that caused anomalistic output
-  (:fm/anomaly (bad-output 1))    ; output of `s/explain-data`
-  (:clojure.spec.alpha/value      ; output that triggered anomaly
-   (:fm/anomaly (bad-output 1)))
+  (:fm/sym (bad-output 1))       ; qualified function symbol
+  (:fm/args (bad-output 1))      ; args that caused anomalistic output
+  (:fm/anomaly (bad-output 1))   ; output of `s/explain-data`
+  (:clojure.spec.alpha/value
+   (:fm/anomaly (bad-output 1))) ; output that triggered anomaly
 
   ;; another anomaly 3: throw
   (defm throws
@@ -291,8 +318,8 @@
   (:fm/anomaly (throws)) ; an #error { ... }
 
   ;; anonymous fm
-  ((fm ^{:fm/args number? :fm/ret number?} [n] (inc n)) 1)
-  ((fm ^{:fm/args number? :fm/ret number?} [n] (inc n)) 'a)
+  ((fm ^{:fm/args number?} [n] (inc n)) 1)
+  ((fm ^{:fm/args number?} [n] (inc n)) 'a)
 
   ;; variadic signatures aren't ready yet, but otherwise...
   (defm add_
@@ -330,6 +357,13 @@
 
   (custom-anomaly2)
 
+  (defm custom-anomaly3
+    ^{:fm/anomaly (fn [anomaly] (prn anomaly))}
+    []
+    (throw (Exception. "darn!")))
+
+  (custom-anomaly3)
+
   (s/def ::http-req
     (s/select
      [{:body (s/and string? not-empty)}]
@@ -338,7 +372,7 @@
   (s/def ::http-resp
     (s/select
      [{:body   (s/and string? not-empty)
-       :status #{200}}]
+       :status #{200 400 503}}]
      [*]))
 
   (gen/generate (s/gen ::http-req))
@@ -347,8 +381,10 @@
   (s/def ::echo-resp
     (s/and
      ::http-resp
-     (fn [{:keys [body]}]
-       (clojure.string/starts-with? body "echo: "))))
+     (fn [{:keys [status body]}]
+       (and
+        (= status 200)
+        (clojure.string/starts-with? body "echo: ")))))
 
   (defm echo
     ^{:fm/args ::http-req
@@ -357,7 +393,9 @@
     {:status 200
      :body   (str "echo: " body)})
 
-  ;; fm metadata
+  (echo {:body "hi"})
+
+  ;; fm metadata; AdS/CFT
   (meta echo)
 
   ;; toward properties
@@ -387,12 +425,12 @@
      :body   (str body "!")})
 
   ;; "wire up"
-  (def echo-exclaim-xf
-    (map (comp exclaim echo)))
+  (def echo-exclaim
+    (comp exclaim echo))
 
   (->>
    (gen/sample (s/gen ::http-req))
-   (into [] echo-exclaim-xf))
+   (into [] (map echo-exclaim)))
 
   (->
    {:body "hi"}
@@ -405,7 +443,7 @@
    (exclaim)) ;; surprise anomaly 4: received
 
   ;; the anomaly occured in `echo`, and then was
-  ;; received and propogated by `exclaim`
+  ;; received and propagated by `exclaim`
   (->
    {:causes :anomaly}
    (echo)
@@ -418,6 +456,99 @@
   ;; anomaly 2: ret   => anomaly map; `:fm/anomaly` is a map
   ;; anomaly 3: throw => anomaly map; `:fm/anomaly` is throwable
   ;; anomaly 4: recd  => argument vector containing one or more anomaly maps
+
+  ;; anomaly handling
+  (def http-503
+    {:status 503
+     :body   "darn!"})
+
+  (defn http-400
+    [source]
+    {:status 400
+     :body   (if source
+               (str "bad request in " source "!")
+               "bad request!")})
+
+  (defn http-anomaly-handler
+    [{:keys [fm/args]
+      :as   anomaly}]
+    (cond
+      ;; propagate previous anomalistic response
+      (s/valid? ::http-resp (first args))
+      (first args)
+
+      ;; anomaly 1: argument(s)
+      ;; in this context, may indicate an anomalistic (bad) request
+      (s/valid? :fm.utils/args-anomaly anomaly)
+      (http-400 (:fm/sym anomaly))
+
+      ,,,
+
+      :else
+      http-503))
+
+  (defm echo2
+    ^{:fm/args    ::http-req
+      :fm/ret     ::echo-resp
+      :fm/anomaly http-anomaly-handler}
+    [{:keys [body]}]
+    {:status 200
+     :body   (str "echo: " body)})
+
+  (echo2 {:body nil})
+
+  (defm exclaim2
+    ^{:fm/args    ::echo-resp
+      :fm/ret     ::exclaim-resp
+      :fm/anomaly http-anomaly-handler}
+    [{:keys [body]}]
+    {:status 200
+     :body   (str body "!")})
+
+  (->>
+   {:body "hi"}
+   (echo2)
+   (exclaim2))
+
+  (->>
+   {:causes :anomaly}
+   (echo2)
+   (exclaim2))
+
+  ;; thin trace facility
+  (defm traced
+    ^{:fm/trace true} ;; defaults to `clojure.core/prn`
+    []
+    (rand))
+
+  (traced)
+
+  (defm traced2
+    ^{:fm/trace
+      (fn [{:keys [fm/sym fm/args fm/res]}]
+        (prn sym (symbol "trace:") args res))}
+    []
+    (rand))
+
+  (traced2)
+
+  (def state-atom (atom 0))
+
+  (defm traced3
+    ^{:fm/trace @state-atom}
+    []
+    (swap! state-atom inc)
+    (rand))
+
+  (traced3)
+  (traced3)
+
+  (defm traced4
+    ^{:fm/trace (fm [x] (prn x))}
+    []
+    (rand))
+
+  (traced4)
 
   ;; experimental (broken)
   ;; defining ret spec dynamically as a function of args
