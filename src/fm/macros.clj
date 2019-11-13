@@ -4,19 +4,17 @@
 
 (defmacro fm
   "The `fm` macro."
-  [args ret & body]
-  (let [qname (symbol (str *ns* "/" (gensym "fm__")))]
-    (utils/fm-form {:fm/fname qname
-                    :fm/args args
-                    :fm/ret ret
-                    :fm/body body})))
+  [args-form & body]
+  (let [ns-sym (symbol (str *ns* "/" (gensym "fm__")))]
+    (utils/fm-form {:fm/sym       ns-sym
+                    :fm/args-form args-form
+                    :fm/body      body})))
 
 (defmacro defm
   "The `defm` macro."
-  [fname args ret & body]
-  (let [qname (symbol (str *ns* "/" fname))
-        form (utils/fm-form {:fm/fname qname
-                             :fm/args args
-                             :fm/ret ret
-                             :fm/body body})]
-    `(def ~fname ~form)))
+  [sym args-form & body]
+  (let [ns-sym (symbol (str *ns* "/" sym))
+        form   (utils/fm-form {:fm/sym       ns-sym
+                               :fm/args-form args-form
+                               :fm/body      body})]
+    `(def ~sym ~form)))

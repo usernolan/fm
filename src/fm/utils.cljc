@@ -1,68 +1,198 @@
 (ns fm.utils
   (:require
    [clojure.spec-alpha2.gen :as gen]
-   [clojure.spec-alpha2 :as s]))
+   [clojure.spec-alpha2 :as s]
+   [clojure.walk :as walk]))
 
-(s/def ::anomaly (s/select [{:fm/anomaly any?}] [*]))
-(def anomaly? (partial s/valid? ::anomaly))
+(s/def ::anomaly
+  (s/select
+   [{:fm/anomaly any?}]
+   [*]))
 
-(s/def ::args-anomaly (s/and ::anomaly (fn [{:keys [fm/args]}] (nil? args))))
-(def args-anomaly? (partial s/valid? ::args-anomaly))
+(def anomaly?
+  (partial s/valid? ::anomaly))
 
-;; TODO: Improve clarity of form handling
-;; TODO: Improve destructuring support
-;; e.g. (s/and ::ns1/k ::ns2/xyz)
-;; e.g. (s/cat ...)
+(s/def ::args-anomaly
+  (s/and
+   ::anomaly
+   (fn [{:keys [fm/anomaly]}]
+     (vector? anomaly))))
+
+(def args-anomaly?
+  (partial s/valid? ::args-anomaly))
+
 (defn schema-keys
   [schema]
   (let [f #(cond (keyword? %) [%] (map? %) (keys %))]
-    (cond (vector? schema)        (distinct (mapcat f schema))
-          (map? schema)           (keys schema)
-          (or (keyword? schema)
-              (s/schema? schema)) (schema-keys (second (s/form schema)))
-          (seqable? schema)       (schema-keys (second schema)))))
+    (cond
+      (vector? schema)     (distinct (mapcat f schema))
+      (map? schema)        (keys schema)
+      (or
+       (keyword? schema)
+       (s/schema? schema)) (schema-keys (second (s/form schema)))
+      (seqable? schema)    (schema-keys (second schema)))))
 
 (defn spec-form
   [x]
-  (cond (or (vector? x) (map? x))     `(s/select ~x ~(vec (schema-keys x)))
-        (keyword? x)                  `(when (s/form ~x) (s/get-spec ~x))
-        (or (seqable? x) (symbol? x)) `(s/spec ~x)))
+  (cond
+    (vector? x)     (mapv spec-form x)
+    (keyword? x)    `(when (s/form ~x) (s/get-spec ~x))
+    (map? x)        `(s/select [~x] ~(vec (schema-keys x)))
+    (or
+     (symbol? x)
+     (and
+      (seqable? x)
+      (not
+       (=
+        (first x)
+        `s/spec)))) `(s/spec ~x)
+    :else           x))
 
-(defn args-form
-  [x sym]
-  (if (or (vector? x) (map? x))
-    `{:keys ~(mapv symbol (schema-keys x))
-      :as ~sym}
-    sym))
+(defn fmt-arg
+  [arg]
+  (cond
+    (vector? arg) (mapv fmt-arg arg)
+    (map? arg)    (if (:as arg)
+                    arg
+                    (assoc arg :as (gensym "fm__arg__")))
+    :else         arg))
+
+(defn args-syms-walk
+  [x]
+  (if (map? x)
+    (:as x)
+    x))
 
 (defn anomaly-form
   [x]
-  (cond (and (list? x)
-             (= 'fn (first x))) `~x
-        (symbol? x)             x
-        :else                   `(fn [~'_] ~x)))
+  (cond
+    (and
+     (seqable? x)
+     (= 'fn (first x))) `~x
+    (symbol? x)         x
+    :else               `(fn [~'_] ~x)))
+
+(defn zip-syms-specs
+  [syms specs]
+  (mapv
+   (fn [sym spec]
+     (if (symbol? sym)
+       [sym spec]
+       (zip-syms-specs sym spec)))
+   syms
+   specs))
+
+(defn rreduce
+  [recurse? f init xs]
+  (reduce
+   (fn [acc x]
+     (let [x (if (recurse? x)
+               (rreduce recurse? f init x)
+               x)]
+       (f recurse? init xs acc x)))
+   init
+   xs))
+
+(defn args-anomaly?*
+  [args]
+  (rreduce
+   vector?
+   (fn [_ _ _ _ arg]
+     (cond
+       (boolean? arg)           (reduced arg)
+       (s/valid? ::anomaly arg) (reduced true)
+       :else                    false))
+   false
+   args))
+
+(s/def ::zipped-arg-spec
+  (fn [v]
+    (and
+     (vector? v)
+     (= (count v) 2)
+     (or
+      (s/spec? (second v))
+      (and
+       (keyword? (second v))
+       (s/get-spec (second v)))))))
+
+(s/def ::args-recurse
+  (fn [v]
+    (and
+     (vector? v)
+     (not (s/valid? ::zipped-arg-spec v)))))
+
+(defn args-valid?*
+  [zipped]
+  (rreduce
+   (partial s/valid? ::args-recurse)
+   (fn [_ _ _ _ x]
+     (cond
+       (boolean? x)                      (reduced x)
+       (and
+        (s/valid? ::zipped-arg-spec x)
+        (s/valid? (second x) (first x))) true
+       :else                             (reduced false)))
+   true
+   zipped))
+
+(defn explain*
+  [zipped]
+  (rreduce
+   (partial s/valid? ::args-recurse)
+   (fn [_ _ _ acc x]
+     (if (s/valid? ::zipped-arg-spec x)
+       (conj acc (s/explain-data (second x) (first x)))
+       (conj acc x)))
+   []
+   zipped))
 
 (defn fm-form
-  [{:keys [fm/fname fm/args fm/ret fm/body]}]
-  (let [name-sym (or fname (gensym "fm__"))
-        args-sym (or (:fm/as (meta (first body)))
-                     (if (keyword? args)
-                       (symbol (name args))
-                       '$))
-        anomaly  (or (:fm/anomaly (meta (first body)))
-                     `identity)]
-    `(let [args# ~(spec-form args)
-           ret# ~(spec-form ret)
-           anom# ~(anomaly-form anomaly)]
-       ^{:fm/args args#
-         :fm/ret ret#}
-       (fn ~(symbol (name name-sym))
-         [~(args-form args args-sym)]
-         (if (s/valid? ::anomaly ~args-sym)
-           (anom# ~args-sym)
-           (if (s/valid? args# ~args-sym)
+  [{:keys [fm/sym fm/args-form fm/body]}]
+  (let [sym        (or sym (gensym "fm__"))
+        metadata   (meta args-form)
+        args-fmt   (mapv fmt-arg args-form)
+        args-syms  (walk/postwalk args-syms-walk args-fmt)
+        args-specs (some->>
+                    (or
+                     (:fm/args metadata)
+                     (if (empty? args-form)
+                       nil
+                       (walk/postwalk
+                        (fn [x] (if (symbol? x) `any? x))
+                        args-syms)))
+                    (walk/postwalk spec-form)
+                    ((fn [specs]
+                       (if (not (vector? specs))
+                         [specs]
+                         specs))))
+        zipped     (zip-syms-specs args-syms args-specs)
+        ret-spec   (->>
+                    (or (:fm/ret metadata) `any?)
+                    (spec-form))
+        anomaly    (->>
+                    (or (:fm/anomaly metadata) `identity)
+                    (anomaly-form))]
+
+    `(let [args# ~args-specs
+           ret#  ~ret-spec
+           anom# ~anomaly]
+
+       ^{:fm/sym     '~sym
+         :fm/args    args#
+         :fm/ret     ret#
+         :fm/anomaly anom#}
+
+       (fn ~(symbol (name sym))
+         ~args-fmt
+
+         (if (args-anomaly?* ~args-syms)
+           (anom# ~args-syms)
+
+           (if (args-valid?* ~zipped)
              (try
                (let [res# (do ~@body)]
+
                  (cond
                    (s/valid? ::anomaly res#)
                    (anom# res#)
@@ -71,15 +201,18 @@
                    res#
 
                    :else
-                   (anom# #:fm{:fname '~name-sym
-                               :args ~args-sym
+                   (anom# #:fm{:sym     '~sym
+                               :args    ~args-syms
                                :anomaly (s/explain-data ret# res#)})))
+
                (catch Throwable e#
-                 (anom# #:fm{:fname '~name-sym
-                             :args ~args-sym
+                 (anom# #:fm{:sym     '~sym
+                             :args    ~args-syms
                              :anomaly e#})))
-             (anom# #:fm{:fname '~name-sym
-                         :anomaly (s/explain-data args# ~args-sym)})))))))
+
+             (anom# #:fm{:sym     '~sym
+                         :args    ~args-syms
+                         :anomaly (explain* ~zipped)})))))))
 
 (defn genform
   [spec x]
@@ -91,137 +224,208 @@
 (comment
 
   (require
-   '[clojure.spec-alpha2 :as s]
    '[clojure.spec-alpha2.gen :as gen]
+   '[clojure.spec-alpha2 :as s]
    '[fm.macros :refer [fm defm]]
+   '[fm.utils :as fm]
    :reload-all)
 
-  ;; inline fn specs, default args symbol $
-  (defm inc_ number? number? (inc $))
-  (inc_ 1)
+  ;; control group
+  (defn inc_
+    [n]
+    (inc n))
 
-  ;; anomaly 1: bad input
+  (inc_ 1)
   (inc_ 'a)
 
-  ;; anomalies are data
-  (:fm/anomaly (inc_ 'a)) ; output of s/explain-data
-  (:fm/fname (inc_ 'a))   ; qualified name of function
+  ;; fm is just fn
+  (macroexpand '(defm inc_
+                  [n]
+                  (inc n)))
 
-  ;; anomaly 2: bad output
-  (defm bad-output number? symbol? (inc $))
+  (defm inc_
+    [n]
+    (inc n))
+
+  (inc_ 1)
+  (inc_ 'a) ;; this is anomaly 3: throw
+
+  (defm inc_
+    ^{:fm/args number?}
+    [n]
+    (inc n))
+
+  (inc_ 1)
+  (inc_ 'a) ;; anomaly 1: argument(s)
+
+  ;; anomalies are data
+  (:fm/sym (inc_ 'a))     ; qualified function symbol
+  (:fm/args (inc_ 'a))    ; args that triggered the anomaly
+  (:fm/anomaly (inc_ 'a)) ; output of `s/explain-data`, same shape as args
+
+  ;; anomaly 2: return
+  (defm bad-output
+    ^{:fm/args number?
+      :fm/ret  symbol?}
+    [n]
+    (inc n))
+
   (bad-output 1)
 
   ;; anomaly contains the input and output values
-  (:fm/anomaly (bad-output 1))    ; output of s/explain-data
-  (:fm/fname (bad-output 1))      ; qualified name of function
+  (:fm/sym (bad-output 1))        ; qualified function symbol
   (:fm/args (bad-output 1))       ; args that caused anomalistic output
+  (:fm/anomaly (bad-output 1))    ; output of `s/explain-data`
   (:clojure.spec.alpha/value      ; output that triggered anomaly
    (:fm/anomaly (bad-output 1)))
 
-  ;; anomaly 3: throws
-  (defm throws any? any? (throw (Exception. "darn!")))
-  (throws nil)
+  ;; another anomaly 3: throw
+  (defm throws
+    []
+    (throw (Exception. "darn!")))
 
-  (:fm/anomaly (throws [])) ; an #error { ... }
-  (:fm/fname (throws []))   ; qualified name of function
-  (:fm/args (throws []))    ; args that caused throw
+  (throws)
+
+  (:fm/sym (throws))     ; qualified function symbol
+  (:fm/args (throws))    ; args that caused throw, same shape as args
+  (:fm/anomaly (throws)) ; an #error { ... }
 
   ;; anonymous fm
-  ((fm number? number? (inc $)) 1)
-  ((fm number? number? (inc $)) 'a)
+  ((fm ^{:fm/args number? :fm/ret number?} [n] (inc n)) 1)
+  ((fm ^{:fm/args number? :fm/ret number?} [n] (inc n)) 'a)
 
-  ;; rebind args symbol
-  (defm inc_ number? number?
-    ^{:fm/as n}
-    (inc n))
+  ;; variadic signatures aren't ready yet, but otherwise...
+  (defm add_
+    ^{:fm/args [number? [float? [int? int?]]]}
+    [x [y [z w]]]
+    (+ x y z w))
+
+  (add_ 1/2 [2.5 [36 3]])
+
+  ;; anomalies are reported according to the shape of the arguments
+  (add_ 'a [2.5 ['b 3]])
+
+  (first (:fm/args    (add_ 'a [2.0 ['b 4]])))
+  (first (:fm/anomaly (add_ 'a [2.0 ['b 4]])))
+  (first (second (second (:fm/args    (add_ 'a [2.0 ['b 4]])))))
+  (first (second (second (:fm/anomaly (add_ 'a [2.0 ['b 4]])))))
 
   ;; custom anomaly handling
-  (defm custom-anomaly any? any?
+  (defm custom-anomaly
     ^{:fm/anomaly "dang!"}
-    (throw (Exception.)))
+    []
+    (throw (Exception. "darn!")))
 
-  (custom-anomaly nil)
+  (custom-anomaly)
 
-  (defm custom-anomaly2 any? any?
-    ^{:fm/anomaly (fn [a]
-                    (prn (:fm/fname a))
-                    (prn (:fm/args a))
-                    a)}
-    (throw (Exception.)))
+  (defn log!
+    [a]
+    (prn "logging!")
+    a)
 
-  (custom-anomaly2 'xyz)
+  (defm custom-anomaly2
+    ^{:fm/anomaly log!}
+    []
+    (throw (Exception. "darn!")))
+
+  (custom-anomaly2)
 
   (s/def ::http-req
     (s/select
-     [{:body string?}]
+     [{:body (s/and string? not-empty)}]
      [*]))
-
-  (gen/generate (s/gen ::http-req))
-  (gen/sample (s/gen ::http-req))
-
-  (defm echo
-    ::http-req        ; spec from registry
-    [{:body string?}] ; inline select [*]
-    (let [{:keys [body] :as resp} http-req]
-      {:body (str "echo " body)}))
-
-  ;; compiled args and ret specs accessible via metadata
-  (:fm/args (meta echo))
-  (:fm/ret (meta echo))
-
-  ;; toward properties
-  (gen/sample (s/gen (:fm/args (meta echo))))
-  (gen/sample (s/gen (:fm/ret (meta echo))))
-  (map echo (gen/sample (s/gen (:fm/args (meta echo)))))
-
-  (defm exclaim
-    [{:body string?}]
-    [{:body string?}]
-    {:body (str body "!")})
-
-  ;; "wire up"
-  (-> (gen/generate (s/gen ::http-req))
-      (echo)
-      (exclaim)
-      )
-
-  ;; anomaly pass-through
-  (-> {:causes :anomaly :in :echo}
-      (echo)
-      (exclaim)
-      #_(:fm/fname) ;; anomaly source
-      )
 
   (s/def ::http-resp
     (s/select
-     [{:statusCode #{200 503}
-       :body string?}]
+     [{:body   (s/and string? not-empty)
+       :status #{200}}]
      [*]))
 
-  ;; `sink`
-  (defm response ::http-req ::http-resp
-    ^{:fm/anomaly (fn [{:keys [fm/fname] :as anomaly}]
-                    (prn (str "Bad happened in " fname "!"))
-                    #_(logger/log! anomaly)
-                    {:statusCode 503 :body "I failed!"})}
-    (assoc http-req :statusCode 200))
+  (gen/generate (s/gen ::http-req))
+  (gen/sample (s/gen ::http-resp))
 
-  (-> {:body "hi"}
-      (echo)
-      (exclaim)
-      (response))
+  (s/def ::echo-resp
+    (s/and
+     ::http-resp
+     (fn [{:keys [body]}]
+       (clojure.string/starts-with? body "echo: "))))
 
-  (-> {:causes :anomaly}
-      (echo)
-      (exclaim)
-      (response))
+  (defm echo
+    ^{:fm/args ::http-req
+      :fm/ret  ::echo-resp}
+    [{:keys [body]}]
+    {:status 200
+     :body   (str "echo: " body)})
+
+  ;; fm metadata
+  (meta echo)
+
+  ;; toward properties
+  (->>
+   (:fm/args (meta echo))
+   (map (comp gen/sample s/gen))
+   (apply map echo))
+
+  (->>
+   (gen/sample (gen/string))
+   (map (partial assoc {} :body))
+   (map echo))
+
+  (s/def ::exclaim-resp
+    (s/and
+     ::echo-resp
+     (fn [{:keys [status body]}]
+       (and
+        (= status 200)
+        (clojure.string/ends-with? body "!")))))
+
+  (defm exclaim
+    ^{:fm/args ::echo-resp
+      :fm/ret  ::exclaim-resp}
+    [{:keys [body]}]
+    {:status 200
+     :body   (str body "!")})
+
+  ;; "wire up"
+  (def echo-exclaim-xf
+    (map (comp exclaim echo)))
+
+  (->>
+   (gen/sample (s/gen ::http-req))
+   (into [] echo-exclaim-xf))
+
+  (->
+   {:body "hi"}
+   (echo)
+   (exclaim))
+
+  (->
+   {:causes :anomaly}
+   (echo)
+   (exclaim)) ;; surprise anomaly 4: received
+
+  ;; the anomaly occured in `echo`, and then was
+  ;; received and propogated by `exclaim`
+  (->
+   {:causes :anomaly}
+   (echo)
+   (exclaim)
+   (first)
+   (:fm/sym))
+
+  ;; summary          |  anomaly handler receives:
+  ;; anomaly 1: args  => anomaly map; `:fm/anomaly` is a vector
+  ;; anomaly 2: ret   => anomaly map; `:fm/anomaly` is a map
+  ;; anomaly 3: throw => anomaly map; `:fm/anomaly` is throwable
+  ;; anomaly 4: recd  => argument vector containing one or more anomaly maps
 
   ;; experimental (broken)
   ;; defining ret spec dynamically as a function of args
   (defm echo-refined
-    ::http-req
-    [{:body #(= % (str "echo " http-req))}]
-    (let [{:keys [body] :as resp} http-req]
-      {:body (str "echo " body)}))
-
-  )
+    ^{:fm/args ::http-req
+      :fm/ret  {:body (fn [resp]
+                        (= (:body resp)
+                           (str "echo: " (:body req))))}}
+    [{:keys [body] :as req}]
+    {:status 200
+     :body   (str "echo: " body)}))
