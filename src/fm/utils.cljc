@@ -32,21 +32,29 @@
        (s/schema? schema)) (schema-keys (second (s/form schema)))
       (seqable? schema)    (schema-keys (second schema)))))
 
+(s/def ::spec-form
+  (fn [x]
+    (and
+     (seqable? x)
+     (=
+      (first x)
+      `s/spec))))
+
 (defn spec-form
   [x]
   (cond
-    (vector? x)     (mapv spec-form x)
-    (keyword? x)    `(when (s/form ~x) (s/get-spec ~x))
-    (map? x)        `(s/select [~x] ~(vec (schema-keys x)))
+    (vector? x)      (mapv spec-form x)
+    (keyword? x)     `(when (s/form ~x) (s/get-spec ~x))
+    (map? x)         `(s/select [~x] ~(vec (schema-keys x)))
     (or
      (symbol? x)
      (and
-      (seqable? x)
       (not
-       (=
-        (first x)
-        `s/spec)))) `(s/spec ~x)
-    :else           x))
+       (s/valid?
+        ::spec-form
+        x))
+      (seqable? x))) `(s/spec ~x)
+    :else            x))
 
 (defn fmt-arg
   [arg]
@@ -113,7 +121,7 @@
    vector?
    (fn [_ _ _ _ arg]
      (cond
-       (boolean? arg)           (reduced arg)
+       (true? arg)              (reduced true)
        (s/valid? ::anomaly arg) (reduced true)
        :else                    false))
    false
@@ -142,11 +150,13 @@
    (partial s/valid? ::args-recurse)
    (fn [_ _ _ _ x]
      (cond
-       (boolean? x)                      (reduced x)
-       (and
-        (s/valid? ::zipped-arg-spec x)
-        (s/valid? (second x) (first x))) true
-       :else                             (reduced false)))
+       (false? x)                          (reduced false)
+       (or
+        (true? x)
+        (and
+         (s/valid? ::zipped-arg-spec x)
+         (s/valid? (second x) (first x)))) true
+       :else                               (reduced false)))
    true
    zipped))
 
@@ -175,11 +185,15 @@
                        (walk/postwalk
                         (fn [x] (if (symbol? x) `any? x))
                         args-syms)))
-                    (walk/postwalk spec-form)
                     ((fn [specs]
                        (if (not (vector? specs))
                          [specs]
-                         specs))))
+                         specs)))
+                    (rreduce
+                     vector?
+                     (fn [_ _ _ acc spec]
+                       (conj acc (spec-form spec)))
+                     []))
         zipped     (zip-syms-specs args-syms args-specs)
         ret-spec   (->>
                     (or (:fm/ret metadata) `any?)
@@ -474,19 +488,9 @@
     [{:keys [fm/args]
       :as   anomaly}]
     (cond
-      ;; propagate previous anomalistic response
-      (s/valid? ::http-resp (first args))
-      (first args)
-
-      ;; anomaly 1: argument(s)
-      ;; in this context, may indicate an anomalistic (bad) request
-      (s/valid? :fm.utils/args-anomaly anomaly)
-      (http-400 (:fm/sym anomaly))
-
-      ,,,
-
-      :else
-      http-503))
+      (s/valid? ::http-resp (first args))       (first args)                 ;; propagate previous anomalistic response
+      (s/valid? :fm.utils/args-anomaly anomaly) (http-400 (:fm/sym anomaly)) ;; anomaly 1: argument(s) may indicate an anomalistic (bad) request
+      :else                                     http-503))
 
   (defm echo2
     ^{:fm/args    ::http-req
