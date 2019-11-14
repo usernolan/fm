@@ -9,4 +9,4 @@ A small macro that produces a regular `fn`
   (inc n))
 ```
 
-[Usage](src/fm/utils.cljc#L265)
+[Usage](src/fm/usage.cljc)
