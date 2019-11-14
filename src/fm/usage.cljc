@@ -188,6 +188,11 @@
    exclaim
    echo))
 
+  ;; are these wirable?
+(=
+ (first (:fm/args (meta exclaim)))
+ (:fm/ret (meta echo)))
+
 (->>
  (gen/sample (s/gen ::http-req))
  (into [] (map echo-exclaim)))
@@ -275,8 +280,8 @@
 
 (defm traced2
   ^{:fm/trace
-    (fn [{:keys [fm/sym fm/args fm/res]}]
-      (prn sym (symbol "trace:") args res))}
+    (fn [{:keys [fm/sym fm/args fm/ret]}]
+      (prn sym (symbol "trace:") args ret))}
   []
   (rand))
 

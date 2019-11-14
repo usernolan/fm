@@ -205,7 +205,7 @@
                      (->>
                       (if (true? trace) `prn trace)
                       (trace-form)))
-        res-sym    (gensym "res__")]
+        ret-sym    (gensym "ret__")]
 
     `(let [args# ~args-specs
            ret#  ~ret-spec
@@ -228,23 +228,23 @@
 
            (if (args-valid?* ~zipped)
              (try
-               (let [~res-sym (do ~@body)]
+               (let [~ret-sym (do ~@body)]
 
                  ~(when (:fm/trace metadata)
                     `(~trace {:fm/sym '~sym
-                              :fm/res ~res-sym}))
+                              :fm/ret ~ret-sym}))
 
                  (cond
-                   (s/valid? ::anomaly ~res-sym)
-                   (anom# ~res-sym)
+                   (s/valid? ::anomaly ~ret-sym)
+                   (anom# ~ret-sym)
 
-                   (s/valid? ret# ~res-sym)
-                   ~res-sym
+                   (s/valid? ret# ~ret-sym)
+                   ~ret-sym
 
                    :else
                    (anom# #:fm{:sym     '~sym
                                :args    ~args-syms
-                               :anomaly (s/explain-data ret# ~res-sym)})))
+                               :anomaly (s/explain-data ret# ~ret-sym)})))
 
                (catch Throwable e#
                  (anom# #:fm{:sym     '~sym
