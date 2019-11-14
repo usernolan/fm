@@ -188,14 +188,14 @@
    exclaim
    echo))
 
-  ;; are these wirable?
+  ;; wait are they wirable?
 (=
  (first (:fm/args (meta exclaim)))
  (:fm/ret (meta echo)))
 
 (->>
  (gen/sample (s/gen ::http-req))
- (into [] (map echo-exclaim)))
+ (map echo-exclaim))
 
 (->
  {:body "hi"}
@@ -238,9 +238,16 @@
   [{:keys [fm/args]
     :as   anomaly}]
   (cond
-    (s/valid? ::http-resp (first args))       (first args)                 ;; propagate previous anomalistic response
-    (s/valid? :fm.utils/args-anomaly anomaly) (http-400 (:fm/sym anomaly)) ;; anomaly 1: args; treated as anomalistic (bad) request
-    :else                                     http-503))
+    ;; propagate any previous anomalistic response
+    (s/valid? ::http-resp (first args))
+    (first args)
+    ;; anomaly 1: args
+    ;; treated as anomalistic (bad) request
+    (s/valid? :fm.utils/args-anomaly anomaly)
+    (http-400 (:fm/sym anomaly))
+    ,,,
+    :else
+    http-503))
 
 (defm echo2
   ^{:fm/args    ::http-req
