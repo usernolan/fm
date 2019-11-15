@@ -117,11 +117,19 @@
    (fn [{:keys [fm/anomaly]}]
      (vector? anomaly))))
 
+(defn args-anomaly?
+  [x]
+  (s/valid? ::args-anomaly x))
+
 (s/def ::ret-anomaly
   (s/and
    map?
    (fn [{:keys [fm/anomaly]}]
      (map? anomaly))))
+
+(defn ret-anomaly?
+  [x]
+  (s/valid? ::ret-anomaly x))
 
 (defn throwable?
   [x]
@@ -132,6 +140,10 @@
    map?
    (fn [{:keys [fm/anomaly]}]
      (throwable? anomaly))))
+
+(defn throw-anomaly?
+  [x]
+  (s/valid? ::throw-anomaly x))
 
 (defn contains-anomaly?*
   [recurse? xs]
@@ -162,6 +174,10 @@
    vector?
    not-empty
    args-anomaly?*))
+
+(defn received-anomaly?
+  [x]
+  (s/valid? ::received-anomaly x))
 
 (s/def ::anomaly
   (s/or
