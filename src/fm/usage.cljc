@@ -23,7 +23,7 @@
   (inc n))
 
 (inc_ 1)
-(inc_ 'a) ;; this is anomaly 3: throw
+(inc_ 'a) ; this is anomaly 3: throw
 
 (defm inc_
   ^{:fm/args number?}
@@ -31,12 +31,19 @@
   (inc n))
 
 (inc_ 1)
-(inc_ 'a) ;; anomaly 1: argument(s)
+(inc_ 'a) ; anomaly 1: argument(s)
 
   ;; anomalies are data
-(:fm/sym (inc_ 'a))     ; qualified function symbol
-(:fm/args (inc_ 'a))    ; args that triggered the anomaly
+(:fm/sym     (inc_ 'a)) ; qualified function symbol
+(:fm/args    (inc_ 'a)) ; args that triggered the anomaly
 (:fm/anomaly (inc_ 'a)) ; args reduced with `s/explain-data`, same shape as args
+
+  ;; what kind of anomaly are you?
+(->>
+ (inc_ 'a)
+ (s/conform
+  ::fm/anomaly)
+ (first)) ; i'm an anomaly 1: args
 
   ;; anomaly 2: return
 (defm bad-ret
@@ -48,9 +55,9 @@
 (bad-ret 1)
 
   ;; anomaly contains the args and ret values
-(:fm/sym (bad-ret 1))       ; qualified function symbol
-(:fm/args (bad-ret 1))      ; args that caused anomalistic ret
-(:fm/anomaly (bad-ret 1))   ; output of `s/explain-data`
+(:fm/sym      (bad-ret 1))  ; qualified function symbol
+(:fm/args     (bad-ret 1))  ; args that caused anomalous ret
+(:fm/anomaly  (bad-ret 1))  ; output of `s/explain-data`
 (:clojure.spec.alpha/value
  (:fm/anomaly (bad-ret 1))) ; return value that triggered anomaly
 
@@ -61,8 +68,8 @@
 
 (throws)
 
-(:fm/sym (throws))     ; qualified function symbol
-(:fm/args (throws))    ; args that caused the throw, same shape as args
+(:fm/sym     (throws)) ; qualified function symbol
+(:fm/args    (throws)) ; args that caused the throw, same shape as args
 (:fm/anomaly (throws)) ; a throwable
 
   ;; anonymous fm
@@ -155,13 +162,15 @@
 (failed-pred (echo {:body nil}))
 (failed-pred (echo {:body ""}))
 (failed-pred (echo {:body "hi"}))
+(echo {:body "hi"})
 
-  ;; fm metadata; AdS/CFT
+  ;; function metadata
 (meta echo)
 
   ;; toward properties
 (->>
- (:fm/args (meta echo))
+ (meta echo)
+ (:fm/args)
  (first)
  (s/gen)
  (gen/sample)
@@ -191,36 +200,43 @@
   ;; wait are they wirable?
 (=
  (first (:fm/args (meta exclaim)))
- (:fm/ret (meta echo)))
+ (:fm/ret         (meta echo)))
 
 (->>
- (gen/sample (s/gen ::http-req))
+ (s/gen ::http-req)
+ (gen/sample)
  (map echo-exclaim))
 
-(->
+(->>
  {:body "hi"}
  (echo)
  (exclaim))
 
-(->
+(->>
  {:causes :anomaly}
  (echo)
- (exclaim)) ;; surprise anomaly 4: received
+ (exclaim)) ; surprise anomaly 4: received
 
-  ;; the anomaly occured in `echo`, and then was
+  ;; the anomaly occurs in `echo`, and is
   ;; received and propagated by `exclaim`
-(->
+(->>
  {:causes :anomaly}
  (echo)
  (exclaim)
- (first)    ;; ask the anomaly
- (:fm/sym)) ;; "where did you occur?"
+ (first)    ; ask the anomaly
+ (:fm/sym)) ; "where did you occur?"
 
   ;; summary          |  anomaly handler receives:
   ;; anomaly 1: args  => anomaly map; `:fm/anomaly` is a vector
   ;; anomaly 2: ret   => anomaly map; `:fm/anomaly` is a map
   ;; anomaly 3: throw => anomaly map; `:fm/anomaly` is throwable
   ;; anomaly 4: recd  => argument vector containing one or more anomaly maps
+
+(s/describe ::fm/anomaly)          ; anomaly sum
+(s/describe ::fm/args-anomaly)     ; anomaly 1, args
+(s/describe ::fm/ret-anomaly)      ; anomaly 2, ret
+(s/describe ::fm/throw-anomaly)    ; anomaly 3, throw
+(s/describe ::fm/received-anomaly) ; anomaly 4, received
 
   ;; anomaly handling
 (def http-503
@@ -238,14 +254,13 @@
   [{:keys [fm/args]
     :as   anomaly}]
   (cond
-    ;; propagate any previous anomalistic response
+    ;; propagate any previous anomalous response
     (s/valid? ::http-resp (first args))
     (first args)
-    ;; anomaly 1: args
-    ;; treated as anomalistic (bad) request
+    ;; anomaly 1: args, treated as bad request
     (s/valid? :fm.utils/args-anomaly anomaly)
     (http-400 (:fm/sym anomaly))
-    ,,,
+    ;; ...
     :else
     http-503))
 
@@ -279,7 +294,7 @@
 
   ;; thin trace facility
 (defm traced
-  ^{:fm/trace true} ;; defaults to `clojure.core/prn`
+  ^{:fm/trace true} ; defaults to `clojure.core/prn`
   []
   (rand))
 
@@ -304,6 +319,13 @@
 
 (traced3)
 (traced3)
+
+(defm traced4
+  ^{:fm/trace true}
+  []
+  (inc (traced)))
+
+(traced4)
 
   ;; experimental (broken)
   ;; defining ret spec dynamically as a function of args

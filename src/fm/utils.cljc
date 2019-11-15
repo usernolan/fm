@@ -1,27 +1,29 @@
 (ns fm.utils
   (:require
    [clojure.spec-alpha2.gen :as gen]
-   [clojure.spec-alpha2 :as s]
-   [clojure.walk :as walk]))
+   [clojure.spec-alpha2 :as s]))
 
-(s/def ::anomaly
-  (s/select
-   [{:fm/anomaly any?}]
-   [*]))
+(defn arg-fmt*
+  [arg]
+  (cond
+    (vector? arg) (mapv arg-fmt* arg)
+    (map? arg)    (update arg :as (fnil identity (gensym "arg__")))
+    :else         arg))
 
-(def anomaly?
-  (partial s/valid? ::anomaly))
+(defn arg-sym*
+  [arg]
+  (cond
+    (vector? arg) (mapv arg-sym* arg)
+    (map? arg)    (:as arg)
+    :else         arg))
 
-(s/def ::args-anomaly
-  (s/and
-   ::anomaly
-   (fn [{:keys [fm/anomaly]}]
-     (vector? anomaly))))
+(defn default-spec*
+  [x]
+  (if (vector? x)
+    (mapv default-spec* x)
+    `any?))
 
-(def args-anomaly?
-  (partial s/valid? ::args-anomaly))
-
-(defn schema-keys
+(defn schema-keys*
   [schema]
   (let [f #(cond (keyword? %) [%] (map? %) (keys %))]
     (cond
@@ -29,47 +31,38 @@
       (map? schema)        (keys schema)
       (or
        (keyword? schema)
-       (s/schema? schema)) (schema-keys (second (s/form schema)))
-      (seqable? schema)    (schema-keys (second schema)))))
+       (s/schema? schema)) (schema-keys* (second (s/form schema)))
+      (seqable? schema)    (schema-keys* (second schema)))))
 
 (s/def ::spec-form
   (fn [x]
     (and
      (seqable? x)
-     (=
-      (first x)
-      `s/spec))))
+     (= (first x) `s/spec))))
 
-(defn spec-form
+(defn spec-form?
+  [x]
+  (s/valid? ::spec-form x))
+
+(defn spec-form*
   [x]
   (cond
-    (vector? x)      (mapv spec-form x)
-    (keyword? x)     `(when (s/form ~x) (s/get-spec ~x))
-    (map? x)         `(s/select [~x] ~(vec (schema-keys x)))
+    (vector? x)          (mapv spec-form* x)
+    (map? x)             `(s/select [~x] ~(vec (schema-keys* x)))
+    (keyword? x)         `(when (s/form ~x) (s/get-spec ~x))
     (or
      (symbol? x)
      (and
+      (seqable? x)
       (not
-       (s/valid?
-        ::spec-form
-        x))
-      (seqable? x))) `(s/spec ~x)
-    :else            x))
+       (spec-form? x)))) `(s/spec ~x)
+    :else                x))
 
-(defn fmt-arg
-  [arg]
-  (cond
-    (vector? arg) (mapv fmt-arg arg)
-    (map? arg)    (if (:as arg)
-                    arg
-                    (assoc arg :as (gensym "arg__")))
-    :else         arg))
-
-(defn args-syms-walk
-  [x]
-  (if (map? x)
-    (:as x)
-    x))
+(defn zipv*
+  [& xs]
+  (if (every? coll? xs)
+    (apply mapv zipv* xs)
+    (vec xs)))
 
 (def fn-symbols-set
   #{'fn 'fn* `fn 'fm})
@@ -80,132 +73,173 @@
      (seqable? x)
      (fn-symbols-set (first x)))))
 
+(defn fn-form?
+  [x]
+  (s/valid? ::fn-form x))
+
 (defn anomaly-form
   [x]
   (cond
-    (s/valid? ::fn-form x) `~x
-    (symbol? x)            x
-    :else                  `(fn [~'_] ~x)))
+    (fn-form? x) `~x
+    (symbol? x)  x
+    :else        `(fn [~'_] ~x)))
 
 (defn trace-form
   [x]
   (cond
-    (s/valid? ::fn-form x) `~x
-    (symbol? x)            x
-    :else                  `(fn [~'_] (prn ~x))))
+    (fn-form? x) `~x
+    (symbol? x)  x
+    :else        `(fn [~'_] (prn ~x))))
 
-(defn zip-syms-specs
-  [syms specs]
-  (mapv
-   (fn [sym spec]
-     (if (symbol? sym)
-       [sym spec]
-       (zip-syms-specs sym spec)))
-   syms
-   specs))
+(defn reduce*
+  ([recurse? f init xs]
+   (reduce* recurse? f f init xs))
+  ([recurse? cf f init xs]
+   (reduce
+    (fn [acc x]
+      (if (recurse? x)
+        (cf acc (reduce* recurse? cf f init x))
+        (f acc x)))
+    init
+    xs)))
 
-(defn rreduce
-  [recurse? f init xs]
-  (reduce
-   (fn [acc x]
-     (let [x (if (recurse? x)
-               (rreduce recurse? f init x)
-               x)]
-       (f recurse? init xs acc x)))
-   init
+;; TODO: 20191115 namespaced keys work strangely in
+;; the current `s/select`. the following returns true for
+;; `(s/valid? ::args-anomaly {:fm/anomaly {}})`
+#_(s/def ::args-anomaly
+    (s/select
+     [{:fm/anomaly vector?}]
+     [:fm/anomaly]))
+
+(s/def ::args-anomaly
+  (s/and
+   map?
+   (fn [{:keys [fm/anomaly]}]
+     (vector? anomaly))))
+
+(s/def ::ret-anomaly
+  (s/and
+   map?
+   (fn [{:keys [fm/anomaly]}]
+     (map? anomaly))))
+
+(defn throwable?
+  [x]
+  (instance? Throwable x))
+
+(s/def ::throw-anomaly
+  (s/and
+   map?
+   (fn [{:keys [fm/anomaly]}]
+     (throwable? anomaly))))
+
+(defn contains-anomaly?*
+  [recurse? xs]
+  (reduce*
+   recurse?
+   (fn [_ result]
+     (if (true? result)
+       (reduced true)
+       false))
+   (fn [_ x]
+     (if (s/valid?
+          (s/or
+           ::args  ::args-anomaly
+           ::ret   ::ret-anomaly
+           ::throw ::throw-anomaly)
+          x)
+       (reduced true)
+       false))
+   false
    xs))
 
 (defn args-anomaly?*
   [args]
-  (rreduce
+  (contains-anomaly?* vector? args))
+
+(s/def ::received-anomaly
+  (s/and
    vector?
-   (fn [_ _ _ _ arg]
-     (cond
-       (true? arg)              (reduced true)
-       (s/valid? ::anomaly arg) (reduced true)
-       :else                    false))
-   false
-   args))
+   not-empty
+   args-anomaly?*))
+
+(s/def ::anomaly
+  (s/or
+   ::args     ::args-anomaly
+   ::ret      ::ret-anomaly
+   ::throw    ::throw-anomaly
+   ::received ::received-anomaly))
+
+(defn anomaly?
+  [x]
+  (s/valid? ::anomaly x))
 
 (s/def ::zipped-arg-spec
-  (fn [v]
-    (and
-     (vector? v)
-     (= (count v) 2)
-     (or
-      (s/spec? (second v))
-      (and
-       (keyword? (second v))
-       (s/get-spec (second v)))))))
+  (s/tuple
+   any?
+   (s/or
+    ::spec s/spec?
+    ::kw   (s/and keyword? s/get-spec))))
 
-(s/def ::args-recurse
-  (fn [v]
-    (and
-     (vector? v)
-     (not (s/valid? ::zipped-arg-spec v)))))
+(defn zipped-arg-spec?
+  [x]
+  (s/valid? ::zipped-arg-spec x))
+
+(s/def ::zipped-recurse
+  (s/and
+   vector?
+   (fn [v] (not (zipped-arg-spec? v)))))
+
+(defn zipped-recurse?
+  [x]
+  (s/valid? ::zipped-recurse x))
 
 (defn args-valid?*
   [zipped]
-  (rreduce
-   (partial s/valid? ::args-recurse)
-   (fn [_ _ _ _ x]
-     (cond
-       (false? x)                          (reduced false)
-       (or
-        (true? x)
-        (and
-         (s/valid? ::zipped-arg-spec x)
-         (s/valid? (second x) (first x)))) true
-       :else                               (reduced false)))
+  (reduce*
+   zipped-recurse?
+   (fn [_ result]
+     (if (false? result)
+       (reduced false)
+       true))
+   (fn [_ [arg spec]]
+     (if (s/valid? spec arg)
+       true
+       (reduced false)))
    true
    zipped))
 
 (defn explain*
-  [zipped]
-  (rreduce
-   (partial s/valid? ::args-recurse)
-   (fn [_ _ _ acc x]
-     (if (s/valid? ::zipped-arg-spec x)
-       (conj acc (s/explain-data (second x) (first x)))
-       (conj acc x)))
-   []
-   zipped))
+  [x]
+  (cond
+    (zipped-arg-spec? x) (s/explain-data (second x) (first x))
+    (vector? x)          (mapv explain* x)
+    :else                x))
 
 (defn fm-form
   [{:keys [fm/sym fm/args-form fm/body]}]
   (let [sym        (or sym (gensym "fm__"))
         metadata   (meta args-form)
-        args-fmt   (mapv fmt-arg args-form)
-        args-syms  (walk/postwalk args-syms-walk args-fmt)
-        args-specs (some->>
+        args-fmt   (mapv arg-fmt* args-form)
+        args-syms  (mapv arg-sym* args-fmt)
+        args-specs (->>
                     (or
                      (:fm/args metadata)
-                     (if (empty? args-form)
-                       nil
-                       (walk/postwalk
-                        (fn [x] (if (symbol? x) `any? x))
-                        args-syms)))
-                    ((fn [specs]
-                       (if (not (vector? specs))
-                         [specs]
-                         specs)))
-                    (rreduce
-                     vector?
-                     (fn [_ _ _ acc spec]
-                       (conj acc (spec-form spec)))
-                     []))
-        zipped     (zip-syms-specs args-syms args-specs)
+                     (mapv default-spec* args-syms))
+                    ((fn [x] (if (vector? x) x [x])))
+                    (mapv spec-form*))
+        zipped     (mapv zipv* args-syms args-specs)
+        ret-sym    (gensym "ret__")
         ret-spec   (->>
                     (or (:fm/ret metadata) `any?)
-                    (spec-form))
+                    (spec-form*))
         anomaly    (->>
                     (or (:fm/anomaly metadata) `identity)
                     (anomaly-form))
         trace      (when-let [trace (:fm/trace metadata)]
                      (->>
                       (if (true? trace) `prn trace)
-                      (trace-form)))
-        ret-sym    (gensym "ret__")]
+                      (trace-form)))]
 
     `(let [args# ~args-specs
            ret#  ~ret-spec
@@ -253,7 +287,7 @@
 
              (anom# #:fm{:sym     '~sym
                          :args    ~args-syms
-                         :anomaly (explain* ~zipped)})))))))
+                         :anomaly (mapv explain* ~zipped)})))))))
 
 (defn genform
   [spec x]
