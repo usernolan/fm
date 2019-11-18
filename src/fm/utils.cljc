@@ -92,13 +92,13 @@
     :else        `(fn [~'_] (prn ~x))))
 
 (defn reduce*
-  ([recurse? f init xs]
-   (reduce* recurse? f f init xs))
-  ([recurse? cf f init xs]
+  ([recur? f init xs]
+   (reduce* recur? f f init xs))
+  ([recur? cf f init xs]
    (reduce
     (fn [acc x]
-      (if (recurse? x)
-        (cf acc (reduce* recurse? cf f init x))
+      (if (recur? x)
+        (cf acc (reduce* recur? cf f init x))
         (f acc x)))
     init
     xs)))
@@ -146,9 +146,9 @@
   (s/valid? ::throw-anomaly x))
 
 (defn contains-anomaly?*
-  [recurse? xs]
+  [recur? xs]
   (reduce*
-   recurse?
+   recur?
    (fn [_ result]
      (if (true? result)
        (reduced true)
@@ -201,19 +201,19 @@
   [x]
   (s/valid? ::zipped-arg-spec x))
 
-(s/def ::zipped-recurse
+(s/def ::zipped-recur?
   (s/and
    vector?
    (fn [v] (not (zipped-arg-spec? v)))))
 
-(defn zipped-recurse?
+(defn zipped-recur?
   [x]
-  (s/valid? ::zipped-recurse x))
+  (s/valid? ::zipped-recur? x))
 
 (defn args-valid?*
   [zipped]
   (reduce*
-   zipped-recurse?
+   zipped-recur?
    (fn [_ result]
      (if (false? result)
        (reduced false)
