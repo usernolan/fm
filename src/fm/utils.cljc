@@ -97,7 +97,7 @@
   ([recur? cf f init xs]
    (reduce
     (fn [acc x]
-      (if (recur? x)
+      (if (recur? acc x)
         (cf acc (reduce* recur? cf f init x))
         (f acc x)))
     init
@@ -165,9 +165,13 @@
    false
    xs))
 
+(defn args-anomaly-recur?
+  [_ x]
+  (vector? x))
+
 (defn args-anomaly?*
   [args]
-  (contains-anomaly?* vector? args))
+  (contains-anomaly?* args-anomaly-recur? args))
 
 (s/def ::received-anomaly
   (s/and
@@ -201,14 +205,18 @@
   [x]
   (s/valid? ::zipped-arg-spec x))
 
-(s/def ::zipped-recur?
+(s/def ::arg-vector
   (s/and
    vector?
    (fn [v] (not (zipped-arg-spec? v)))))
 
-(defn zipped-recur?
+(defn arg-vector?
   [x]
-  (s/valid? ::zipped-recur? x))
+  (s/valid? ::arg-vector x))
+
+(defn zipped-recur?
+  [_ x]
+  (arg-vector? x))
 
 (defn args-valid?*
   [zipped]
