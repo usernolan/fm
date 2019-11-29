@@ -98,7 +98,7 @@
    (reduce
     (fn [acc x]
       (if (recur? acc x)
-        (cf acc (reduce* recur? cf f init x))
+        (cf (reduce* recur? cf f acc x) x)
         (f acc x)))
     init
     xs)))
@@ -149,8 +149,8 @@
   [recur? xs]
   (reduce*
    recur?
-   (fn [_ result]
-     (if (true? result)
+   (fn [acc _]
+     (if (true? acc)
        (reduced true)
        false))
    (fn [_ x]
@@ -222,8 +222,8 @@
   [zipped]
   (reduce*
    zipped-recur?
-   (fn [_ result]
-     (if (false? result)
+   (fn [acc _]
+     (if (false? acc)
        (reduced false)
        true))
    (fn [_ [arg spec]]
