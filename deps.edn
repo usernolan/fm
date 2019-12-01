@@ -4,5 +4,4 @@
   {:git/url "https://github.com/clojure/spec-alpha2.git",
    :sha "de38650874c6f0bc19e7755feab4d65b3fffb268"},
   org.clojure/test.check {:mvn/version "0.10.0"}},
- :paths ["src"],
- :aliases {}}
+ :paths ["src"]}
