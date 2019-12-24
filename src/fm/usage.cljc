@@ -1,7 +1,7 @@
 (ns fm.usage
   (:require
-   [clojure.spec-alpha2.gen :as gen]
-   [clojure.spec-alpha2 :as s]
+   [clojure.alpha.spec.gen :as gen]
+   [clojure.alpha.spec :as s]
    [fm.macros :refer [fm defm]]
    [fm.utils :as fm]))
 

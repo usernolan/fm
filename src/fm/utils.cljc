@@ -1,7 +1,7 @@
 (ns fm.utils
   (:require
-   [clojure.spec-alpha2.gen :as gen]
-   [clojure.spec-alpha2 :as s]))
+   [clojure.alpha.spec.gen :as gen]
+   [clojure.alpha.spec :as s]))
 
 (defn arg-fmt*
   [arg]
