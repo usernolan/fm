@@ -269,7 +269,7 @@
            ret#  ~ret-spec
            anom# ~anomaly]
 
-       ^{:fm/sym     '~sym
+       ^{:fm/sym     sym
          :fm/args    args#
          :fm/ret     ret#
          :fm/anomaly anom#}
