@@ -3,6 +3,28 @@
    [clojure.alpha.spec.gen :as gen]
    [clojure.alpha.spec :as s]))
 
+(s/def :fm/args
+  (s/or
+   :spec s/spec?
+   :vector (s/coll-of s/spec?)))
+
+(s/def :fm/meta
+  (s/select
+   [:fm/sym :fm/args :fm/ret :fm/rel]
+   [:fm/sym]))
+
+(s/def :fm/ret
+  (s/or
+   :fn fn?
+   :spec s/spec?))
+
+(s/def :fm/rel
+  (s/or
+   :fn fn?
+   :spec s/spec?))
+
+(s/def :fm/sym symbol?)
+
 (defn arg-fmt*
   [arg]
   (cond
@@ -255,10 +277,10 @@
         zipped     (mapv zipv* args-syms args-specs)
         ret-sym    (gensym "ret__")
         ret-spec   (->>
-                    (or (:fm/ret metadata) `any?)
+                    (:fm/ret metadata `any?)
                     (spec-form*))
         anomaly    (->>
-                    (or (:fm/anomaly metadata) `identity)
+                    (:fm/anomaly metadata `identity)
                     (anomaly-form))
         trace      (when-let [trace (:fm/trace metadata)]
                      (->>
@@ -312,6 +334,14 @@
              (anom# #:fm{:sym     '~sym
                          :args    ~args-syms
                          :anomaly (mapv explain* ~zipped)})))))))
+
+(defn fm?
+  "Given a fn symbol, inform if the symbol is wrapped by fm"
+  [fn-meta]
+  (->> fn-meta
+       meta
+       :fm/sym
+       boolean))
 
 (defn genform
   [spec x]
