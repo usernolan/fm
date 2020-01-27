@@ -17,10 +17,10 @@
     (map? arg)    (:as arg)
     :else         arg))
 
-(defn default-spec*
+(defn any?*
   [x]
   (if (vector? x)
-    (mapv default-spec* x)
+    (mapv any?* x)
     `any?))
 
 (defn schema-keys*
@@ -44,25 +44,28 @@
   [x]
   (s/valid? ::spec-form x))
 
-(defn spec-form*
+(defn args-spec-form*
   [x]
   (cond
-    (vector? x)          (mapv spec-form* x)
-    (map? x)             `(s/select [~x] ~(vec (schema-keys* x)))
-    (keyword? x)         `(when (s/form ~x) (s/get-spec ~x))
+    (map? x)     `(s/select [~x] ~(vec (schema-keys* x)))
+    (and
+     (vector? x)
+     (empty? x)) `(s/spec #{[]})
+    (vector? x)  `(s/tuple ~@(mapv args-spec-form* x))
+    :else        x))
+
+(defn ret-spec-form
+  [x]
+  (cond
+    (keyword? x)             `(when (s/form ~x) (s/get-spec ~x))
+    (map? x)                 `(s/select [~x] ~(vec (schema-keys* x)))
     (or
      (symbol? x)
+     (set? x)
      (and
       (seqable? x)
-      (not
-       (spec-form? x)))) `(s/spec ~x)
-    :else                x))
-
-(defn zipv*
-  [& xs]
-  (if (every? coll? xs)
-    (apply mapv zipv* xs)
-    (vec xs)))
+      (not (spec-form? x)))) `(s/spec ~x)
+    :else                    x))
 
 (def fn-symbols-set
   #{'fn 'fn* `fn 'fm})
@@ -103,47 +106,46 @@
     init
     xs)))
 
-;; TODO: 20191115 namespaced keys work strangely in
+;; TODO: 20200126 namespaced keys work strangely in
 ;; the current `s/select`. the following returns true for
-;; `(s/valid? ::args-anomaly {:fm/anomaly {}})`
-#_(s/def ::args-anomaly
+;; `(s/valid? :fm.anomaly/args {:fm.anomaly/type nil})`
+#_(s/def :fm.anomaly/args
     (s/select
-     [{:fm/anomaly vector?}]
-     [:fm/anomaly]))
+     [{:fm.anomaly/type #{:fm.anomaly/args}}]
+     [:fm.anomaly/type]))
 
-(s/def ::args-anomaly
+(s/def :fm.anomaly/args
   (s/and
    map?
-   (fn [{:keys [fm/anomaly]}]
-     (vector? anomaly))))
+   (fn [{t :fm.anomaly/type}]
+     (= t :fm.anomaly/args))))
 
 (defn args-anomaly?
   [x]
-  (s/valid? ::args-anomaly x))
+  (s/valid? :fm.anomaly/args x))
 
-(s/def ::ret-anomaly
+(s/def :fm.anomaly/ret
   (s/and
    map?
-   (fn [{:keys [fm/anomaly]}]
-     (map? anomaly))))
+   (fn [{t :fm.anomaly/type}]
+     (= t :fm.anomaly/ret))))
 
 (defn ret-anomaly?
   [x]
-  (s/valid? ::ret-anomaly x))
+  (s/valid? :fm.anomaly/ret x))
 
-(defn throwable?
-  [x]
-  (instance? Throwable x))
-
-(s/def ::throw-anomaly
+(s/def :fm.anomaly/throw
   (s/and
    map?
-   (fn [{:keys [fm/anomaly]}]
-     (throwable? anomaly))))
+   (fn [{t    :fm.anomaly/type
+         data :fm.anomaly/data}]
+     (and
+      (= t :fm.anomaly/throw)
+      (instance? Throwable data)))))
 
 (defn throw-anomaly?
   [x]
-  (s/valid? ::throw-anomaly x))
+  (s/valid? :fm.anomaly/throw x))
 
 (defn contains-anomaly?*
   [recur? xs]
@@ -156,9 +158,9 @@
    (fn [_ x]
      (if (s/valid?
           (s/or
-           ::args  ::args-anomaly
-           ::ret   ::ret-anomaly
-           ::throw ::throw-anomaly)
+           ::args  :fm.anomaly/args
+           ::ret   :fm.anomaly/ret
+           ::throw :fm.anomaly/throw)
           x)
        (reduced true)
        false))
@@ -173,7 +175,7 @@
   [args]
   (contains-anomaly?* args-anomaly-recur? args))
 
-(s/def ::received-anomaly
+(s/def :fm.anomaly/received
   (s/and
    vector?
    not-empty
@@ -181,91 +183,38 @@
 
 (defn received-anomaly?
   [x]
-  (s/valid? ::received-anomaly x))
+  (s/valid? :fm.anomaly/received x))
 
-(s/def ::anomaly
+(s/def :fm/anomaly
   (s/or
-   ::args     ::args-anomaly
-   ::ret      ::ret-anomaly
-   ::throw    ::throw-anomaly
-   ::received ::received-anomaly))
+   :fm.anomaly/args     :fm.anomaly/args
+   :fm.anomaly/ret      :fm.anomaly/ret
+   :fm.anomaly/throw    :fm.anomaly/throw
+   :fm.anomaly/received :fm.anomaly/received))
 
 (defn anomaly?
   [x]
-  (s/valid? ::anomaly x))
-
-(s/def ::zipped-arg-spec
-  (s/tuple
-   any?
-   (s/or
-    ::spec s/spec?
-    ::kw   (s/and keyword? s/get-spec))))
-
-(defn zipped-arg-spec?
-  [x]
-  (s/valid? ::zipped-arg-spec x))
-
-(s/def ::arg-vector
-  (s/and
-   vector?
-   (fn [v] (not (zipped-arg-spec? v)))))
-
-(defn arg-vector?
-  [x]
-  (s/valid? ::arg-vector x))
-
-(defn zipped-recur?
-  [_ x]
-  (arg-vector? x))
-
-(defn args-valid?*
-  [zipped]
-  (reduce*
-   zipped-recur?
-   (fn [acc _]
-     (if (false? acc)
-       (reduced false)
-       true))
-   (fn [_ [arg spec]]
-     (if (s/valid? spec arg)
-       true
-       (reduced false)))
-   true
-   zipped))
-
-(defn explain*
-  [x]
-  (cond
-    (zipped-arg-spec? x) (s/explain-data (second x) (first x))
-    (vector? x)          (mapv explain* x)
-    :else                x))
+  (s/valid? :fm/anomaly x))
 
 (defn fm-form
   [{:keys [fm/sym fm/args-form fm/body]}]
-  (let [sym        (or sym (gensym "fm__"))
-        metadata   (meta args-form)
-        args-fmt   (mapv arg-fmt* args-form)
-        args-syms  (mapv arg-sym* args-fmt)
-        args-specs (->>
-                    (or
-                     (:fm/args metadata)
-                     (mapv default-spec* args-syms))
-                    ((fn [x] (if (vector? x) x [x])))
-                    (mapv spec-form*))
-        zipped     (mapv zipv* args-syms args-specs)
-        ret-sym    (gensym "ret__")
-        ret-spec   (->>
-                    (or (:fm/ret metadata) `any?)
-                    (spec-form*))
-        anomaly    (->>
-                    (or (:fm/anomaly metadata) `identity)
-                    (anomaly-form))
-        trace      (when-let [trace (:fm/trace metadata)]
-                     (->>
-                      (if (true? trace) `prn trace)
-                      (trace-form)))]
+  (let [sym       (or sym (gensym "fm__"))
+        metadata  (meta args-form)
+        args-fmt  (arg-fmt* args-form)
+        args-syms (arg-sym* args-fmt)
+        args-spec (->>
+                   (:fm/args metadata (any?* args-syms))
+                   ((fn [x] (if (vector? x) x [x])))
+                   (args-spec-form*))
+        ret-sym   (gensym "ret__")
+        ret-spec  (ret-spec-form (:fm/ret metadata `any?))
+        anomaly   (anomaly-form (:fm/anomaly metadata `identity))
+        trace     (when-let [trace (:fm/trace metadata)]
+                    (->>
+                     (if (true? trace) `prn trace)
+                     (trace-form)))]
 
-    `(let [args# ~args-specs
+    `(let [args# ~args-spec
            ret#  ~ret-spec
            anom# ~anomaly]
 
@@ -278,40 +227,43 @@
          ~args-fmt
 
          ~(when (:fm/trace metadata)
-            `(~trace {:fm/sym  '~sym
-                      :fm/args ~args-syms}))
+            `(~trace #:fm.trace{:sym  '~sym
+                                :args ~args-syms}))
 
          (if (args-anomaly?* ~args-syms)
            (anom# ~args-syms)
 
-           (if (args-valid?* ~zipped)
+           (if (s/valid? args# ~args-syms)
              (try
                (let [~ret-sym (do ~@body)]
 
                  ~(when (:fm/trace metadata)
-                    `(~trace {:fm/sym '~sym
-                              :fm/ret ~ret-sym}))
+                    `(~trace #:fm.trace{:sym '~sym
+                                        :ret ~ret-sym}))
 
                  (cond
-                   (s/valid? ::anomaly ~ret-sym)
+                   (s/valid? :fm/anomaly ~ret-sym)
                    (anom# ~ret-sym)
 
                    (s/valid? ret# ~ret-sym)
                    ~ret-sym
 
                    :else
-                   (anom# #:fm{:sym     '~sym
-                               :args    ~args-syms
-                               :anomaly (s/explain-data ret# ~ret-sym)})))
+                   (anom# #:fm.anomaly{:type :fm.anomaly/ret
+                                       :sym  '~sym
+                                       :args ~args-syms
+                                       :data (s/explain-data ret# ~ret-sym)})))
 
                (catch Throwable e#
-                 (anom# #:fm{:sym     '~sym
-                             :args    ~args-syms
-                             :anomaly e#})))
+                 (anom# #:fm.anomaly{:type :fm.anomaly/throw
+                                     :sym  '~sym
+                                     :args ~args-syms
+                                     :data e#})))
 
-             (anom# #:fm{:sym     '~sym
-                         :args    ~args-syms
-                         :anomaly (mapv explain* ~zipped)})))))))
+             (anom# #:fm.anomaly{:type :fm.anomaly/args
+                                 :sym  '~sym
+                                 :args ~args-syms
+                                 :data (s/explain-data args# ~args-syms)})))))))
 
 (defn genform
   [spec x]
@@ -319,3 +271,136 @@
     (if (s/invalid? c)
       x
       (gen/generate (s/gen (first c))))))
+
+(comment
+
+  (require '[fm.utils :as fm.utils] :reload-all)
+  (require '[fm.macros :refer [defm fm]])
+  (require '[clojure.alpha.spec :as s]
+           '[clojure.alpha.spec.gen :as gen])
+
+  (def test-vec1 ['a ['b 'c]])
+  (def bad-vec1 [1 [2 3]])
+
+  (s/def ::cat1
+    (s/cat
+     :a symbol?
+     :nested1 (s/cat :b symbol? :c symbol?)))
+
+  (s/explain ::cat1 test-vec1) ; unexpected...
+
+  (s/def ::cat2
+    (s/cat
+     :a symbol?
+     :G__29109 (s/tuple symbol? symbol?))) ; gensym'd
+
+  (s/explain ::cat2 test-vec1) ; works
+  (s/conform ::cat2 test-vec1) ; might be brtual to work with in practice
+
+  (s/explain-data ::cat2 bad-vec1) ; only first problem reported
+
+  (s/def ::tuple1
+    (s/tuple symbol? (s/tuple symbol? symbol?)))
+
+  (s/explain ::tuple1 test-vec1)
+  (s/conform ::tuple1 test-vec1) ; maintains structure
+
+  (s/explain-data ::tuple1 bad-vec1) ; agh, beautiful
+
+  (defm inc1
+    ^{:fm/args int?
+      :fm/ret  int?}
+    [n]
+    (inc n))
+
+  (inc1 1)
+  (inc1 'a)
+
+  (macroexpand '(defm inc1
+                  ^{:fm/args int?
+                    :fm/ret  int?}
+                  [n]
+                  (inc n)))
+
+  (s/def ::n int?)
+
+  (defm inc2
+    ^{:fm/args (s/cat :n int? :m ::n)
+      :fm/ret  ::n}
+    [[n m]]
+    (inc (+ n m)))
+
+  (inc2 [1 2])
+  (inc2 'a) ; ah! inherits `defn` behavior but may present an opportunity...
+  (inc2 [1 'a]) ; potentially confusing `:path` (see aside)
+
+  (def inc2-anom (inc2 [1 'a]))
+  (def inc2-problems (:clojure.spec.alpha/problems (:fm.anomaly/data inc2-anom)))
+  (def inc2-args (:fm.anomaly/args inc2-anom)) ; alternatively (:clojure.spec.alpha/value (:fm.anomaly/data inc2-anom))
+  (get-in inc2-args (:path (first inc2-problems))) ; nil because of how `s/cat` conforms
+
+  (defm inc3
+    ^{:fm/args (s/tuple int? ::n)
+      :fm/ret  ::n}
+    [[n m]]
+    (inc (+ n m)))
+
+  (inc3 [1 2])
+  (inc3 [1 'a])
+
+  (def inc3-anom (inc3 [1 'a]))
+  (def inc3-problems (:clojure.spec.alpha/problems (:fm.anomaly/data inc3-anom)))
+  (def inc3-args (:fm.anomaly/args inc3-anom))
+  (get-in inc3-args (:path (first inc3-problems))) ; potentially useful
+
+  (->>
+   (meta inc3)                 ; fm        -> meta
+   (:fm/args)                  ; meta      -> args-spec
+   (s/gen)                     ; args-spec -> generator
+   (gen/sample)                ; generator -> args seq
+   (map (partial apply inc3))) ; args seq  -> ret seq
+
+  (defm inc4
+    ^{:fm/args (s/cat :n int? :m int?)
+      :fm/ret  (s/and int? pos?)}
+    [[n m]]
+    (let [i (inc (+ n m))]
+      (* i i)))
+
+  (inc4 [1 2])
+  (inc4 [1 -2]) ; ah! nice
+  (inc4 [-1 -3])
+
+  (defm inc5
+    ^{:fm/args [(fn [n] (= n 1))]
+      :fm/ret  (fn [n] (= n 2))}
+    [n]
+    (inc n))
+
+  (inc5 1)
+  (inc5 'a)
+
+  (macroexpand '(defm inc5
+                  ^{:fm/args [(fn [n] (= n 1))]
+                    :fm/ret  (fn [n] (= n 2))}
+                  [n]
+                  (inc n)))
+
+  (s/explain (:fm/args (meta inc5)) [1])
+  (s/explain (:fm/args (meta inc5)) [2])
+
+    ;; does `s/spec` nest?
+  (s/valid? (s/spec (s/cat :n int? :m int?)) [1 2]) ; seemingly
+  (s/conform (s/cat :n int? :m int?) [1 2])
+  (s/conform (s/spec (s/cat :n int? :m int?)) [1 2]) ; maybe...
+  (s/conform (s/spec (s/spec (s/cat :n int? :m int?))) [1 2]) ; i wonder why this isn't a no-op
+
+  (defm inc6
+    ^{:fm/args #{1}
+      :fm/ret  #{2}}
+    [n]
+    (inc n))
+
+  (inc6 1)
+  (inc6 2) ; sweet
+  )
