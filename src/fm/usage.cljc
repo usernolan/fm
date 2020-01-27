@@ -323,7 +323,47 @@
 
 (traced4)
 
-  ;; WIP `:fm/rel`
+(s/def ::n int?)
+
+(defm inc_
+  ^{:fm/args (s/tuple int? ::n)
+    :fm/ret  ::n}
+  [[n m]]
+  (inc (+ n m)))
+
+(inc_ [1 2])
+(inc_ [1 'a])
+
+(defm inc_
+  ^{:fm/args (s/tuple int? int?)
+    :fm/ret  (s/and int? pos?)}
+  [[n m]]
+  (let [i (inc (+ n m))]
+    (* i i)))
+
+(inc_ [1 2])
+(inc_ [1 -2])
+(inc_ [-1 -3])
+
+(defm inc_
+  ^{:fm/args [(fn [n] (= n 1))]
+    :fm/ret  (fn [n] (= n 2))}
+  [n]
+  (inc n))
+
+(inc_ 1)
+(inc_ 'a)
+
+(defm inc_
+  ^{:fm/args #{1}
+    :fm/ret  #{2}}
+  [n]
+  (inc n))
+
+(inc_ 1)
+(inc_ 'a)
+
+;; WIP `:fm/rel`
 (defm echo-refined
   ^{:fm/args ::http-req
     :fm/ret  ::http-resp
