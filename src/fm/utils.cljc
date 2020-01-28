@@ -117,8 +117,8 @@
 (s/def :fm.anomaly/args
   (s/and
    map?
-   (fn [{t :fm.anomaly/type}]
-     (= t :fm.anomaly/args))))
+   (fn [{:keys [fm.anomaly/spec]}]
+     (= spec :fm.anomaly/args))))
 
 (defn args-anomaly?
   [x]
@@ -127,8 +127,8 @@
 (s/def :fm.anomaly/ret
   (s/and
    map?
-   (fn [{t :fm.anomaly/type}]
-     (= t :fm.anomaly/ret))))
+   (fn [{:keys [fm.anomaly/spec]}]
+     (= spec :fm.anomaly/ret))))
 
 (defn ret-anomaly?
   [x]
@@ -137,10 +137,9 @@
 (s/def :fm.anomaly/throw
   (s/and
    map?
-   (fn [{t    :fm.anomaly/type
-         data :fm.anomaly/data}]
+   (fn [{:keys [fm.anomaly/spec fm.anomaly/data]}]
      (and
-      (= t :fm.anomaly/throw)
+      (= spec :fm.anomaly/throw)
       (instance? Throwable data)))))
 
 (defn throw-anomaly?
@@ -249,18 +248,18 @@
                    ~ret-sym
 
                    :else
-                   (anom# #:fm.anomaly{:type :fm.anomaly/ret
+                   (anom# #:fm.anomaly{:spec :fm.anomaly/ret
                                        :sym  '~sym
                                        :args ~args-syms
                                        :data (s/explain-data ret# ~ret-sym)})))
 
                (catch Throwable e#
-                 (anom# #:fm.anomaly{:type :fm.anomaly/throw
+                 (anom# #:fm.anomaly{:spec :fm.anomaly/throw
                                      :sym  '~sym
                                      :args ~args-syms
                                      :data e#})))
 
-             (anom# #:fm.anomaly{:type :fm.anomaly/args
+             (anom# #:fm.anomaly{:spec :fm.anomaly/args
                                  :sym  '~sym
                                  :args ~args-syms
                                  :data (s/explain-data args# ~args-syms)})))))))
