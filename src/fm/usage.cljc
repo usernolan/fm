@@ -23,7 +23,7 @@
   (inc n))
 
 (inc_ 1)
-(inc_ 'a) ; this is anomaly 3: throw
+(inc_ 'a) ; this is anomaly 3: `:fm.anomaly/throw`
 
 (defm inc_
   ^{:fm/args number?}
@@ -31,21 +31,20 @@
   (inc n))
 
 (inc_ 1)
-(inc_ 'a) ; anomaly 1: argument(s)
+(inc_ 'a) ; anomaly 1: `:fm.anomaly/args`
 
   ;; anomalies are data
-(:fm/sym     (inc_ 'a)) ; qualified function symbol
-(:fm/args    (inc_ 'a)) ; args that triggered the anomaly
-(:fm/anomaly (inc_ 'a)) ; args reduced with `s/explain-data`, same shape as args
+(:fm.anomaly/sym  (inc_ 'a)) ; qualified function symbol
+(:fm.anomaly/args (inc_ 'a)) ; args that triggered the anomaly
+(:fm.anomaly/data (inc_ 'a)) ; output of `s/explain-data`
 
   ;; what kind of anomaly are you?
 (->>
  (inc_ 'a)
- (s/conform
-  ::fm/anomaly)
- (first)) ; i'm an anomaly 1: args
+ (s/conform :fm/anomaly)
+ (first))
 
-  ;; anomaly 2: return
+  ;; anomaly 2: `:fm.anomaly/ret`
 (defm bad-ret
   ^{:fm/args number?
     :fm/ret  symbol?}
@@ -55,22 +54,24 @@
 (bad-ret 1)
 
   ;; anomaly contains the args and ret values
-(:fm/sym      (bad-ret 1))  ; qualified function symbol
-(:fm/args     (bad-ret 1))  ; args that caused anomalous ret
-(:fm/anomaly  (bad-ret 1))  ; output of `s/explain-data`
+(:fm.anomaly/sym   (bad-ret 1))  ; qualified function symbol
+(:fm.anomaly/args  (bad-ret 1))  ; args that caused anomalous ret
+(:fm.anomaly/data  (bad-ret 1))  ; output of `s/explain-data`
 (:clojure.spec.alpha/value
- (:fm/anomaly (bad-ret 1))) ; return value that triggered anomaly
+ (:fm.anomaly/data (bad-ret 1))) ; return value that triggered anomaly
 
-  ;; anomaly 3 again: throw
+  ;; anomaly 3 again: `:fm.anomaly/throw`
 (defm throws
   []
-  (throw (Exception. "darn!")))
+  (throw (ex-info "darn!" {:severity :big-time})))
 
 (throws)
 
-(:fm/sym     (throws)) ; qualified function symbol
-(:fm/args    (throws)) ; args that caused the throw, same shape as args
-(:fm/anomaly (throws)) ; a throwable
+(:fm.anomaly/sym   (throws))  ; qualified function symbol
+(:fm.anomaly/args  (throws))  ; args that caused the throw, same shape as args
+(:fm.anomaly/data  (throws))  ; a throwable
+(ex-data
+ (:fm.anomaly/data (throws))) ; uh...
 
   ;; anonymous fm
 ((fm ^{:fm/args number?} [n] (inc n)) 1)
@@ -84,13 +85,8 @@
 
 (add_ 1/2 [2.5 [36 1]] {:body 2})
 
-  ;; anomalies are reported according to the shape of the arguments
+  ;; anomalies are reported as a sequence of `:clojure.spec.alpha/problems`
 (add_ 'a [2.5 ['b 1]] {:body 2})
-
-(first (:fm/args    (add_ 'a [2.5 ['b 1]] {:body 2})))
-(first (:fm/anomaly (add_ 'a [2.5 ['b 1]] {:body 2})))
-(first (second (second (:fm/args    (add_ 'a [2.5 ['b 1]] {:body 2})))))
-(first (second (second (:fm/anomaly (add_ 'a [2.5 ['b 1]] {:body 2})))))
 
   ;; custom anomaly handling
 (defm custom-anomaly
@@ -126,7 +122,7 @@
 
 (s/def ::http-resp
   (s/select
-   [{:status #{200 400 503}
+   [{:status #{200 400 500}
      :body   (s/and string? not-empty)}]
    [*]))
 
@@ -148,14 +144,19 @@
   {:status 200
    :body   (str "echo: " body)})
 
-  ;; look away!
+(macroexpand '(defm echo
+                ^{:fm/args ::http-req
+                  :fm/ret  ::echo-resp}
+                [{:keys [body]}]
+                {:status 200
+                 :body   (str "echo: " body)}))
+
 (def failed-pred
   (comp
    :pred
    first
    :clojure.spec.alpha/problems
-   first
-   :fm/anomaly))
+   :fm.anomaly/data))
 
 (failed-pred (echo nil))
 (failed-pred (echo {}))
@@ -169,12 +170,11 @@
 
   ;; toward properties
 (->>
- (meta echo)
- (:fm/args)
- (first)
- (s/gen)
- (gen/sample)
- (map echo))
+ (meta echo)                 ; fm        => meta
+ (:fm/args)                  ; meta      => args spec
+ (s/gen)                     ; args spec => generator
+ (gen/sample)                ; generator => args seq
+ (map (partial apply echo))) ; args seq  => ret seq
 
 (s/def ::exclaim-resp
   (s/and
@@ -199,8 +199,8 @@
 
   ;; wait are they wirable?
 (=
- (first (:fm/args (meta exclaim)))
- (:fm/ret         (meta echo)))
+ (s/get-spec (second (s/form (:fm/args (meta exclaim)))))
+ (:fm/ret (meta echo)))
 
 (->>
  (s/gen ::http-req)
@@ -215,7 +215,7 @@
 (->>
  {:causes :anomaly}
  (echo)
- (exclaim)) ; surprise anomaly 4: received
+ (exclaim)) ; surprise anomaly 4: `:fm.anomaly/received`
 
   ;; the anomaly occurs in `echo`, and is
   ;; received and propagated by `exclaim`
@@ -223,24 +223,18 @@
  {:causes :anomaly}
  (echo)
  (exclaim)
- (first)    ; ask the anomaly
- (:fm/sym)) ; "where did you occur?"
+ (first)            ; ask the anomaly
+ (:fm.anomaly/sym)) ; "where did you occur?"
 
-  ;; summary          |  anomaly handler receives:
-  ;; anomaly 1: args  => anomaly map; `:fm/anomaly` is a vector
-  ;; anomaly 2: ret   => anomaly map; `:fm/anomaly` is a map
-  ;; anomaly 3: throw => anomaly map; `:fm/anomaly` is throwable
-  ;; anomaly 4: recd  => argument vector containing one or more anomaly maps
-
-(s/describe ::fm/anomaly)          ; anomaly sum
-(s/describe ::fm/args-anomaly)     ; anomaly 1, args
-(s/describe ::fm/ret-anomaly)      ; anomaly 2, ret
-(s/describe ::fm/throw-anomaly)    ; anomaly 3, throw
-(s/describe ::fm/received-anomaly) ; anomaly 4, received
+(s/describe :fm/anomaly)          ; anomaly sum
+(s/describe :fm.anomaly/args)     ; anomaly 1, args
+(s/describe :fm.anomaly/ret)      ; anomaly 2, ret
+(s/describe :fm.anomaly/throw)    ; anomaly 3, throw
+(s/describe :fm.anomaly/received) ; anomaly 4, received
 
   ;; anomaly handling
-(def http-503
-  {:status 503
+(def http-500
+  {:status 500
    :body   "darn!"})
 
 (defn http-400
@@ -251,18 +245,20 @@
              "bad request!")})
 
 (defn http-anomaly-handler
-  [{:keys [fm/args]
+  [{:keys [fm.anomaly/args]
     :as   anomaly}]
   (cond
     ;; propagate any previous anomalous response
     (s/valid? ::http-resp (first args))
     (first args)
-    ;; anomaly 1: args, treated as bad request
-    (s/valid? :fm.utils/args-anomaly anomaly)
-    (http-400 (:fm/sym anomaly))
+
+    ;; `:fm.anomaly/args` treated as bad request
+    (s/valid? :fm.anomaly/args anomaly)
+    (http-400 (:fm.anomaly/sym anomaly))
+
     ;; ...
     :else
-    http-503))
+    http-500))
 
 (defm echo2
   ^{:fm/args    ::http-req
@@ -302,7 +298,7 @@
 
 (defm traced2
   ^{:fm/trace
-    (fn [{:keys [fm/sym fm/args fm/ret]}]
+    (fn [{:keys [fm.trace/sym fm.trace/args fm.trace/ret]}]
       (prn sym (symbol "trace:") args ret))}
   []
   (rand))
@@ -327,13 +323,54 @@
 
 (traced4)
 
-  ;; experimental (broken)
-  ;; defining ret spec dynamically as a function of args
+(s/def ::n int?)
+
+(defm inc_
+  ^{:fm/args (s/tuple int? ::n)
+    :fm/ret  ::n}
+  [[n m]]
+  (inc (+ n m)))
+
+(inc_ [1 2])
+(inc_ [1 'a])
+
+(defm inc_
+  ^{:fm/args (s/tuple int? int?)
+    :fm/ret  (s/and int? pos?)}
+  [[n m]]
+  (let [i (inc (+ n m))]
+    (* i i)))
+
+(inc_ [1 2])
+(inc_ [1 -2])
+(inc_ [-1 -3])
+
+(defm inc_
+  ^{:fm/args [(fn [n] (= n 1))]
+    :fm/ret  (fn [n] (= n 2))}
+  [n]
+  (inc n))
+
+(inc_ 1)
+(inc_ 'a)
+
+(defm inc_
+  ^{:fm/args #{1}
+    :fm/ret  #{2}}
+  [n]
+  (inc n))
+
+(inc_ 1)
+(inc_ 'a)
+
+;; WIP `:fm/rel`
 (defm echo-refined
   ^{:fm/args ::http-req
-    :fm/ret  {:body (fn [resp]
-                      (= (:body resp)
-                         (str "echo: " (:body req))))}}
+    :fm/ret  ::http-resp
+    :fm/rel  (fn [{:keys [args ret]}] ; same interface as `:fn` in `s/fdef`
+               (=
+                (:body ret)
+                (str "echo: " (:body (first args)))))}
   [{:keys [body] :as req}]
   {:status 200
    :body   (str "echo: " body)})
