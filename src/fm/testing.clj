@@ -24,18 +24,19 @@
   [anomaly]
   (prn anomaly))
 
-(defn fmdef!
-  ^{:fm/doc "Takes a fn that has fm metadata on it and passes it through to s/fdef."
+(defm fmdef!
+  ^{:fm/doc
+    "Takes a fn that has fm metadata on it and passes it through to s/fdef."
     :fm/args :fm/meta
-    :fm/ret symbol?}
-  [{:keys [:fm/sym :fm/args :fm/ret :fm/rel]}]
+    :fm/ret  symbol?}
+  [{:keys [fm/sym fm/args]}]
   (eval `(s/fdef ~sym
-           :args (s/or args any?)
+           :args ~(s/form args)
            :ret not-anomaly?)))
 
 (defm fms-from-ns
   ^{:fm/args ::namespaces
-    :fm/ret (s/coll-of symbol?)}
+    :fm/ret  (s/coll-of symbol?)}
   [namespaces]
   (->> namespaces
        (mapcat ns->fnsym)
@@ -43,9 +44,11 @@
        (map (comp fmdef! meta))))
 
 (defm check
-  ^{:fm/doc "Iterate through namespaces, extracting any fns that have fm metadata, registering those with s/fdef, and finally running them against s/check."
-    :fm/args ::namespaces
-    :fm/ret ::check-result
+  ^{:fm/doc   
+    "Iterate through namespaces, extracting any fns that have fm metadata,
+     registering those with s/fdef, and finally running them against s/check."
+    :fm/args    ::namespaces
+    :fm/ret     ::check-result
     :fm/anomaly handle-check-failure}
   [namespaces]
   (->> namespaces
