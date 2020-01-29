@@ -30,8 +30,7 @@
     :fm/ret symbol?}
   [{:keys [:fm/sym :fm/args :fm/ret :fm/rel]}]
   (eval `(s/fdef ~sym
-           :args (or args any?)
-           :ret #(not (s/valid? :fm.utils/anomaly %))
+           :args (s/or args any?)
            :ret not-anomaly?)))
 
 (defm fms-from-ns
