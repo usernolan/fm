@@ -64,7 +64,7 @@
     ^{:fm/args (s/with-gen
                  (s/cat :n int?)
                  (fn [] (gen/vec (gen/gen-for-pred int?))))
-      :fm/ret int?}
+      :fm/ret  int?}
     [[n]]
       (inc n))
 
@@ -79,8 +79,8 @@
     ^{:fm/args (s/with-gen
                  (s/cat :n int?)
                  (fn [] (gen/gen-for-pred int?)))
-      :fm/ret (s/spec int? :gen
-                      (fn [] (gen/gen-for-pred int?)))}
+      :fm/ret  (s/spec int? :gen
+                       (fn [] (gen/gen-for-pred int?)))}
     [n]
     (inc n))
 
