@@ -79,6 +79,20 @@
              :num-tests       0
              :time-elapsed-ms 0}}
    check-results))
+
+(defm explain-run
+  ^{:fm/doc "Prints test result explanation to *out*. Use group-result-data instead
+             if you prefer an aggregated data representation of the result."}
+  [{passed :passed
+    failed :failed
+    total  :total}]
+  (prn (str "fms     -> " (:fns total)))
+  (prn (str "tests   -> " (:num-tests total)))
+  (prn (str "elapsed -> " (float (/ (:time-elapsed-ms total) 1000)) "s"))
+  (prn (str "passed  -> " (count passed)))
+  (prn (str "failed  -> " (count  failed)))
+  )
+
 (comment
 
   (require '[clojure.alpha.spec.gen :as gen])
