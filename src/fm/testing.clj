@@ -55,6 +55,30 @@
        (fms-from-ns)
        (stest/check)))
 
+(defm group-result-data
+  ^{:fm/doc "Takes a sequence of check results and groups the results into
+              :passed and :failed maps keyed by the function symbol"}
+  [check-results]
+  (reduce
+   (fn [acc
+        {spec                                      :spec
+         {:keys [pass? num-tests time-elapsed-ms]} :clojure.spec.test.check/ret
+         sym                                       :sym
+         :as                                       result}]
+     (->
+      (if pass?
+        (assoc-in acc [:passed sym] result)
+        (assoc-in acc [:failed sym] result))
+      (update-in [:total :fns] inc)
+      (update-in [:total :num-tests] (partial + num-tests))
+      (update-in [:total :time-elapsed-ms] (partial + time-elapsed-ms))
+      ))
+   {:passed {}
+    :failed {}
+    :total  {:fns             0
+             :num-tests       0
+             :time-elapsed-ms 0}}
+   check-results))
 (comment
 
   (require '[clojure.alpha.spec.gen :as gen])
