@@ -2,13 +2,12 @@
   (:require [clojure.alpha.spec :as s]
             [clojure.alpha.spec.test :as stest]
             [fm.macros :refer [defm]]
-            [fm.utils :refer [fm?]]
+            [fm.utils :refer [fm? not-anomaly?]]
             [clojure.alpha.spec.gen :as gen]))
 
 (s/def ::namespaces
   (s/coll-of
    symbol?
-   :kind vector?
    :distinct true))
 
 (s/def ::check-result any?)
@@ -21,7 +20,7 @@
        (map deref)))
 
 (defm handle-check-failure
-  ^{:fm/args :fm.utils/anomaly}
+  ^{:fm/args :fm/anomaly}
   [anomaly]
   (prn anomaly))
 
@@ -33,7 +32,7 @@
   (eval `(s/fdef ~sym
            :args (or args any?)
            :ret #(not (s/valid? :fm.utils/anomaly %))
-           :fn (or rel (constantly true)))))
+           :ret not-anomaly?)))
 
 (defm fms-from-ns
   ^{:fm/args ::namespaces

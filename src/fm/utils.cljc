@@ -217,6 +217,10 @@
   [x]
   (s/valid? :fm/anomaly x))
 
+(defn not-anomaly?
+  [x]
+  (not (anomaly? x)))
+
 (defn fm-form
   [{:keys [fm/sym fm/args-form fm/body]}]
   (let [sym       (or sym (gensym "fm__"))
