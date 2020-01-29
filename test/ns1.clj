@@ -40,6 +40,10 @@
     [n]
     (inc n))
 
+  (def m (meta @#'fn-to-test))
+  (def sym (:fm/sym m))
+  (def args (:fm/args m))
+
   ;; This appears to work if you _don't_ unquote args
   ;; but check will fail.
   ;;
@@ -56,14 +60,10 @@
 
   (defmacro macro-fmdef!
     "Takes a fn that has fm metadata on it and passes it through to s/fdef."
-    [fm-metadata]
-    `(s/fdef (unquote (:fm/sym ~fm-metadata))
-       :args (s/or (unquote (:fm/args ~fm-metadata)) any?)
+    [sym args]
+    `(s/fdef ~sym
+       :args (s/or ~args any?)
        :ret fm.utils/not-anomaly?))
-
-  (def m (meta @#'fn-to-test))
-  (def sym (:fm/sym m))
-  (def args (:fm/args m))
 
   ;; ------ CASE eval
   (eval-fmdef! m)
