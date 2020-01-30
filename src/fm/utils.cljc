@@ -80,7 +80,7 @@
   [x]
   (s/valid? ::fn-form x))
 
-(defn anomaly-form
+(defn handler-form
   [x]
   (cond
     (fn-form? x) `~x
@@ -207,20 +207,20 @@
                    (args-spec-form*))
         ret-sym   (gensym "ret__")
         ret-spec  (ret-spec-form (:fm/ret metadata `any?))
-        anomaly   (anomaly-form (:fm/anomaly metadata `identity))
+        handler   (handler-form (:fm/handler metadata `identity))
         trace     (when-let [trace (:fm/trace metadata)]
                     (->>
                      (if (true? trace) `prn trace)
                      (trace-form)))]
 
-    `(let [args# ~args-spec
-           ret#  ~ret-spec
-           anom# ~anomaly]
+    `(let [args#    ~args-spec
+           ret#     ~ret-spec
+           handler# ~handler]
 
        ^{:fm/sym     '~sym
          :fm/args    args#
          :fm/ret     ret#
-         :fm/anomaly anom#}
+         :fm/handler handler#}
 
        (fn ~(symbol (name sym))
          ~args-fmt
@@ -230,7 +230,7 @@
                                 :args ~args-syms}))
 
          (if (args-anomaly?* ~args-syms)
-           (anom# ~args-syms)
+           (handler# ~args-syms)
 
            (if (s/valid? args# ~args-syms)
              (try
@@ -242,27 +242,27 @@
 
                  (cond
                    (s/valid? :fm/anomaly ~ret-sym)
-                   (anom# ~ret-sym)
+                   (handler# ~ret-sym)
 
                    (s/valid? ret# ~ret-sym)
                    ~ret-sym
 
                    :else
-                   (anom# #:fm.anomaly{:spec :fm.anomaly/ret
-                                       :sym  '~sym
-                                       :args ~args-syms
-                                       :data (s/explain-data ret# ~ret-sym)})))
+                   (handler# #:fm.anomaly{:spec :fm.anomaly/ret
+                                          :sym  '~sym
+                                          :args ~args-syms
+                                          :data (s/explain-data ret# ~ret-sym)})))
 
                (catch Throwable e#
-                 (anom# #:fm.anomaly{:spec :fm.anomaly/throw
-                                     :sym  '~sym
-                                     :args ~args-syms
-                                     :data e#})))
+                 (handler# #:fm.anomaly{:spec :fm.anomaly/throw
+                                        :sym  '~sym
+                                        :args ~args-syms
+                                        :data e#})))
 
-             (anom# #:fm.anomaly{:spec :fm.anomaly/args
-                                 :sym  '~sym
-                                 :args ~args-syms
-                                 :data (s/explain-data args# ~args-syms)})))))))
+             (handler# #:fm.anomaly{:spec :fm.anomaly/args
+                                    :sym  '~sym
+                                    :args ~args-syms
+                                    :data (s/explain-data args# ~args-syms)})))))))
 
 (defn genform
   [spec x]
