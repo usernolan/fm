@@ -1,8 +1,9 @@
-(ns fm.testing
+(ns fm.test.check
   (:require [clojure.alpha.spec :as s]
             [clojure.alpha.spec.test :as stest]
             [fm.macros :refer [defm]]
-            [fm.utils :refer [fm? not-anomaly?]]))
+            [fm.utils :as fm]
+            [fm.test.check :as check]))
 
 (alias 'stc 'clojure.spec.test.check)
 
@@ -38,31 +39,26 @@
     :spec    s/spec?
     :sym     symbol?}))
 
-(defm fmdef!
-  ^{:fm/doc "Takes a defm and passes it through to s/fdef."
-    :fm/args map?
-    :fm/ret  symbol?}
+(defn fmdef!
+  "Takes a defm and passes it through to s/fdef."
   [{:keys [fm/sym fm/args]}]
   (eval
    `(s/fdef ~sym
       :args ~(s/form args)
-      :ret not-anomaly?)))
+      :ret fm/not-anomaly?)))
 
-(defm ns->fnsym
-  ^{:fm/doc "Extracts all defms from the given namespace."
-    :fm/args symbol?
-    :fm/ret (s/coll-of fn?)}
+(defn ns->fnsym
+  "Extracts all defms from the given namespace."
   [ns-sym]
   (->> ns-sym ns-publics vals (map deref)))
 
 (defn fms-from-ns
-  ^{:fm/args ::namespaces
-    :fm/ret  (s/coll-of symbol?)}
+  "Build a list of fm meta for all fms in a namespace."
   [namespaces]
   (->>
    namespaces
    (mapcat ns->fnsym)
-   (filter fm?)
+   (filter fm/fm?)
    (map (comp fmdef! meta))))
 
 (defm check
@@ -79,7 +75,7 @@ registering those with s/fdef, and finally running them against s/check."
 
 (comment
 
-  (fms-from-ns '[fm.test.ns1])
-
+  (check '[fm.test.check-test])
+  (s/get-spec :stc/ret)
 
   )
