@@ -90,7 +90,7 @@
 
   ;; custom anomaly handling
 (defm custom-anomaly
-  ^{:fm/anomaly "dang!"}
+  ^{:fm/handler "dang!"}
   []
   (throw (Exception. "darn!")))
 
@@ -102,14 +102,14 @@
   a)
 
 (defm custom-anomaly2
-  ^{:fm/anomaly log!}
+  ^{:fm/handler log!}
   []
   (throw (Exception. "darn!")))
 
 (custom-anomaly2)
 
 (defm custom-anomaly3
-  ^{:fm/anomaly (fn [anomaly] (prn anomaly))}
+  ^{:fm/handler (fn [anomaly] (prn anomaly))}
   []
   (throw (Exception. "darn!")))
 
@@ -217,6 +217,13 @@
  (echo)
  (exclaim)) ; surprise anomaly 4: `:fm.anomaly/received`
 
+(->>
+ {:causes :anomaly}
+ (echo)
+ (exclaim)
+ (s/conform :fm/anomaly)
+ (first))
+
   ;; the anomaly occurs in `echo`, and is
   ;; received and propagated by `exclaim`
 (->>
@@ -263,7 +270,7 @@
 (defm echo2
   ^{:fm/args    ::http-req
     :fm/ret     ::echo-resp
-    :fm/anomaly http-anomaly-handler}
+    :fm/handler http-anomaly-handler}
   [{:keys [body]}]
   {:status 200
    :body   (str "echo: " body)})
@@ -273,7 +280,7 @@
 (defm exclaim2
   ^{:fm/args    ::echo-resp
     :fm/ret     ::exclaim-resp
-    :fm/anomaly http-anomaly-handler}
+    :fm/handler http-anomaly-handler}
   [{:keys [body]}]
   {:status 200
    :body   (str body "!")})
@@ -297,9 +304,8 @@
 (traced)
 
 (defm traced2
-  ^{:fm/trace
-    (fn [{:keys [fm.trace/sym fm.trace/args fm.trace/ret]}]
-      (prn sym (symbol "trace:") args ret))}
+  ^{:fm/trace (fn [{:keys [fm.trace/sym fm.trace/args fm.trace/ret]}]
+                (prn sym (symbol "trace:") args ret))}
   []
   (rand))
 
@@ -367,10 +373,11 @@
 (defm echo-refined
   ^{:fm/args ::http-req
     :fm/ret  ::http-resp
-    :fm/rel  (fn [{:keys [args ret]}] ; same interface as `:fn` in `s/fdef`
+    :fm/rel  (fn [{[{:keys [body] :as req}] :args
+                   ret                      :ret}] ; same interface as `:fn` in `s/fdef`
                (=
                 (:body ret)
-                (str "echo: " (:body (first args)))))}
+                (str "echo: " body)))}
   [{:keys [body] :as req}]
   {:status 200
    :body   (str "echo: " body)})
