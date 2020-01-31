@@ -44,6 +44,9 @@
  (s/conform :fm/anomaly)
  (first))
 
+  ;; or just
+(:fm.anomaly/spec (inc_ 'a))
+
   ;; anomaly 2: `:fm.anomaly/ret`
 (defm bad-ret
   ^{:fm/args number?
@@ -199,8 +202,8 @@
 
   ;; wait are they wirable?
 (=
- (s/get-spec (second (s/form (:fm/args (meta exclaim)))))
- (:fm/ret (meta echo)))
+ (s/form (s/get-spec (second (s/form (:fm/args (meta exclaim))))))
+ (s/form (:fm/ret (meta echo))))
 
 (->>
  (s/gen ::http-req)
@@ -369,16 +372,15 @@
 (inc_ 1)
 (inc_ 'a)
 
-;; WIP `:fm/rel`
+  ;; WIP `:fm/rel`
 (defm echo-refined
   ^{:fm/args ::http-req
     :fm/ret  ::http-resp
-    :fm/rel  (fn [{[{:keys [body] :as req}] :args
-                   ret                      :ret}] ; same interface as `:fn` in `s/fdef`
+    :fm/rel  (fn [{[req] :args resp :ret}] ; same interface as `:fn` in `s/fdef`
                (=
-                (:body ret)
-                (str "echo: " body)))}
-  [{:keys [body] :as req}]
+                (:body resp)
+                (str "echo: " (:body req))))}
+  [{:keys [body]}]
   {:status 200
    :body   (str "echo: " body)})
 
