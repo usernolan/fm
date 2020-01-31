@@ -279,12 +279,12 @@
 
                [:else ret-sym])))
 
-       (catch Throwable e#
+       (catch Throwable throw#
          (~handler-sym
           #:fm.anomaly{:spec :fm.anomaly/throw
                        :sym  '~sym
                        :args ~args-syms
-                       :data e#})))))
+                       :data throw#})))))
 
 (defn fn-form
   [{:keys [fm/sym fm/args-form fm/metadata]

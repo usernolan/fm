@@ -372,6 +372,18 @@
 (inc_ 1)
 (inc_ 'a)
 
+(defm inc_
+  ^{:fm/args {:body int?}
+    :fm/ret  {:body int?}}
+  [{:keys [body]}]
+  {:body (inc body)})
+
+(inc_ {:body 1})
+(inc_ {:a 1})
+(inc_ {:body 'a})
+(inc_ nil)
+(inc_ 'a)
+
   ;; WIP `:fm/rel`
 (defm echo-refined
   ^{:fm/args ::http-req
