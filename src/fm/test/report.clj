@@ -86,11 +86,3 @@
     (pp/pprint total)
     (prn)
     (pp/pprint (str "Test Result: " (if (> 0 failed-count) "FAIL" "PASS")))))
-
-(comment
-
-  (group-result-data (check/check '[fm.test.check-test]))
-  (alias 'check1 'fm.test.check)
-  (s/get-spec check1/check-result)
-
-  )

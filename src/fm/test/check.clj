@@ -72,10 +72,3 @@ registering those with s/fdef, and finally running them against s/check."
    namespaces
    (fms-from-ns)
    (stest/check)))
-
-(comment
-
-  (check '[fm.test.check-test])
-  (s/get-spec :stc/ret)
-
-  )
