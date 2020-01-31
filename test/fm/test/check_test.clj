@@ -60,6 +60,7 @@
           expected-min-test-runs (* 1000 expected-pass-count)
           check-results          (check/check '[fm.test.check-test])
           aggregate              (report/group-result-data check-results)]
+      (t/is (= false (:pass? aggregate)))
       (t/is (= total-fns (+ expected-pass-count expected-fail-count)))
       (t/is (= total-fns (count check-results)))
       (t/is (= expected-pass-count
@@ -68,7 +69,6 @@
       (t/is (= expected-fail-count
                (count (:failed aggregate))
                (get-in aggregate [:total :failed])))
-      (t/is (= false (get-in aggregate [:total :pass?])))
       (t/is (= total-fns (get-in aggregate [:total :fns])))
       (t/is (<= expected-min-test-runs (get-in aggregate [:total :num-tests])))
       )))

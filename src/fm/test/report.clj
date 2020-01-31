@@ -59,13 +59,11 @@
             :passed          0
             :time-elapsed-ms 0}})
 
-(defn set-final-pass-fail
-  [{:keys [failed] :as total}]
-  (assoc total :pass? (<= failed 0)))
-
 (defn finalize-result
   [grouped-result]
-  (update grouped-result :total set-final-pass-fail))
+  (assoc grouped-result
+         :pass?
+         (< (get-in grouped-result [:total :failed]) 1)))
 
 (defn group-result-data
   "Takes a sequence of check results and groups the results into :passed and
@@ -79,10 +77,6 @@
 (defn explain-run
   "Prints test result explanation to *out*. Use group-result-data instead if you
   prefer an aggregated data representation of the result."
-  [{passed :passed
-    failed :failed
-    total  :total}]
-  (let [failed-count (count failed)]
-    (pp/pprint total)
-    (prn)
-    (pp/pprint (str "Test Result: " (if (> 0 failed-count) "FAIL" "PASS")))))
+  [{:keys [pass? total]}]
+  (pp/pprint (str "Test Result: " (if pass? "PASS" "FAIL")))
+  (pp/pprint total))
