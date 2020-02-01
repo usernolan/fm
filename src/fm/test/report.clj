@@ -30,7 +30,6 @@
 (defmethod group-result-data-reducer
   :pass
   [acc {:keys [clojure.spec.test.check/ret sym] :as result}]
-  (prn "check results: " result)
   (let [{:keys [num-tests time-elapsed-ms]} ret]
     (->
      acc
@@ -74,9 +73,67 @@
    (reduce group-result-data-reducer initial-group-result-data)
    (finalize-result)))
 
+(defn get-ex-data-from-failure
+  "Pull the deeply nested exception from the failure and convert it into a map"
+  [failure]
+  (->
+   failure
+   (get-in
+    [:clojure.spec.test.check/ret
+     :result-data
+     :clojure.test.check.properties/error])
+   (Throwable->map)))
+
+(defn get-anomalies-from-ex-data
+  "All check failures will be the result of the fdef :ret coming back as an
+  :fm.anomaly (indicating failure). We should then discard the outer spec
+  as it will always be identical."
+  [ex-data]
+  (map :val
+   (get-in ex-data [:data :clojure.spec.alpha/problems])))
+
+(defmulti decompile-problem-specs
+  "When viewing an inner anomaly spec problem, we want to see the compiled spec
+  so that we can more easily understand what's going on for a given failure."
+  (fn [anomaly]
+    (if (isa? (class (:fm.anomaly/data anomaly)) Throwable)
+      :exception
+      :spec-failure)))
+
+(defmethod decompile-problem-specs :exception
+  [anomaly]
+  anomaly)
+
+(defmethod decompile-problem-specs :spec-failure
+  [anomaly]
+  (update-in
+   anomaly
+   [:fm.anomaly/data :clojure.spec.alpha/spec]
+   s/form))
+
+(defn extract-spec-problems-from-failure
+  "Gets the deeply nested exception data from a failure"
+  [failure]
+  (->>
+   failure
+   (get-ex-data-from-failure)
+   (get-anomalies-from-ex-data)
+   (map decompile-problem-specs)))
+
+(defn explain-failures
+  "Pretty-print check failures"
+  [check-result-failures]
+  (doseq [[sym failure] check-result-failures]
+    (prn)
+    (pp/pprint (str "[FAIL] " sym))
+    (pp/pprint (extract-spec-problems-from-failure failure))
+    (prn)))
+
 (defn explain-run
   "Prints test result explanation to *out*. Use group-result-data instead if you
   prefer an aggregated data representation of the result."
-  [{:keys [pass? total]}]
+  [{:keys [pass? total] :as grouped-result-data}]
+  (when-not pass?
+    (explain-failures (:failed grouped-result-data)))
   (pp/pprint (str "Test Result: " (if pass? "PASS" "FAIL")))
   (pp/pprint total))

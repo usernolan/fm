@@ -391,21 +391,32 @@
             [fm.test.check :as fm.check]
             [fm.test.report :as fm.report]))
 
+;; This should pass
 (defm add1
   ^{:fm/args int?
     :fm/ret int?}
   [n]
   (inc n))
 
+;; This should fail
 (defm add5
-  ^{:fm/args int?
+  ^{:fm/args nil? ;; let's cause an exception to be thrown by check
     :fm/ret int?}
   [n]
   (+ n 5))
 
+; This should also fail
+(defm expected-spec-failure
+  ^{:fm/args any? ;; let's cause an exception to be thrown by check
+    :fm/ret int?}
+  [x]
+  x)
+
 ;; Can provide as many ns' as you want
 (def namespaces-to-test '[fm.usage.check])
 
+;; Run the test
+;;
 ;; fm.test.check/check will map over all fm-enabled fns,
 ;; register them against s/fdef, and finally execute each with
 ;; clojure.alpha.spec.test/check. It returns a seq of all check
@@ -413,6 +424,8 @@
 (def check-result
   (fm.check/check namespaces-to-test)) 
 
+;; Group the results
+;;
 ;; The check-result is nice if you wanna do your own spelunking, but
 ;; we got you covered there with test.check.report/group-result-data.
 (def check-result-data
@@ -430,3 +443,4 @@
 
 ;; Get a report printed to *out* (open your repl)
 (fm.report/explain-run check-result-data)
+
