@@ -3,6 +3,28 @@
    [clojure.alpha.spec.gen :as gen]
    [clojure.alpha.spec :as s]))
 
+(s/def :fm/args
+  (s/or
+   :spec s/spec?
+   :vector (s/coll-of s/spec?)))
+
+(s/def :fm/meta
+  (s/select
+   [:fm/sym :fm/args :fm/ret :fm/rel]
+   [:fm/sym]))
+
+(s/def :fm/ret
+  (s/or
+   :fn fn?
+   :spec s/spec?))
+
+(s/def :fm/rel
+  (s/or
+   :fn fn?
+   :spec s/spec?))
+
+(s/def :fm/sym symbol?)
+
 (defn arg-fmt*
   [arg]
   (cond
@@ -195,6 +217,10 @@
   [x]
   (s/valid? :fm/anomaly x))
 
+(defn not-anomaly?
+  [x]
+  (not (anomaly? x)))
+
 (defn fm-form
   [{:keys [fm/sym fm/args-form fm/body]}]
   (let [sym       (or sym (gensym "fm__"))
@@ -263,6 +289,14 @@
                                     :sym  '~sym
                                     :args ~args-syms
                                     :data (s/explain-data args# ~args-syms)})))))))
+
+(defn fm?
+  "Given a fn symbol, inform if the symbol is wrapped by fm"
+  [fn-meta]
+  (->> fn-meta
+       meta
+       :fm/sym
+       boolean))
 
 (defn genform
   [spec x]
