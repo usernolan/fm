@@ -3,28 +3,6 @@
    [clojure.alpha.spec.gen :as gen]
    [clojure.alpha.spec :as s]))
 
-(s/def :fm/args
-  (s/or
-   :spec s/spec?
-   :vector (s/coll-of s/spec?)))
-
-(s/def :fm/meta
-  (s/select
-   [:fm/sym :fm/args :fm/ret :fm/rel]
-   [:fm/sym]))
-
-(s/def :fm/ret
-  (s/or
-   :fn fn?
-   :spec s/spec?))
-
-(s/def :fm/rel
-  (s/or
-   :fn fn?
-   :spec s/spec?))
-
-(s/def :fm/sym symbol?)
-
 (defn arg-fmt*
   [arg]
   (cond
