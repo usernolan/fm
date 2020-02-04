@@ -5,8 +5,6 @@
             [fm.utils :as fm]
             [fm.test.check :as check]))
 
-(alias 'stc 'clojure.spec.test.check)
-
 (s/def ::namespaces
   (s/coll-of symbol?
              :distinct true))
@@ -33,11 +31,11 @@
 
 (s/def ::check-result
   (s/schema
-   {:stc/ret (s/or
-              ::check-result-pass
-              ::check-result-fail)
-    :spec    s/spec?
-    :sym     symbol?}))
+   {:clojure.spec.test.check/ret (s/or
+                                  ::check-result-pass
+                                  ::check-result-fail)
+    :spec                        s/spec?
+    :sym                         symbol?}))
 
 (defn fmdef!
   "Takes a defm and passes it through to s/fdef."
