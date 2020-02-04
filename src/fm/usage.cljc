@@ -91,6 +91,11 @@
   ;; anomalies are reported as a sequence of `:clojure.spec.alpha/problems`
 (add_ 'a [2.5 ['b 1]] {:body 2})
 
+(->>
+ (add_ 'a [2.5 ['b 1]] {:body 2})
+ :fm.anomaly/data
+ :clojure.spec.alpha/problems)
+
   ;; custom anomaly handling
 (defm custom-anomaly
   ^{:fm/handler "dang!"}
@@ -419,7 +424,7 @@
   [n]
   (+ n 5))
 
-; This should also fail
+;; This should also fail
 (defm expected-spec-failure
   ^{:fm/args any? ;; let's cause an exception to be thrown by check
     :fm/ret int?}
@@ -457,4 +462,3 @@
 
 ;; Get a report printed to *out* (open your repl)
 (fm.report/explain-run check-result-data)
-

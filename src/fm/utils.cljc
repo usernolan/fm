@@ -222,6 +222,11 @@
   (not (anomaly? x)))
 
 (defmulti  meta-xf (fn [[k _]] k))
+(defmethod meta-xf :fm/sym
+  [[k v]]
+  [k #:fm.meta{:sym  (gensym "sym__")
+               :form `'~v}])
+
 (defmethod meta-xf :fm/args
   [[k v]]
   [k #:fm.meta{:sym  (gensym "args-spec__")
@@ -325,32 +330,27 @@
   [{:keys [fm/sym fm/args-form fm/body]
     :as   form-args}]
 
-  (if (empty? (meta args-form))
-    (fn-form form-args)
+  (let [metadata (->>
+                  (merge (meta args-form) {:fm/sym sym})
+                  (into {} (map meta-xf)))
+        bindings (interleave
+                  (map :fm.meta/sym  (vals metadata))
+                  (map :fm.meta/form (vals metadata)))
+        fn-form  (fn-form
+                  (merge
+                   form-args
+                   {:fm/metadata metadata}))
+        meta     (not-empty
+                  (zipmap
+                   (keys metadata)
+                   (map :fm.meta/sym (vals metadata))))]
 
-    (let [metadata (into {} (map meta-xf) (meta args-form))
-          bindings (interleave
-                    (map :fm.meta/sym  (vals metadata))
-                    (map :fm.meta/form (vals metadata)))
-          fn-form  (fn-form
-                    (merge
-                     form-args
-                     {:fm/metadata metadata}))
-          meta     (not-empty
-                    (zipmap
-                     (keys metadata)
-                     (map :fm.meta/sym (vals metadata))))]
-
-      `(let [~@bindings]
-         (with-meta ~fn-form ~meta)))))
+    `(let [~@bindings]
+       (with-meta ~fn-form ~meta))))
 
 (defn fm?
-  "Given a fn symbol, inform if the symbol is wrapped by fm"
-  [fn-meta]
-  (->> fn-meta
-       meta
-       :fm/sym
-       boolean))
+  [sym]
+  (boolean (:fm/sym (meta sym))))
 
 (defn genform
   [spec x]
