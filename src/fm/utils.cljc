@@ -333,20 +333,24 @@
   (if (empty? (meta args-form))
     (fn-form form-args)
 
-    (let [metadata    (into {} (map meta-xf) (meta args-form))
-          bindings    (interleave
-                       (map :fm.meta/sym  (vals metadata))
-                       (map :fm.meta/form (vals metadata)))
-          fn-form     (fn-form
-                       (merge
-                        form-args
-                        {:fm/metadata metadata}))
-          symbol-meta (when (:fm/doc metadata)
-                        {:doc (get-in metadata [:fm/doc :fm.meta/form])})
-          meta        (not-empty
-                       (zipmap
-                        (keys metadata)
-                        (map :fm.meta/sym (vals metadata))))]
+    (let [metadata              (into {} (map meta-xf) (meta args-form))
+          metadata-vals         (vals metadata)
+          metadata-key-bindings (map :fm.meta/sym metadata-vals)
+          bindings              (interleave
+                                 metadata-key-bindings
+                                 (map :fm.meta/form metadata-vals))
+          fn-form               (fn-form
+                                 (merge
+                                  form-args
+                                  {:fm/metadata metadata}))
+          symbol-meta           (when (:fm/doc metadata)
+                                  {:doc (get-in
+                                         metadata
+                                         [:fm/doc :fm.meta/form])})
+          meta                  (not-empty
+                                 (zipmap
+                                  (keys metadata)
+                                  metadata-key-bindings))]
 
       [`(let [~@bindings]
           (with-meta ~fn-form ~meta))
