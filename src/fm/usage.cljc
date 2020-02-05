@@ -396,6 +396,29 @@
   {:status 200
    :body   (str "echo: " body)})
 
+;; fm supports docstrings
+
+(require '[clojure.repl :as repl])
+
+(defn normal-with-docstring
+  "this is a docstring for a normal defn"
+  [n]
+  (inc n))
+
+(:doc (meta #'normal-with-docstring))
+(repl/doc normal-with-docstring) ; see repl for output
+
+(defm with-docstring
+  ^{:fm/args int?
+    :fm/ret int?
+    :fm/doc "This is a docstring for a defm"}
+  [n]
+  (inc n))
+
+(:fm/doc (meta with-docstring))
+(:doc (meta #'with-docstring))
+(repl/doc with-docstring) ; see repl for output
+
 ;; ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 ;; Now let's test everything out 
 ;; ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
