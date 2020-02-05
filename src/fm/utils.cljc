@@ -242,6 +242,11 @@
   [k #:fm.meta{:sym  (gensym "trace__")
                :form (trace-form (if (true? v) `prn v))}])
 
+(defmethod meta-xf :fm/doc
+  [[k v]]
+  [k #:fm.meta{:sym  (gensym "doc__")
+               :form v}])
+
 (defmethod meta-xf :default
   [[k v]]
   [k #:fm.meta{:sym  (gensym)
