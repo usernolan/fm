@@ -22,6 +22,6 @@
                    :fm/body      body})
         metadata (last form)
         form     (first form)]
-    (if (not (empty? metadata))
+    (if-not (empty? metadata)
       (list `def (with-meta sym metadata) form)
       `(def ~sym ~form))))
