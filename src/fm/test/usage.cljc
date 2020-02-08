@@ -5,23 +5,23 @@
    [fm.test.check :as fm.check]
    [fm.test.report :as fm.report]))
 
-;; This should pass
 (defm add1
-  ^{:fm/args int?
+  ^{:fm/doc  "Should pass `fm.check/check!`"
+    :fm/args int?
     :fm/ret  int?}
   [n]
   (inc n))
 
-;; This should fail
 (defm add5
-  ^{:fm/args nil? ;; let's cause an exception to be thrown by check
+  ^{:fm/doc  "Should fail `fm.check/check!` with `:fm.anomaly/throw`"
+    :fm/args nil?
     :fm/ret  int?}
   [n]
   (+ n 5))
 
-;; This should also fail
 (defm expected-spec-failure
-  ^{:fm/args any? ;; let's cause an exception to be thrown by check
+  ^{:fm/doc  "Should fail `fm.check/check!` with `:fm.anomaly/ret`"
+    :fm/args any?
     :fm/ret  int?}
   [x]
   x)
