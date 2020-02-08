@@ -318,13 +318,13 @@
                   (merge
                    form-args
                    {:fm/metadata metadata}))
-        meta     (not-empty
+        fn-meta  (not-empty
                   (zipmap
                    (keys metadata)
                    (map :fm.meta/sym (vals metadata))))]
 
     `(let [~@bindings]
-       (with-meta ~fn-form ~meta))))
+       (with-meta ~fn-form ~fn-meta))))
 
 (defn fm?
   [sym]
