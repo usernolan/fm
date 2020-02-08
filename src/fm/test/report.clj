@@ -1,19 +1,15 @@
 (ns fm.test.report
-  (:require [clojure.alpha.spec :as s]
-            [clojure.pprint :as pp]
-            [fm.macros :refer [defm]]
-            [fm.test.check :as check]))
+  (:require
+   [clojure.alpha.spec :as s]
+   [clojure.pprint :as pp]
+   [fm.test.check :as fm.check]
+   [fm.utils :as fm]))
 
 (defn cleanup-check-result
   [result]
-  (->
-   result
-   (update :spec s/describe)))
+  (update result :spec s/describe))
 
 (defn update-result-total
-  ^{:fm/doc ""
-    :fm/args ::update-result-total-args
-    :fm/ret  ::group-result-data-total}
   [pass-or-fail num-tests time-elapsed-ms total]
   (->
    total
@@ -22,13 +18,17 @@
    (update :num-tests + num-tests)
    (update :time-elapsed-ms + time-elapsed-ms)))
 
+(defn first-or-invalid
+  [x]
+  (if (coll? x) (first x) x))
 
 (defmulti group-result-data-reducer
-  (fn [_acc {{pass? :pass?} :clojure.spec.test.check/ret}]
-    (if pass? :pass :fail)))
+  (fn [_acc {:keys [clojure.spec.test.check/ret]}]
+    (->>
+     (s/conform :clojure.spec.test.check/ret ret)
+     (first-or-invalid))))
 
-(defmethod group-result-data-reducer
-  :pass
+(defmethod group-result-data-reducer :pass
   [acc {:keys [clojure.spec.test.check/ret sym] :as result}]
   (let [{:keys [num-tests time-elapsed-ms]} ret]
     (->
@@ -38,8 +38,7 @@
       :total
       (partial update-result-total :pass num-tests time-elapsed-ms)))))
 
-(defmethod group-result-data-reducer
-  :fail
+(defmethod group-result-data-reducer :fail
   [acc {:keys [clojure.spec.test.check/ret sym] :as result}]
   (let [{:keys [num-tests failed-after-ms]} ret]
     (->
@@ -60,9 +59,9 @@
 
 (defn finalize-result
   [grouped-result]
-  (assoc grouped-result
-         :pass?
-         (< (get-in grouped-result [:total :failed]) 1)))
+  (assoc
+   grouped-result
+   :pass? (< (get-in grouped-result [:total :failed]) 1)))
 
 (defn group-result-data
   "Takes a sequence of check results and groups the results into :passed and
@@ -70,7 +69,9 @@
   [check-results]
   (->>
    check-results
-   (reduce group-result-data-reducer initial-group-result-data)
+   (reduce
+    group-result-data-reducer
+    initial-group-result-data)
    (finalize-result)))
 
 (defn get-ex-data-from-failure
@@ -89,22 +90,23 @@
   :fm.anomaly (indicating failure). We should then discard the outer spec
   as it will always be identical."
   [ex-data]
-  (map :val
-   (get-in ex-data [:data :clojure.spec.alpha/problems])))
+  (->>
+   (get-in ex-data [:data :clojure.spec.alpha/problems])
+   (map :val)))
 
 (defmulti decompile-problem-specs
   "When viewing an inner anomaly spec problem, we want to see the compiled spec
   so that we can more easily understand what's going on for a given failure."
   (fn [anomaly]
-    (if (isa? (class (:fm.anomaly/data anomaly)) Throwable)
-      :exception
-      :spec-failure)))
+    (->>
+     (s/conform :fm/anomaly anomaly)
+     (first-or-invalid))))
 
-(defmethod decompile-problem-specs :exception
+(defmethod decompile-problem-specs :fm.anomaly/throw
   [anomaly]
   anomaly)
 
-(defmethod decompile-problem-specs :spec-failure
+(defmethod decompile-problem-specs :default
   [anomaly]
   (update-in
    anomaly

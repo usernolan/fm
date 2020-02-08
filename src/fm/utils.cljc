@@ -3,28 +3,6 @@
    [clojure.alpha.spec.gen :as gen]
    [clojure.alpha.spec :as s]))
 
-(s/def :fm/args
-  (s/or
-   :spec s/spec?
-   :vector (s/coll-of s/spec?)))
-
-(s/def :fm/meta
-  (s/select
-   [:fm/sym :fm/args :fm/ret :fm/rel]
-   [:fm/sym]))
-
-(s/def :fm/ret
-  (s/or
-   :fn fn?
-   :spec s/spec?))
-
-(s/def :fm/rel
-  (s/or
-   :fn fn?
-   :spec s/spec?))
-
-(s/def :fm/sym symbol?)
-
 (defn arg-fmt*
   [arg]
   (cond
@@ -221,82 +199,136 @@
   [x]
   (not (anomaly? x)))
 
+(defmulti  meta-xf (fn [[k _]] k))
+(defmethod meta-xf :fm/sym
+  [[k v]]
+  [k #:fm.meta{:sym  (gensym "sym__")
+               :form `'~v}])
+
+(defmethod meta-xf :fm/args
+  [[k v]]
+  [k #:fm.meta{:sym  (gensym "args-spec__")
+               :form (args-spec-form* (if (vector? v) v [v]))}])
+
+(defmethod meta-xf :fm/ret
+  [[k v]]
+  [k #:fm.meta{:sym  (gensym "ret-spec__")
+               :form (ret-spec-form v)}])
+
+(defmethod meta-xf :fm/handler
+  [[k v]]
+  [k #:fm.meta{:sym  (gensym "handler__")
+               :form (handler-form v)}])
+
+(defmethod meta-xf :fm/trace
+  [[k v]]
+  [k #:fm.meta{:sym  (gensym "trace__")
+               :form (trace-form (if (true? v) `prn v))}])
+
+(defmethod meta-xf :default
+  [[k v]]
+  [k #:fm.meta{:sym  (gensym)
+               :form v}])
+
+(defn try-form
+  [{:keys [fm/sym fm/metadata fm/body fm/args-syms]
+    :as   form-args}]
+
+  (let [ret-sym      (gensym "ret__")
+        trace-sym    (:fm.meta/sym (:fm/trace metadata))
+        handler-sym  (:fm.meta/sym (:fm/handler metadata) `identity)
+        ret-spec-sym (:fm.meta/sym (:fm/ret metadata))]
+
+    `(try
+       (let [~ret-sym (do ~@body)]
+
+         ~@(when (:fm/trace metadata)
+             [`(~trace-sym #:fm.trace{:sym '~sym :ret ~ret-sym})])
+
+         (cond
+           (s/valid? :fm/anomaly ~ret-sym)
+           (~handler-sym ~ret-sym)
+
+           ~@(if (:fm/ret metadata)
+               [`(s/valid? ~ret-spec-sym ~ret-sym)
+                ret-sym
+
+                :else
+                `(~handler-sym
+                  #:fm.anomaly{:spec :fm.anomaly/ret
+                               :sym  '~sym
+                               :args ~args-syms
+                               :data (s/explain-data ~ret-spec-sym ~ret-sym)})]
+
+               [:else ret-sym])))
+
+       (catch Throwable throw#
+         (~handler-sym
+          #:fm.anomaly{:spec :fm.anomaly/throw
+                       :sym  '~sym
+                       :args ~args-syms
+                       :data throw#})))))
+
+(defn fn-form
+  [{:keys [fm/sym fm/args-form fm/metadata]
+    :as   form-args}]
+
+  (let [args-fmt      (arg-fmt* args-form)
+        args-syms     (arg-sym* args-fmt)
+        trace-sym     (:fm.meta/sym (:fm/trace metadata))
+        handler-sym   (:fm.meta/sym (:fm/handler metadata) `identity)
+        args-spec-sym (:fm.meta/sym (:fm/args metadata))
+        try-form      (try-form
+                       (merge
+                        form-args
+                        {:fm/args-syms args-syms}))]
+
+    `(fn ~@(when sym [(symbol (name sym))])
+       ~args-fmt
+
+       ~@(when (:fm/trace metadata)
+           [`(~trace-sym #:fm.trace{:sym '~sym :args ~args-syms})])
+
+       (if (args-anomaly?* ~args-syms)
+         (~handler-sym ~args-syms)
+
+         ~(if (:fm/args metadata)
+            `(if (s/valid? ~args-spec-sym ~args-syms)
+               ~try-form
+
+               (~handler-sym
+                #:fm.anomaly{:spec :fm.anomaly/args
+                             :sym  '~sym
+                             :args ~args-syms
+                             :data (s/explain-data ~args-spec-sym ~args-syms)}))
+
+            try-form)))))
+
 (defn fm-form
-  [{:keys [fm/sym fm/args-form fm/body]}]
-  (let [sym       (or sym (gensym "fm__"))
-        metadata  (meta args-form)
-        args-fmt  (arg-fmt* args-form)
-        args-syms (arg-sym* args-fmt)
-        args-spec (->>
-                   (:fm/args metadata (any?* args-syms))
-                   ((fn [x] (if (vector? x) x [x])))
-                   (args-spec-form*))
-        ret-sym   (gensym "ret__")
-        ret-spec  (ret-spec-form (:fm/ret metadata `any?))
-        handler   (handler-form (:fm/handler metadata `identity))
-        trace     (when-let [trace (:fm/trace metadata)]
-                    (->>
-                     (if (true? trace) `prn trace)
-                     (trace-form)))]
+  [{:keys [fm/sym fm/args-form fm/body]
+    :as   form-args}]
 
-    `(let [args#    ~args-spec
-           ret#     ~ret-spec
-           handler# ~handler]
+  (let [metadata (->>
+                  (merge (meta args-form) {:fm/sym sym})
+                  (into {} (map meta-xf)))
+        bindings (interleave
+                  (map :fm.meta/sym  (vals metadata))
+                  (map :fm.meta/form (vals metadata)))
+        fn-form  (fn-form
+                  (merge
+                   form-args
+                   {:fm/metadata metadata}))
+        meta     (not-empty
+                  (zipmap
+                   (keys metadata)
+                   (map :fm.meta/sym (vals metadata))))]
 
-       ^{:fm/sym     '~sym
-         :fm/args    args#
-         :fm/ret     ret#
-         :fm/handler handler#}
-
-       (fn ~(symbol (name sym))
-         ~args-fmt
-
-         ~(when (:fm/trace metadata)
-            `(~trace #:fm.trace{:sym  '~sym
-                                :args ~args-syms}))
-
-         (if (args-anomaly?* ~args-syms)
-           (handler# ~args-syms)
-
-           (if (s/valid? args# ~args-syms)
-             (try
-               (let [~ret-sym (do ~@body)]
-
-                 ~(when (:fm/trace metadata)
-                    `(~trace #:fm.trace{:sym '~sym
-                                        :ret ~ret-sym}))
-
-                 (cond
-                   (s/valid? :fm/anomaly ~ret-sym)
-                   (handler# ~ret-sym)
-
-                   (s/valid? ret# ~ret-sym)
-                   ~ret-sym
-
-                   :else
-                   (handler# #:fm.anomaly{:spec :fm.anomaly/ret
-                                          :sym  '~sym
-                                          :args ~args-syms
-                                          :data (s/explain-data ret# ~ret-sym)})))
-
-               (catch Throwable e#
-                 (handler# #:fm.anomaly{:spec :fm.anomaly/throw
-                                        :sym  '~sym
-                                        :args ~args-syms
-                                        :data e#})))
-
-             (handler# #:fm.anomaly{:spec :fm.anomaly/args
-                                    :sym  '~sym
-                                    :args ~args-syms
-                                    :data (s/explain-data args# ~args-syms)})))))))
+    `(let [~@bindings]
+       (with-meta ~fn-form ~meta))))
 
 (defn fm?
-  "Given a fn symbol, inform if the symbol is wrapped by fm"
-  [fn-meta]
-  (->> fn-meta
-       meta
-       :fm/sym
-       boolean))
+  [sym]
+  (boolean (:fm/sym (meta sym))))
 
 (defn genform
   [spec x]

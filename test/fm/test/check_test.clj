@@ -70,5 +70,4 @@
                (count (:failed aggregate))
                (get-in aggregate [:total :failed])))
       (t/is (= total-fns (get-in aggregate [:total :fns])))
-      (t/is (<= expected-min-test-runs (get-in aggregate [:total :num-tests])))
-      )))
+      (t/is (<= expected-min-test-runs (get-in aggregate [:total :num-tests]))))))
