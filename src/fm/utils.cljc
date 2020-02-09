@@ -199,33 +199,33 @@
   [x]
   (not (anomaly? x)))
 
-(defmulti  meta-xf (fn [[k _]] k))
-(defmethod meta-xf :fm/sym
+(defmulti  fn-meta-xf (fn [[k _]] k))
+(defmethod fn-meta-xf :fm/sym
   [[k v]]
   [k #:fm.meta{:sym  (gensym "sym__")
                :form `'~v}])
 
-(defmethod meta-xf :fm/args
+(defmethod fn-meta-xf :fm/args
   [[k v]]
   [k #:fm.meta{:sym  (gensym "args-spec__")
                :form (args-spec-form* (if (vector? v) v [v]))}])
 
-(defmethod meta-xf :fm/ret
+(defmethod fn-meta-xf :fm/ret
   [[k v]]
   [k #:fm.meta{:sym  (gensym "ret-spec__")
                :form (ret-spec-form v)}])
 
-(defmethod meta-xf :fm/handler
+(defmethod fn-meta-xf :fm/handler
   [[k v]]
   [k #:fm.meta{:sym  (gensym "handler__")
                :form (handler-form v)}])
 
-(defmethod meta-xf :fm/trace
+(defmethod fn-meta-xf :fm/trace
   [[k v]]
   [k #:fm.meta{:sym  (gensym "trace__")
                :form (trace-form (if (true? v) `prn v))}])
 
-(defmethod meta-xf :default
+(defmethod fn-meta-xf :default
   [[k v]]
   [k #:fm.meta{:sym  (gensym)
                :form v}])
@@ -310,7 +310,7 @@
 
   (let [metadata (->>
                   (merge (meta args-form) {:fm/sym sym})
-                  (into {} (map meta-xf)))
+                  (into {} (map fn-meta-xf)))
         bindings (interleave
                   (map :fm.meta/sym  (vals metadata))
                   (map :fm.meta/form (vals metadata)))

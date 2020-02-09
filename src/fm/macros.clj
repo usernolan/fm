@@ -9,26 +9,25 @@
                     :fm/args-form args-form
                     :fm/body      body})))
 
-(defmulti  meta-xf (fn [[k _]] k))
-(defmethod meta-xf :fm/doc
+(defmulti  var-meta-xf (fn [[k _]] k))
+(defmethod var-meta-xf :fm/doc
   [[_ v]]
   [:doc v])
 
-(defmethod meta-xf :fm/arglists
+(defmethod var-meta-xf :fm/arglists
   [[_ v]]
   [:arglists `(list '~v)])
 
-(defmethod meta-xf :default
+(defmethod var-meta-xf :default
   [_]
   nil)
 
 (defmacro defm
   [sym args-form & body]
-
   (let [ns-sym   (symbol (str *ns* "/" sym))
         var-meta (into
                   {}
-                  (map meta-xf)
+                  (map var-meta-xf)
                   (merge
                    (meta args-form)
                    {:fm/arglists args-form}))
@@ -36,5 +35,4 @@
         fm-form  (utils/fm-form {:fm/sym       ns-sym
                                  :fm/args-form args-form
                                  :fm/body      body})]
-
     `(def ~fm-sym ~fm-form)))
