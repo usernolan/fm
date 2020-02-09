@@ -115,7 +115,7 @@
 (defm custom-anomaly
   ^{:fm/handler "dang!"}
   []
-  (throw (Exception. "darn!")))
+  (throw (ex-info "darn!" {})))
 
 (custom-anomaly)
 
@@ -127,14 +127,14 @@
 (defm custom-anomaly2
   ^{:fm/handler log!}
   []
-  (throw (Exception. "darn!")))
+  (throw (ex-info "darn!" {})))
 
 (custom-anomaly2)
 
 (defm custom-anomaly3
   ^{:fm/handler (fn [anomaly] (prn anomaly))}
   []
-  (throw (Exception. "darn!")))
+  (throw (ex-info "darn!" {})))
 
 (custom-anomaly3)
 

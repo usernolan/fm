@@ -43,7 +43,7 @@
 (get-in check-result-data [:total :fns])             ; how many fns did we test?
 (get-in check-result-data [:total :num-tests])       ; how many tests were generated?
 (get-in check-result-data [:total :passed])          ; how many passed?
-(get-in check-result-data [:total :failed])          ; how many failed
+(get-in check-result-data [:total :failed])          ; how many failed?
 (get-in check-result-data [:total :time-elapsed-ms]) ; how long did it take?
 
   ;; print report to *out*
