@@ -13,6 +13,9 @@
 (inc_ 1)
 (inc_ 'a)
 
+(meta inc_)
+(meta #'inc_)
+
   ;; fm is just fn
 (macroexpand '(defm inc_
                 [n]
@@ -24,6 +27,9 @@
 
 (inc_ 1)
 (inc_ 'a) ; this is anomaly 3: `:fm.anomaly/throw`
+
+(meta inc_)
+(meta #'inc_)
 
 (defm inc_
   ^{:fm/args number?}
@@ -80,6 +86,15 @@
 ((fm ^{:fm/args number?} [n] (inc n)) 1)
 ((fm ^{:fm/args number?} [n] (inc n)) 'a)
 
+  ;; doc
+(defm doct
+  ^{:fm/doc "Is documented."}
+  [n]
+  (inc n))
+
+(meta doct)
+(meta #'doct)
+
   ;; variadic signatures aren't ready yet, but otherwise...
 (defm add_
   ^{:fm/args [number? [float? [int? int?]] {:body even?}]}
@@ -100,7 +115,7 @@
 (defm custom-anomaly
   ^{:fm/handler "dang!"}
   []
-  (throw (Exception. "darn!")))
+  (throw (ex-info "darn!" {})))
 
 (custom-anomaly)
 
@@ -112,14 +127,14 @@
 (defm custom-anomaly2
   ^{:fm/handler log!}
   []
-  (throw (Exception. "darn!")))
+  (throw (ex-info "darn!" {})))
 
 (custom-anomaly2)
 
 (defm custom-anomaly3
   ^{:fm/handler (fn [anomaly] (prn anomaly))}
   []
-  (throw (Exception. "darn!")))
+  (throw (ex-info "darn!" {})))
 
 (custom-anomaly3)
 
