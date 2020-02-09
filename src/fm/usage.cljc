@@ -1,8 +1,10 @@
 (ns fm.usage
   (:require
    [clojure.alpha.spec.gen :as gen]
+   [clojure.alpha.spec.test :as stest]
    [clojure.alpha.spec :as s]
    [fm.macros :refer [fm defm]]
+   [fm.test.check :as fm.check]
    [fm.utils :as fm]))
 
   ;; control group
@@ -26,7 +28,7 @@
   (inc n))
 
 (inc_ 1)
-(inc_ 'a) ; this is anomaly 3: `:fm.anomaly/throw`
+(inc_ 'a) ; `:fm.anomaly/throw`
 
 (meta inc_)
 (meta #'inc_)
@@ -37,7 +39,7 @@
   (inc n))
 
 (inc_ 1)
-(inc_ 'a) ; anomaly 1: `:fm.anomaly/args`
+(inc_ 'a) ; `:fm.anomaly/args`
 
   ;; anomalies are data
 (:fm.anomaly/sym  (inc_ 'a)) ; qualified function symbol
@@ -53,14 +55,14 @@
   ;; or just
 (:fm.anomaly/spec (inc_ 'a))
 
-  ;; anomaly 2: `:fm.anomaly/ret`
+  ;; fishing for `:fm.anomaly/ret`
 (defm bad-ret
   ^{:fm/args number?
     :fm/ret  symbol?}
   [n]
   (inc n))
 
-(bad-ret 1)
+(bad-ret 1) ; we caught one
 
   ;; anomaly contains the args and ret values
 (:fm.anomaly/sym   (bad-ret 1))  ; qualified function symbol
@@ -69,7 +71,31 @@
 (:clojure.spec.alpha/value
  (:fm.anomaly/data (bad-ret 1))) ; return value that triggered anomaly
 
-  ;; anomaly 3 again: `:fm.anomaly/throw`
+  ;; `:fm.anomaly/rel`
+(defm bad-rel
+  ^{:fm/args number?
+    :fm/ret  number?
+    :fm/rel  (fn [{[n] :args ret :ret}]
+               (> n ret))} ; bait
+  [n]
+  (inc n))
+
+(bad-rel 1)
+
+(:fm.anomaly/sym  (bad-rel 1)) ; qualified function symbol
+(:fm.anomaly/args (bad-rel 1)) ; args that caused anomalous ret
+(:fm.anomaly/data (bad-rel 1)) ; output of `s/explain-data`
+
+(def failed-pred
+  (comp
+   :pred
+   first
+   :clojure.spec.alpha/problems
+   :fm.anomaly/data))
+
+(failed-pred (bad-rel 1))
+
+  ;; `fm.anomaly/throw` again
 (defm throws
   []
   (throw (ex-info "darn!" {:severity :big-time})))
@@ -174,13 +200,6 @@
                 {:status 200
                  :body   (str "echo: " body)}))
 
-(def failed-pred
-  (comp
-   :pred
-   first
-   :clojure.spec.alpha/problems
-   :fm.anomaly/data))
-
 (failed-pred (echo nil))
 (failed-pred (echo {}))
 (failed-pred (echo {:body nil}))
@@ -220,10 +239,17 @@
    exclaim
    echo))
 
+(def first-arg-spec
+  (comp
+   s/get-spec
+   second
+   s/form
+   :fm/args))
+
   ;; wait are they wirable?
 (=
- (s/form (s/get-spec (second (s/form (:fm/args (meta exclaim))))))
- (s/form (:fm/ret (meta echo))))
+ (:fm/ret        (meta echo))
+ (first-arg-spec (meta exclaim)))
 
 (->>
  (s/gen ::http-req)
@@ -238,7 +264,7 @@
 (->>
  {:causes :anomaly}
  (echo)
- (exclaim)) ; surprise anomaly 4: `:fm.anomaly/received`
+ (exclaim)) ; surprise `:fm.anomaly/received`
 
 (->>
  {:causes :anomaly}
@@ -256,11 +282,13 @@
  (first)            ; ask the anomaly
  (:fm.anomaly/sym)) ; "where did you occur?"
 
-(s/describe :fm/anomaly)          ; anomaly sum
-(s/describe :fm.anomaly/args)     ; anomaly 1, args
-(s/describe :fm.anomaly/ret)      ; anomaly 2, ret
-(s/describe :fm.anomaly/throw)    ; anomaly 3, throw
-(s/describe :fm.anomaly/received) ; anomaly 4, received
+  ;; `:fm/anomaly` sum
+(s/describe :fm/anomaly)
+(s/describe :fm.anomaly/args)
+(s/describe :fm.anomaly/ret)
+(s/describe :fm.anomaly/rel)
+(s/describe :fm.anomaly/throw)
+(s/describe :fm.anomaly/received)
 
   ;; anomaly handling
 (def http-500
@@ -281,11 +309,9 @@
     ;; propagate any previous anomalous response
     (s/valid? ::http-resp (first args))
     (first args)
-
     ;; `:fm.anomaly/args` treated as bad request
     (s/valid? :fm.anomaly/args anomaly)
     (http-400 (:fm.anomaly/sym anomaly))
-
     ;; ...
     :else
     http-500))
@@ -317,6 +343,32 @@
  {:causes :anomaly}
  (echo2)
  (exclaim2))
+
+(defm echo3
+  ^{:fm/args ::http-req
+    :fm/ret  ::http-resp
+    :fm/rel  (fn [{[req] :args resp :ret}] ; same interface as `:fn` in `s/fdef`
+               (=
+                (:body resp)
+                (str "echo: " (:body req))))}
+  [{:keys [body]}]
+  {:status 200
+   :body   (str "echo: " body)})
+
+(contains?
+ (s/registry)
+ (:fm/sym (meta echo3)))
+
+(fm.check/fdef-fm! echo3) ; generates fdefs from fms
+
+(contains?
+ (s/registry)
+ (:fm/sym (meta echo3)))
+
+(->>
+ (meta echo3)
+ (:fm/sym)
+ (stest/check)) ; generates tests from fdefs
 
   ;; thin trace facility
 (defm traced
@@ -403,15 +455,3 @@
 (inc_ {:body 'a})
 (inc_ nil)
 (inc_ 'a)
-
-  ;; WIP `:fm/rel`
-(defm echo-refined
-  ^{:fm/args ::http-req
-    :fm/ret  ::http-resp
-    :fm/rel  (fn [{[req] :args resp :ret}] ; same interface as `:fn` in `s/fdef`
-               (=
-                (:body resp)
-                (str "echo: " (:body req))))}
-  [{:keys [body]}]
-  {:status 200
-   :body   (str "echo: " body)})

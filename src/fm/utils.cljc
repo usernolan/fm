@@ -44,17 +44,17 @@
   [x]
   (s/valid? ::spec-form x))
 
-(defn args-spec-form*
+(defn tuple-spec-form*
   [x]
   (cond
     (map? x)     `(s/select [~x] ~(vec (schema-keys* x)))
     (and
      (vector? x)
      (empty? x)) `(s/spec #{[]})
-    (vector? x)  `(s/tuple ~@(mapv args-spec-form* x))
+    (vector? x)  `(s/tuple ~@(mapv tuple-spec-form* x))
     :else        x))
 
-(defn ret-spec-form
+(defn spec-form
   [x]
   (cond
     (keyword? x)             `(when (s/form ~x) (s/get-spec ~x))
@@ -134,6 +134,16 @@
   [x]
   (s/valid? :fm.anomaly/ret x))
 
+(s/def :fm.anomaly/rel
+  (s/and
+   map?
+   (fn [{:keys [fm.anomaly/spec]}]
+     (= spec :fm.anomaly/rel))))
+
+(defn rel-anomaly?
+  [x]
+  (s/valid? :fm.anomaly/rel x))
+
 (s/def :fm.anomaly/throw
   (s/and
    map?
@@ -159,6 +169,7 @@
           (s/or
            ::args  :fm.anomaly/args
            ::ret   :fm.anomaly/ret
+           ::rel   :fm.anomaly/rel
            ::throw :fm.anomaly/throw)
           x)
        (reduced true)
@@ -188,6 +199,7 @@
   (s/or
    :fm.anomaly/args     :fm.anomaly/args
    :fm.anomaly/ret      :fm.anomaly/ret
+   :fm.anomaly/rel      :fm.anomaly/rel
    :fm.anomaly/throw    :fm.anomaly/throw
    :fm.anomaly/received :fm.anomaly/received))
 
@@ -208,12 +220,17 @@
 (defmethod fn-meta-xf :fm/args
   [[k v]]
   [k #:fm.meta{:sym  (gensym "args-spec__")
-               :form (args-spec-form* (if (vector? v) v [v]))}])
+               :form (tuple-spec-form* (if (vector? v) v [v]))}])
 
 (defmethod fn-meta-xf :fm/ret
   [[k v]]
   [k #:fm.meta{:sym  (gensym "ret-spec__")
-               :form (ret-spec-form v)}])
+               :form (spec-form v)}])
+
+(defmethod fn-meta-xf :fm/rel
+  [[k v]]
+  [k #:fm.meta{:sym  (gensym "rel-spec__")
+               :form (spec-form v)}])
 
 (defmethod fn-meta-xf :fm/handler
   [[k v]]
@@ -237,7 +254,8 @@
   (let [ret-sym      (gensym "ret__")
         trace-sym    (:fm.meta/sym (:fm/trace metadata))
         handler-sym  (:fm.meta/sym (:fm/handler metadata) `identity)
-        ret-spec-sym (:fm.meta/sym (:fm/ret metadata))]
+        ret-spec-sym (:fm.meta/sym (:fm/ret metadata))
+        rel-spec-sym (:fm.meta/sym (:fm/rel metadata))]
 
     `(try
        (let [~ret-sym (do ~@body)]
@@ -249,18 +267,23 @@
            (s/valid? :fm/anomaly ~ret-sym)
            (~handler-sym ~ret-sym)
 
-           ~@(if (:fm/ret metadata)
-               [`(s/valid? ~ret-spec-sym ~ret-sym)
-                ret-sym
-
-                :else
+           ~@(when (:fm/ret metadata)
+               [`(not (s/valid? ~ret-spec-sym ~ret-sym))
                 `(~handler-sym
                   #:fm.anomaly{:spec :fm.anomaly/ret
                                :sym  '~sym
                                :args ~args-syms
-                               :data (s/explain-data ~ret-spec-sym ~ret-sym)})]
+                               :data (s/explain-data ~ret-spec-sym ~ret-sym)})])
 
-               [:else ret-sym])))
+           ~@(when (:fm/rel metadata)
+               [`(not (s/valid? ~rel-spec-sym {:args ~args-syms :ret ~ret-sym}))
+                `(~handler-sym
+                  #:fm.anomaly{:spec :fm.anomaly/rel
+                               :sym  '~sym
+                               :args ~args-syms
+                               :data (s/explain-data ~rel-spec-sym {:args ~args-syms :ret ~ret-sym})})])
+
+           :else ~ret-sym))
 
        (catch Throwable throw#
          (~handler-sym

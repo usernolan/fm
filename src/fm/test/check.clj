@@ -35,12 +35,15 @@
     {:spec s/spec?
      :sym  symbol?}]))
 
-(defn meta->fdef!
+(defn fdef-meta!
   [{:keys [fm/sym fm/args]}]
   (eval
    `(s/fdef ~sym
       :args ~(s/form args)
       :ret  fm/not-anomaly?)))
+
+(def fdef-fm!
+  (comp fdef-meta! meta))
 
 (defn fdef-ns-fms!
   "lazily fdef all fms in the given namespace."
@@ -50,7 +53,7 @@
    (vals)
    (map deref)
    (filter fm/fm?)
-   (map (comp meta->fdef! meta))))
+   (map fdef-fm!)))
 
 (defn check!
   [ns-sym-or-syms]
