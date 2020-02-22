@@ -3,7 +3,7 @@
    [clojure.alpha.spec :as s]
    [clojure.pprint :as pp]
    [fm.test.check :as fm.check]
-   [fm.utils :as fm]))
+   [fm.api :as fm]))
 
 (defn cleanup-check-result
   [result]

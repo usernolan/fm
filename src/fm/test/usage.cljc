@@ -1,7 +1,7 @@
 (ns fm.test.usage
   (:require
    [clojure.alpha.spec.test :as stest]
-   [fm.macros :refer [defm]]
+   [fm.macro :refer [defm]]
    [fm.test.check :as fm.check]
    [fm.test.report :as fm.report]))
 
@@ -36,7 +36,7 @@
   (fm.report/group-result-data check-result))
 
 (:total  check-result-data) ; a summary!
-(:pass?  check-result-data) ; did all fms pass?
+(:pass?  check-result-data) ; did all the fns pass?
 (:passed check-result-data) ; map of passed fns keyed by the fn symbol
 (:failed check-result-data) ; map of failed fns keyed by the fn symbol
 

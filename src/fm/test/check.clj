@@ -2,7 +2,7 @@
   (:require
    [clojure.alpha.spec :as s]
    [clojure.alpha.spec.test :as stest]
-   [fm.utils :as fm]))
+   [fm.api :as fm]))
 
 (s/def :clojure.spec.test.check/ret-pass
   (s/schema
@@ -46,7 +46,7 @@
   (comp fdef-meta! meta))
 
 (defn fdef-ns-fms!
-  "lazily fdef all fms in the given namespace."
+  "Lazily fdef all fms in the given namespace."
   [ns-sym]
   (->>
    (ns-publics ns-sym)
