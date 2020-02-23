@@ -459,3 +459,10 @@
 (fm8 {:body 'a})
 (fm8 nil)
 (fm8 'a)
+
+(defm fm9
+  [a [b [c [d [e f] g]]] h]
+  [a b c d e f g h])
+
+(fm9 1 [2 [3 [4 [5 6] 7]]] 8)
+(fm9 1 [2 [3 [4 [5 {:fm.anomaly/spec :fm.anomaly/args}] 7]]] 8)

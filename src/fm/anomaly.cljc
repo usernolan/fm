@@ -33,18 +33,16 @@
   [recur? xs]
   (lib/reduce*
    recur?
-   (fn [acc _]
-     (if (true? acc)
-       (reduced true)
-       false))
-   (fn [_ x]
-     (if (s/valid?
-          (s/or
-           ::args  ::args
-           ::ret   ::ret
-           ::rel   ::rel
-           ::throw ::throw)
-          x)
+   (fn [acc x]
+     (if (or
+          (true? acc)
+          (s/valid?
+           (s/or
+            ::args  ::args
+            ::ret   ::ret
+            ::rel   ::rel
+            ::throw ::throw)
+           x))
        (reduced true)
        false))
    false
