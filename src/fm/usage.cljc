@@ -45,7 +45,7 @@
 (:fm.anomaly/spec (fm2 'a)) ; oof, what happened?
 (:fm.anomaly/args (fm2 'a)) ; and those `:fm.anomaly/args` were?
 (:fm.anomaly/data (fm2 'a)) ; why are they anomalous?
-  ;; thanks `fm.usage/fm2`.
+  ;; thanks, `fm.usage/fm2`.
 
 (def failed-val
   (comp
@@ -67,7 +67,7 @@
   ;; fishing for `:fm.anomaly/ret`
 (defm bad-ret
   ^{:fm/args number?
-    :fm/ret  symbol?}
+    :fm/ret  symbol?} ; the bait
   [n]
   (inc n))
 
@@ -118,15 +118,6 @@
 ((fm ^{:fm/args number?} [n] (inc n)) 1)
 ((fm ^{:fm/args number?} [n] (inc n)) 'a)
 
-  ;; doc
-(defm docd
-  ^{:fm/doc "Is documented."}
-  [n]
-  (inc n))
-
-(meta docd)
-(meta #'docd)
-
   ;; variadic signatures aren't ready yet, but otherwise...
 (defm fm3
   ^{:fm/args [number? [float? [int? int?]] {:body even?}]}
@@ -140,6 +131,15 @@
  (fm3 'a [2.5 ['b 1]] {:body 2})
  (:fm.anomaly/data)
  (:clojure.spec.alpha/problems))
+
+  ;; doc
+(defm docd
+  ^{:fm/doc "Is documented."}
+  [n]
+  (inc n))
+
+(meta docd)
+(meta #'docd)
 
   ;; anomaly handling
 (defm handled1
@@ -167,6 +167,40 @@
   (throw (ex-info "darn!" {})))
 
 (handled3)
+
+  ;; thin trace facility
+(defm traced1
+  ^{:fm/trace true} ; defaults to `clojure.core/prn`
+  []
+  (rand))
+
+(traced1)
+
+(defm traced2
+  ^{:fm/trace (fn [{:keys [fm.trace/sym fm.trace/args fm.trace/ret]}]
+                (prn sym (symbol "trace:") args ret))}
+  []
+  (rand))
+
+(traced2)
+
+(def state-atom (atom 0))
+
+(defm traced3
+  ^{:fm/trace @state-atom}
+  []
+  (swap! state-atom inc)
+  (rand))
+
+(traced3)
+(traced3)
+
+(defm traced4
+  ^{:fm/trace true}
+  []
+  (inc (traced1)))
+
+(traced4)
 
 (s/def ::req
   (s/select
@@ -373,40 +407,6 @@
  (meta echo3)
  (:fm/sym)
  (stest/check)) ; generates tests from fdefs
-
-  ;; thin trace facility
-(defm traced
-  ^{:fm/trace true} ; defaults to `clojure.core/prn`
-  []
-  (rand))
-
-(traced)
-
-(defm traced2
-  ^{:fm/trace (fn [{:keys [fm.trace/sym fm.trace/args fm.trace/ret]}]
-                (prn sym (symbol "trace:") args ret))}
-  []
-  (rand))
-
-(traced2)
-
-(def state-atom (atom 0))
-
-(defm traced3
-  ^{:fm/trace @state-atom}
-  []
-  (swap! state-atom inc)
-  (rand))
-
-(traced3)
-(traced3)
-
-(defm traced4
-  ^{:fm/trace true}
-  []
-  (inc (traced)))
-
-(traced4)
 
 (s/def ::n int?)
 
