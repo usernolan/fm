@@ -19,9 +19,10 @@
         body      (if named?
                     (drop 2 signature)
                     (drop 1 signature))]
-    (form/fm {:fm/sym       ns-sym
-              :fm/args-form args-form
-              :fm/body      body})))
+    (form/fm
+     {:fm/sym       ns-sym
+      :fm/args-form args-form
+      :fm/body      body})))
 
 (defmacro defm
   [sym args-form & body]
@@ -33,7 +34,8 @@
                    (meta args-form)
                    {:fm/arglists args-form}))
         fm-sym   (with-meta sym var-meta)
-        fm-form  (form/fm {:fm/sym       ns-sym
-                           :fm/args-form args-form
-                           :fm/body      body})]
+        fm-form  (form/fm
+                  {:fm/sym       ns-sym
+                   :fm/args-form args-form
+                   :fm/body      body})]
     `(def ~fm-sym ~fm-form)))
