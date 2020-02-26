@@ -4,8 +4,21 @@
    [fm.meta :as meta]))
 
 (defmacro fm
-  [args-form & body]
-  (let [ns-sym (symbol (str *ns* "/" (gensym "fm__")))]
+  [& signature]
+  (let [named?    (symbol? (first signature))
+        ns-sym    (->>
+                   (if named?
+                     (first signature)
+                     'fm)
+                   (gensym)
+                   (str *ns* "/")
+                   (symbol))
+        args-form (if named?
+                    (second signature)
+                    (first signature))
+        body      (if named?
+                    (drop 2 signature)
+                    (drop 1 signature))]
     (form/fm {:fm/sym       ns-sym
               :fm/args-form args-form
               :fm/body      body})))
