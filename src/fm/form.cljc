@@ -6,8 +6,8 @@
    [fm.form.lib :as form.lib]))
 
 (defn try-form
-  [{:keys [fm/sym fm/metadata fm/body fm/args-syms]
-    :as   form-args}]
+  [{:fm/keys [sym metadata body args-syms]
+    :as      form-args}]
 
   (let [ret-sym      (gensym "ret__")
         trace-sym    (::meta/sym (:fm/trace metadata))
@@ -51,8 +51,8 @@
                      :data throw#})))))
 
 (defn fn-form
-  [{:keys [fm/sym fm/args-form fm/metadata]
-    :as   form-args}]
+  [{:fm/keys [sym args-form metadata]
+    :as      form-args}]
 
   (let [args-fmt      (form.lib/arg-fmt* args-form)
         args-syms     (form.lib/arg-sym* args-fmt)
@@ -86,8 +86,8 @@
             try-form)))))
 
 (defn fm
-  [{:keys [fm/sym fm/args-form fm/body]
-    :as   form-args}]
+  [{:fm/keys [sym args-form body]
+    :as      form-args}]
 
   (let [metadata (->>
                   (merge (meta args-form) {:fm/sym sym})
