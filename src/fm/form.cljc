@@ -9,7 +9,7 @@
   [{:fm/keys [sym metadata body args-syms]
     :as      form-args}]
 
-  (let [ret-sym      (gensym "ret__")
+  (let [ret-sym      (gensym 'ret)
         trace-sym    (::meta/sym (:fm/trace metadata))
         handler-sym  (::meta/sym (:fm/handler metadata) `identity)
         ret-spec-sym (::meta/sym (:fm/ret metadata))
