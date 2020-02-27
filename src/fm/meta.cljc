@@ -2,7 +2,6 @@
   (:require
    [fm.form.lib :as form.lib]))
 
-
 (defmulti  var-xf (fn [[k _]] k))
 (defmethod var-xf :fm/doc
   [[_ v]]
@@ -16,7 +15,6 @@
   [_]
   nil)
 
-
 (defmulti  fn-xf (fn [[k _]] k))
 (defmethod fn-xf :fm/sym
   [[k v]]
@@ -26,7 +24,7 @@
 (defmethod fn-xf :fm/args
   [[k v]]
   [k {::sym  (gensym 'args-spec)
-      ::form (form.lib/tuple-spec-form* (if (vector? v) v [v]))}])
+      ::form (form.lib/tuple-spec-form* (if (vector? v) v (vector v)))}])
 
 (defmethod fn-xf :fm/ret
   [[k v]]
@@ -47,6 +45,11 @@
   [[k v]]
   [k {::sym  (gensym 'trace)
       ::form (form.lib/trace-form (if (true? v) `prn v))}])
+
+(defmethod fn-xf :fm/ignore
+  [[k v]]
+  [k {::sym  (gensym 'ignore)
+      ::form (if (coll? v) (set v) (set (vector v)))}])
 
 (defmethod fn-xf :default
   [[k v]]

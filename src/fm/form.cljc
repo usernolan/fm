@@ -13,19 +13,26 @@
         trace-sym    (::meta/sym (:fm/trace metadata))
         handler-sym  (::meta/sym (:fm/handler metadata) `identity)
         ret-spec-sym (::meta/sym (:fm/ret metadata))
-        rel-spec-sym (::meta/sym (:fm/rel metadata))]
+        rel-spec-sym (::meta/sym (:fm/rel metadata))
+        ignore?      (::meta/form (:fm/ignore metadata) #{})]
 
     `(try
        (let [~ret-sym (do ~@body)]
 
-         ~@(when (:fm/trace metadata)
+         ~@(when (and
+                  (:fm/trace metadata)
+                  (not (ignore? :fm/trace)))
+
              [`(~trace-sym #:fm.trace{:sym '~sym :ret ~ret-sym})])
 
          (cond
            (s/valid? :fm/anomaly ~ret-sym)
            (~handler-sym ~ret-sym)
 
-           ~@(when (:fm/ret metadata)
+           ~@(when (and
+                    (:fm/ret metadata)
+                    (not (ignore? :fm/ret)))
+
                [`(not (s/valid? ~ret-spec-sym ~ret-sym))
                 `(~handler-sym
                   #::anomaly{:spec ::anomaly/ret
@@ -33,7 +40,10 @@
                              :args ~args-syms
                              :data (s/explain-data ~ret-spec-sym ~ret-sym)})])
 
-           ~@(when (:fm/rel metadata)
+           ~@(when (and
+                    (:fm/rel metadata)
+                    (not (ignore? :fm/rel)))
+
                [`(not (s/valid? ~rel-spec-sym {:args ~args-syms :ret ~ret-sym}))
                 `(~handler-sym
                   #::anomaly{:spec ::anomaly/rel
@@ -59,21 +69,25 @@
         trace-sym     (::meta/sym (:fm/trace metadata))
         handler-sym   (::meta/sym (:fm/handler metadata) `identity)
         args-spec-sym (::meta/sym (:fm/args metadata))
-        try-form      (try-form
-                       (merge
-                        form-args
-                        {:fm/args-syms args-syms}))]
+        ignore?       (::meta/form (:fm/ignore metadata) #{})
+        try-form      (try-form (merge form-args {:fm/args-syms args-syms}))]
 
     `(fn ~@(when sym [(symbol (name sym))])
        ~args-fmt
 
-       ~@(when (:fm/trace metadata)
+       ~@(when (and
+                (:fm/trace metadata)
+                (not (ignore? :fm/trace)))
+
            [`(~trace-sym #:fm.trace{:sym '~sym :args ~args-syms})])
 
        (if (anomaly/recd-anomaly?* ~args-syms)
          (~handler-sym ~args-syms)
 
-         ~(if (:fm/args metadata)
+         ~(if (and
+               (:fm/args metadata)
+               (not (ignore? :fm/args)))
+
             `(if (s/valid? ~args-spec-sym ~args-syms)
                ~try-form
 
@@ -89,21 +103,20 @@
   [{:fm/keys [sym args-form body]
     :as      form-args}]
 
-  (let [metadata (into
-                  {}
-                  (map meta/fn-xf)
-                  (merge (meta args-form) {:fm/sym sym}))
-        bindings (interleave
-                  (map ::meta/sym  (vals metadata))
-                  (map ::meta/form (vals metadata)))
-        fn-form  (fn-form
-                  (merge
-                   form-args
-                   {:fm/metadata metadata}))
-        fn-meta  (not-empty
-                  (zipmap
-                   (keys metadata)
-                   (map ::meta/sym (vals metadata))))]
+  (let [metadata     (into
+                      (hash-map)
+                      (map meta/fn-xf)
+                      (merge (meta args-form) {:fm/sym sym}))
+        bindings-map (dissoc metadata :fm/ignore)
+        bindings     (interleave
+                      (map ::meta/sym  (vals bindings-map))
+                      (map ::meta/form (vals bindings-map)))
+        fn-form      (with-meta
+                       (fn-form
+                        (merge form-args {:fm/metadata metadata}))
+                       (not-empty
+                        (zipmap
+                         (keys bindings-map)
+                         (map ::meta/sym (vals bindings-map)))))]
 
-    `(let [~@bindings]
-       (with-meta ~fn-form ~fn-meta))))
+    `(let [~@bindings] ~fn-form)))
