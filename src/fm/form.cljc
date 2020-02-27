@@ -89,9 +89,10 @@
   [{:fm/keys [sym args-form body]
     :as      form-args}]
 
-  (let [metadata (->>
-                  (merge (meta args-form) {:fm/sym sym})
-                  (into {} (map meta/fn-xf)))
+  (let [metadata (into
+                  {}
+                  (map meta/fn-xf)
+                  (merge (meta args-form) {:fm/sym sym}))
         bindings (interleave
                   (map ::meta/sym  (vals metadata))
                   (map ::meta/form (vals metadata)))
