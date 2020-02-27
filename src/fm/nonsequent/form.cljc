@@ -20,7 +20,7 @@
          ~nonse-sym
 
          ~@(when (and
-                  (seq nonse-form)
+                  (contains? metadata :fm/nonse)
                   (not (ignore? :fm/nonse)))
 
              [`(not (s/valid? ~nonse-spec-sym ~nonse-sym))
@@ -30,7 +30,7 @@
                           :data (s/explain-data ~nonse-spec-sym ~nonse-sym)}])
 
          ~@(when (and
-                  (:fm/rel metadata)
+                  (contains? metadata :fm/rel)
                   (not (ignore? :fm/rel)))
 
              [`(not (s/valid? ~rel-spec-sym {:args ~args-syms :ret ~nonse-sym}))

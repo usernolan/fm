@@ -20,7 +20,7 @@
        (let [~ret-sym (do ~@body)]
 
          ~@(when (and
-                  (:fm/trace metadata)
+                  (contains? metadata :fm/trace)
                   (not (ignore? :fm/trace)))
 
              [`(~trace-sym #:fm.trace{:sym '~sym :ret ~ret-sym})])
@@ -30,7 +30,7 @@
            (~handler-sym ~ret-sym)
 
            ~@(when (and
-                    (:fm/ret metadata)
+                    (contains? metadata :fm/ret)
                     (not (ignore? :fm/ret)))
 
                [`(not (s/valid? ~ret-spec-sym ~ret-sym))
@@ -41,7 +41,7 @@
                              :data (s/explain-data ~ret-spec-sym ~ret-sym)})])
 
            ~@(when (and
-                    (:fm/rel metadata)
+                    (contains? metadata :fm/rel)
                     (not (ignore? :fm/rel)))
 
                [`(not (s/valid? ~rel-spec-sym {:args ~args-syms :ret ~ret-sym}))
@@ -76,7 +76,7 @@
        ~args-fmt
 
        ~@(when (and
-                (:fm/trace metadata)
+                (contains? metadata :fm/trace)
                 (not (ignore? :fm/trace)))
 
            [`(~trace-sym #:fm.trace{:sym '~sym :args ~args-syms})])
@@ -85,7 +85,7 @@
          (~handler-sym ~args-syms)
 
          ~(if (and
-               (:fm/args metadata)
+               (contains? metadata :fm/args)
                (not (ignore? :fm/args)))
 
             `(if (s/valid? ~args-spec-sym ~args-syms)
