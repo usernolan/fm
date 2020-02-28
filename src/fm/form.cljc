@@ -10,11 +10,11 @@
     :as      form-args}]
 
   (let [ret-sym      (gensym 'ret)
-        trace-sym    (::meta/sym (:fm/trace metadata))
-        handler-sym  (::meta/sym (:fm/handler metadata) `identity)
-        ret-spec-sym (::meta/sym (:fm/ret metadata))
-        rel-spec-sym (::meta/sym (:fm/rel metadata))
-        ignore?      (::meta/form (:fm/ignore metadata) #{})]
+        trace-sym    (get-in metadata [:fm/trace   ::meta/sym])
+        handler-sym  (get-in metadata [:fm/handler ::meta/sym] `identity)
+        ret-spec-sym (get-in metadata [:fm/ret     ::meta/sym])
+        rel-spec-sym (get-in metadata [:fm/rel     ::meta/sym])
+        ignore?      (get-in metadata [:fm/ignore  ::meta/form] #{})]
 
     `(try
        (let [~ret-sym (do ~@body)]
@@ -66,11 +66,12 @@
 
   (let [args-fmt      (form.lib/arg-fmt* args-form)
         args-syms     (form.lib/arg-sym* args-fmt)
-        trace-sym     (::meta/sym (:fm/trace metadata))
-        handler-sym   (::meta/sym (:fm/handler metadata) `identity)
-        args-spec-sym (::meta/sym (:fm/args metadata))
-        ignore?       (::meta/form (:fm/ignore metadata) #{})
-        try-form      (try-form (merge form-args {:fm/args-syms args-syms}))]
+        trace-sym     (get-in metadata [:fm/trace   ::meta/sym])
+        handler-sym   (get-in metadata [:fm/handler ::meta/sym] `identity)
+        args-spec-sym (get-in metadata [:fm/args    ::meta/sym])
+        ignore?       (get-in metadata [:fm/ignore  ::meta/form] #{})
+        form-args     (merge form-args {:fm/args-syms args-syms})
+        try-form      (try-form form-args)]
 
     `(fn ~@(when sym [(symbol (name sym))])
        ~args-fmt
@@ -111,9 +112,9 @@
         bindings     (interleave
                       (map ::meta/sym  (vals bindings-map))
                       (map ::meta/form (vals bindings-map)))
+        form-args    (merge form-args {:fm/metadata metadata})
         fn-form      (with-meta
-                       (fn-form
-                        (merge form-args {:fm/metadata metadata}))
+                       (fn-form form-args)
                        (not-empty
                         (zipmap
                          (keys bindings-map)

@@ -10,9 +10,9 @@
 (defm body-form
   [{:fm/keys [sym metadata args-syms nonse-form body]}]
   (let [nonse-sym      (gensym 'nonse)
-        nonse-spec-sym (::meta/sym (:fm/nonse metadata))
-        rel-spec-sym   (::meta/sym (:fm/rel metadata))
-        ignore?        (::meta/form (:fm/ignore metadata) #{})]
+        nonse-spec-sym (get-in metadata [:fm/nonse  ::meta/sym])
+        rel-spec-sym   (get-in metadata [:fm/rel    ::meta/sym])
+        ignore?        (get-in metadata [:fm/ignore ::meta/form] #{})]
 
     `(let [~nonse-sym (do ~@body)]
        (cond
@@ -54,19 +54,14 @@
                        (meta args-form)
                        {:fm/sym    sym
                         :fm/ignore ignore?}
-                       (when (seq args-form)
-                         {:fm/args args-form})
-                       (when (seq nonse-form)
-                         {:fm/nonse nonse-form})))
+                       (when (seq args-form)  {:fm/args  args-form})
+                       (when (seq nonse-form) {:fm/nonse nonse-form})))
         bindings-map (select-keys metadata [:fm/nonse :fm/rel])
         bindings     (interleave
                       (map ::meta/sym  (vals bindings-map))
                       (map ::meta/form (vals bindings-map)))
-        fm-metadata  (update-in
-                      metadata
-                      (vector :fm/ignore ::meta/form)
-                      conj
-                      :fm/rel)
+        path         (vector :fm/ignore ::meta/form)
+        fm-metadata  (update-in metadata path conj :fm/rel)
         fm-args-form (with-meta
                        (form.lib/args-form->fm-args-form args-form)
                        (not-empty

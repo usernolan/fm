@@ -28,7 +28,7 @@
   [sym args-form & body]
   (let [ns-sym   (symbol (str *ns* "/" sym))
         var-meta (into
-                  {}
+                  (hash-map)
                   (map meta/var-xf)
                   (merge
                    (meta args-form)
