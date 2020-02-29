@@ -2,6 +2,24 @@
   (:require
    [clojure.alpha.spec :as s]))
 
+(s/def ::ns-kw
+  (s/and keyword? namespace))
+
+(def nil-ns?
+  (comp nil? namespace))
+
+(s/def ::nil-ns-kw
+  (s/and keyword? nil-ns?))
+
+(def nil-ns-kw?
+  (partial s/valid? ::nil-ns-kw))
+
+(s/def ::binding-sym
+  (s/and symbol? nil-ns?))
+
+(def binding-sym?
+  (partial s/valid? ::binding-sym))
+
 (defn arg-fmt*
   [arg]
   (cond

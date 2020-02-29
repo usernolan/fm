@@ -73,7 +73,7 @@
 
 (bad-ret 1) ; we caught one
 
-(:fm.anomaly/sym  (bad-ret 1)) ; let's do this again...
+(:fm.anomaly/sym  (bad-ret 1))
 (:fm.anomaly/spec (bad-ret 1))
 (:fm.anomaly/args (bad-ret 1))
 (:fm.anomaly/data (bad-ret 1))
@@ -201,6 +201,15 @@
   (inc (traced1)))
 
 (traced4)
+
+(defm conformed1
+  ^{:fm/doc     "conformer beware."
+    :fm/conform #{:fm/args}
+    :fm/args    (s/coll-of int? :into #{})}
+  [ns]
+  (conj ns 4))
+
+(conformed1 [1 2 3])
 
 (s/def ::req
   (s/select

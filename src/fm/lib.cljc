@@ -11,3 +11,10 @@
         (f acc x)))
     init
     xs)))
+
+(defn ensure-pred
+  [x]
+  (cond
+    (coll? x) (set x)
+    (true? x) (constantly true)
+    :else     (hash-set x)))

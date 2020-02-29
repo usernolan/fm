@@ -1,6 +1,19 @@
 (ns fm.meta
   (:require
-   [fm.form.lib :as form.lib]))
+   [clojure.alpha.spec :as s]
+   [fm.form.lib :as form.lib]
+   [fm.lib :as lib]))
+
+(s/def ::sym form.lib/binding-sym?)
+
+(s/def ::binding
+  (s/select [::sym] [*]))
+
+(def binding?
+  (partial s/valid? ::binding))
+
+(def binding-filter
+  (comp binding? second))
 
 (defmulti  var-xf (fn [[k _]] k))
 (defmethod var-xf :fm/doc
@@ -46,10 +59,13 @@
   [k {::sym  (gensym 'trace)
       ::form (form.lib/trace-form (if (true? v) `prn v))}])
 
+(defmethod fn-xf :fm/conform
+  [[k v]]
+  [k {::form (lib/ensure-pred v)}])
+
 (defmethod fn-xf :fm/ignore
   [[k v]]
-  [k {::sym  (gensym 'ignore)
-      ::form (if (coll? v) (set v) (set (vector v)))}])
+  [k {::form (lib/ensure-pred v)}])
 
 (defmethod fn-xf :default
   [[k v]]
