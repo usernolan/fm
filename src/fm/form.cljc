@@ -6,8 +6,8 @@
    [fm.form.lib :as form.lib]))
 
 (defn cond-form
-  [{:fm/keys [sym metadata args-sym ret-sym conformed-ret-sym]
-    :as      form-args}]
+  [{::keys [sym metadata args-sym ret-sym conformed-ret-sym]
+    :as    form-args}]
 
   (let [ret-spec-sym (get-in metadata [:fm/ret     ::meta/sym])
         rel-spec-sym (get-in metadata [:fm/rel     ::meta/sym])
@@ -49,8 +49,9 @@
                 ret-sym))))
 
 (defn try-form
-  [{:fm/keys [sym metadata body args-sym args-syms]
-    :as      form-args}]
+  [{::keys [sym metadata body args-sym args-syms cond-form-fn]
+    :as    form-args
+    :or    {cond-form-fn cond-form}}]
 
   (let [ret-sym           (gensym 'ret)
         conformed-ret-sym (gensym 'conformed-ret)
@@ -68,9 +69,9 @@
         trace?            (contains? metadata :fm/trace)
         form-args         (merge
                            form-args
-                           {:fm/ret-sym           ret-sym
-                            :fm/conformed-ret-sym conformed-ret-sym})
-        cond-form         (cond-form form-args)]
+                           {::ret-sym           ret-sym
+                            ::conformed-ret-sym conformed-ret-sym})
+        cond-form         (cond-form-fn form-args)]
 
     `(try
        (let [~@(when conform-args?
@@ -103,25 +104,21 @@
                      :data throw#})))))
 
 (defn fn-form
-  [{:fm/keys [sym args-form metadata]
-    :as      form-args}]
+  [{::keys [sym args-form metadata args-syms try-form-fn]
+    :as    form-args
+    :or    {try-form-fn try-form}}]
 
-  (let [args-fmt      (form.lib/args-fmt* args-form)
-        args-syms     (form.lib/args-sym* args-fmt)
-        args-sym      (gensym 'args)
+  (let [args-sym      (gensym 'args)
         trace-sym     (get-in metadata [:fm/trace   ::meta/sym])
         args-spec-sym (get-in metadata [:fm/args    ::meta/sym])
         handler-sym   (get-in metadata [:fm/handler ::meta/sym] `identity)
         args?         (contains? metadata :fm/args)
         trace?        (contains? metadata :fm/trace)
-        form-args     (merge
-                       form-args
-                       {:fm/args-sym  args-sym
-                        :fm/args-syms args-syms})
-        try-form      (try-form form-args)]
+        form-args     (merge form-args {::args-sym args-sym})
+        try-form      (try-form-fn form-args)]
 
     `(fn ~@(when sym [(symbol (name sym))])
-       ~args-fmt
+       ~args-form
 
        (let [~args-sym ~args-syms]
 
@@ -145,8 +142,9 @@
               try-form))))))
 
 (defn fm
-  [{:fm/keys [sym args-form body]
-    :as      form-args}]
+  [{::keys [sym args-form body fn-form-fn]
+    :as    form-args
+    :or    {fn-form-fn fn-form}}]
 
   (let [metadata     (into
                       (hash-map)
@@ -158,9 +156,15 @@
         bindings     (interleave
                       (map ::meta/sym  (vals bindings-map))
                       (map ::meta/form (vals bindings-map)))
-        form-args    (merge form-args {:fm/metadata metadata})
+        args-form    (form.lib/args-form->form args-form)
+        args-syms    (form.lib/args-form->syms args-form)
+        form-args    (merge
+                      form-args
+                      {::metadata  metadata
+                       ::args-form args-form
+                       ::args-syms args-syms})
         fn-form      (with-meta
-                       (fn-form form-args)
+                       (fn-form-fn form-args)
                        (not-empty
                         (zipmap
                          (keys bindings-map)

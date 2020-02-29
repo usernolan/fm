@@ -23,19 +23,19 @@
 (def binding-sym?
   (partial s/valid? ::binding-sym))
 
-(defn args-fmt*
-  [arg]
+(defn args-form->form
+  [args-form]
   (cond
-    (vector? arg) (mapv args-fmt* arg)
-    (map? arg)    (update arg :as (fnil identity (gensym "arg__")))
-    :else         arg))
+    (vector? args-form) (mapv args-form->form args-form)
+    (map? args-form)    (update args-form :as (fnil identity (gensym 'arg)))
+    :else               args-form))
 
-(defn args-sym*
-  [arg]
+(defn args-form->syms
+  [args-form]
   (cond
-    (vector? arg) (mapv args-sym* arg)
-    (map? arg)    (:as arg)
-    :else         arg))
+    (vector? args-form) (mapv args-form->syms args-form)
+    (map? args-form)    (:as args-form)
+    :else               args-form))
 
 (defn any?*
   [x]
