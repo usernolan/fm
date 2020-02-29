@@ -13,17 +13,9 @@
         rel-spec-sym (get-in metadata [:fm/rel     ::meta/sym])
         handler-sym  (get-in metadata [:fm/handler ::meta/sym] `identity)
         conform?     (get-in metadata [:fm/conform ::meta/form] #{})
-        ignore?      (get-in metadata [:fm/ignore  ::meta/form] #{})
-        ret?         (and
-                      (contains? metadata :fm/ret)
-                      (not (ignore? :fm/ret)))
-        conform-ret? (and
-                      ret?
-                      (not (ignore? :fm/conform))
-                      (conform? :fm/ret))
-        rel?         (and
-                      (contains? metadata :fm/rel)
-                      (not (ignore? :fm/rel)))]
+        ret?         (contains? metadata :fm/ret)
+        conform-ret? (and ret? (conform? :fm/ret))
+        rel?         (contains? metadata :fm/rel)]
 
     `(cond
        (s/valid? :fm/anomaly ~ret-sym)
@@ -67,20 +59,13 @@
         ret-spec-sym      (get-in metadata [:fm/ret     ::meta/sym])
         handler-sym       (get-in metadata [:fm/handler ::meta/sym] `identity)
         conform?          (get-in metadata [:fm/conform ::meta/form] #{})
-        ignore?           (get-in metadata [:fm/ignore  ::meta/form] #{})
         conform-args?     (and
                            (contains? metadata :fm/args)
-                           (not (ignore? :fm/conform))
-                           (not (ignore? :fm/args))
                            (conform? :fm/args))
         conform-ret?      (and
                            (contains? metadata :fm/ret)
-                           (not (ignore? :fm/conform))
-                           (not (ignore? :fm/ret))
                            (conform? :fm/ret))
-        trace?            (and
-                           (contains? metadata :fm/trace)
-                           (not (ignore? :fm/trace)))
+        trace?            (contains? metadata :fm/trace)
         form-args         (merge
                            form-args
                            {:fm/ret-sym           ret-sym
@@ -127,13 +112,8 @@
         trace-sym     (get-in metadata [:fm/trace   ::meta/sym])
         args-spec-sym (get-in metadata [:fm/args    ::meta/sym])
         handler-sym   (get-in metadata [:fm/handler ::meta/sym] `identity)
-        ignore?       (get-in metadata [:fm/ignore  ::meta/form] #{})
-        args?         (and
-                       (contains? metadata :fm/args)
-                       (not (ignore? :fm/args)))
-        trace?        (and
-                       (contains? metadata :fm/trace)
-                       (not (ignore? :fm/trace)))
+        args?         (contains? metadata :fm/args)
+        trace?        (contains? metadata :fm/trace)
         form-args     (merge
                        form-args
                        {:fm/args-sym  args-sym

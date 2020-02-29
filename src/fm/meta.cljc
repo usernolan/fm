@@ -63,10 +63,6 @@
   [[k v]]
   [k {::form (lib/ensure-pred v)}])
 
-(defmethod fn-xf :fm/ignore
-  [[k v]]
-  [k {::form (lib/ensure-pred v)}])
-
 (defmethod fn-xf :default
   [[k v]]
   [k {::sym  (gensym)
