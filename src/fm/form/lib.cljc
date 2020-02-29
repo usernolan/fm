@@ -5,6 +5,9 @@
 (s/def ::ns-kw
   (s/and keyword? namespace))
 
+(def ns-kw?
+  (partial s/valid? ::ns-kw))
+
 (def nil-ns?
   (comp nil? namespace))
 
@@ -20,17 +23,17 @@
 (def binding-sym?
   (partial s/valid? ::binding-sym))
 
-(defn arg-fmt*
+(defn args-fmt*
   [arg]
   (cond
-    (vector? arg) (mapv arg-fmt* arg)
+    (vector? arg) (mapv args-fmt* arg)
     (map? arg)    (update arg :as (fnil identity (gensym "arg__")))
     :else         arg))
 
-(defn arg-sym*
+(defn args-sym*
   [arg]
   (cond
-    (vector? arg) (mapv arg-sym* arg)
+    (vector? arg) (mapv args-sym* arg)
     (map? arg)    (:as arg)
     :else         arg))
 

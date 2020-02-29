@@ -121,8 +121,8 @@
   [{:fm/keys [sym args-form metadata]
     :as      form-args}]
 
-  (let [args-fmt      (form.lib/arg-fmt* args-form)
-        args-syms     (form.lib/arg-sym* args-fmt)
+  (let [args-fmt      (form.lib/args-fmt* args-form)
+        args-syms     (form.lib/args-sym* args-fmt)
         args-sym      (gensym 'args)
         trace-sym     (get-in metadata [:fm/trace   ::meta/sym])
         args-spec-sym (get-in metadata [:fm/args    ::meta/sym])
