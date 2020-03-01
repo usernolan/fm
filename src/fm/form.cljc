@@ -6,8 +6,7 @@
    [fm.form.lib :as form.lib]))
 
 (defn cond-form
-  [{::keys [sym metadata args-sym ret-sym conformed-ret-sym]
-    :as    form-args}]
+  [{::keys [sym metadata args-sym ret-sym conformed-ret-sym]}]
 
   (let [ret-spec-sym (get-in metadata [:fm/ret     ::meta/sym])
         rel-spec-sym (get-in metadata [:fm/rel     ::meta/sym])

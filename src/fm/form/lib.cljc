@@ -8,6 +8,12 @@
 (def ns-kw?
   (partial s/valid? ::ns-kw))
 
+(s/def ::ns-kw-vec
+  (s/coll-of ::ns-kw :kind vector?))
+
+(def ns-kw-vec?
+  (partial s/valid? ::ns-kw-vec))
+
 (def nil-ns?
   (comp nil? namespace))
 
