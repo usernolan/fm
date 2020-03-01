@@ -182,36 +182,23 @@
                  (~handler-sym res#)
                  res#))]))))
 
-(defn fm
-  [{::keys [sym args-form body fn-form-fn]
+(defn binding-form
+  [{::keys [body metadata args-syms fn-form-fn]
     :as    form-args
     :or    {fn-form-fn fn-form}}]
 
-  (let [metadata     (into
-                      (hash-map)
-                      (map meta/fn-xf)
-                      (merge (meta args-form) {:fm/sym sym}))
-        args-form    (form.lib/args-form->form args-form)
-        args-syms    (form.lib/args-form->syms args-form)
+  (let [bindings-map (into {} (filter meta/binding-filter) metadata)
         try?         (or
                       (seq body)
                       (and
                        (seq args-syms)
                        (> (count metadata) 1)))
-        bindings-map (into
-                      (hash-map)
-                      (filter meta/binding-filter) metadata)
         bindings-map (if try?
                        bindings-map
                        (select-keys bindings-map [:fm/sym]))
         bindings     (interleave
                       (map ::meta/sym  (vals bindings-map))
                       (map ::meta/form (vals bindings-map)))
-        form-args    (merge
-                      form-args
-                      {::metadata  metadata
-                       ::args-form args-form
-                       ::args-syms args-syms})
         fn-form      (with-meta
                        (fn-form-fn form-args)
                        (not-empty
@@ -220,3 +207,22 @@
                          (map ::meta/sym (vals bindings-map)))))]
 
     `(let [~@bindings] ~fn-form)))
+
+(defn fm
+  [{::keys [sym args-form binding-form-fn]
+    :as    form-args
+    :or    {binding-form-fn binding-form}}]
+
+  (let [metadata  (into
+                   (hash-map)
+                   (map meta/fn-xf)
+                   (merge (meta args-form) {:fm/sym sym}))
+        args-form (form.lib/args-form->form args-form)
+        args-syms (form.lib/args-form->syms args-form)
+        form-args (merge
+                   form-args
+                   {::metadata  metadata
+                    ::args-form args-form
+                    ::args-syms args-syms})]
+
+    (binding-form form-args)))
