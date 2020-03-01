@@ -48,7 +48,7 @@
                 ret-sym))))
 
 (defn try-form
-  [{::keys [sym metadata body args-sym args-syms cond-form-fn]
+  [{::keys [sym metadata args-form body args-sym args-syms cond-form-fn]
     :as    form-args
     :or    {cond-form-fn cond-form}}]
 
@@ -74,7 +74,7 @@
 
     `(try
        (let [~@(when conform-args?
-                 [args-syms `(s/conform ~args-spec-sym ~args-sym)])
+                 [args-form `(s/conform ~args-spec-sym ~args-sym)])
 
              ~@(when (and trace? conform-args?)
                  ['_ `(~trace-sym
@@ -103,7 +103,7 @@
                      :data throw#})))))
 
 (defn fn-form
-  [{::keys [sym args-form metadata args-syms try-form-fn]
+  [{::keys [sym metadata args-form args-syms try-form-fn]
     :as    form-args
     :or    {try-form-fn try-form}}]
 
