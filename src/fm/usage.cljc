@@ -211,6 +211,19 @@
 
 (conformed1 [1 2 3])
 
+(defm conformed2
+  ^{:fm/conform #{:fm/args}
+    :fm/args    [{:a (s/coll-of int? :into #{})
+                  :b (s/coll-of string? :into [])}
+                 (s/coll-of boolean? :into #{})]}
+  [{:keys [a b] :as x} c]
+  [a b x c])
+
+(conformed2
+ {:a [1 2 2 3 3 3]
+  :b #{"b1" "b2" "b3"}}
+ [true false false true])
+
 (s/def ::req
   (s/select
    [{:body (s/and string? not-empty)}]
