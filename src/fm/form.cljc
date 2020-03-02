@@ -20,10 +20,6 @@
 
     `(cond
 
-       ~@(when body?
-           [`(s/valid? :fm/anomaly ~ret-sym)
-            ret-sym])
-
        ~@(when ret?
            [(if conform-ret?
               `(s/invalid? ~conformed-ret-sym)
@@ -55,38 +51,41 @@
     :as    form-args
     :or    {cond-form-fn cond-form}}]
 
-  (let [ret-sym           (gensym 'ret)
-        conformed-ret-sym (gensym 'conformed-ret)
-        trace-sym         (get-in metadata [:fm/trace   ::meta/sym])
-        ret-spec-sym      (get-in metadata [:fm/ret     ::meta/sym])
-        conform?          (get-in metadata [:fm/conform ::meta/form] #{})
-        body?             (seq body)
-        trace?            (contains? metadata :fm/trace)
-        conform-ret?      (and
-                           (contains? metadata :fm/ret)
-                           (conform? :fm/ret))
-        form-args         (merge
-                           form-args
-                           {::ret-sym ret-sym}
-                           (when conform-ret?
-                             {::conformed-ret-sym conformed-ret-sym}))
-        cond-form         (cond-form-fn form-args)]
+  (let [ret-sym      (gensym 'ret)
+        conf-ret-sym (gensym 'conformed-ret)
+        trace-sym    (get-in metadata [:fm/trace   ::meta/sym])
+        ret-spec-sym (get-in metadata [:fm/ret     ::meta/sym])
+        conform?     (get-in metadata [:fm/conform ::meta/form] #{})
+        body?        (seq body)
+        trace?       (contains? metadata :fm/trace)
+        conform-ret? (and
+                      (contains? metadata :fm/ret)
+                      (conform? :fm/ret))
+        form-args    (merge
+                      form-args
+                      {::ret-sym ret-sym}
+                      (when conform-ret?
+                        {::conformed-ret-sym conf-ret-sym}))
+        cond-form    (cond-form-fn form-args)]
 
     `(let [~ret-sym ~(when body? `(do ~@body))]
 
        ~@(when trace?
            [`(~trace-sym #:fm.trace{:sym '~sym :ret ~ret-sym})])
 
-       ~(if conform-ret?
-          `(let [~conformed-ret-sym (s/conform ~ret-spec-sym ~ret-sym)]
+       (if (s/valid? :fm/anomaly ~ret-sym)
+         ~ret-sym
 
-            ~@(when trace?
-                [`(~trace-sym
-                   #:fm.trace{:sym '~sym :conformed-ret ~conformed-ret-sym})])
+         ~(if conform-ret?
+            `(let [~conf-ret-sym (s/conform ~ret-spec-sym ~ret-sym)]
 
-            ~cond-form)
+               ~@(when trace?
+                   [`(~trace-sym
+                      #:fm.trace{:sym '~sym :conformed-ret ~conf-ret-sym})])
 
-          cond-form))))
+               ~cond-form)
+
+            cond-form)))))
 
 (defn args-anomaly-form
   [{::keys [sym metadata args-form args-sym conformed-args-sym
