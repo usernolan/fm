@@ -6,8 +6,9 @@
    [fm.form.lib :as form.lib]))
 
 (defn cond-form
-  [{::keys [sym metadata body args-syms args-sym ret-sym conformed-ret-sym]
-    :or    {args-sym args-syms}}]
+  [{::keys [sym metadata body args-syms args args-sym ret-sym conformed-ret-sym]
+    :or    {args     args-syms
+            args-sym args}}]
 
   (let [ret-spec-sym (get-in metadata [:fm/ret     ::meta/sym])
         rel-spec-sym (get-in metadata [:fm/rel     ::meta/sym])
@@ -112,10 +113,11 @@
        ~(ret-binding-form-fn form-args))))
 
 (defn args-binding-form
-  [{::keys [sym metadata args-form args-syms args-anomaly-form-fn
+  [{::keys [sym metadata args-form args-syms args args-anomaly-form-fn
             ret-binding-form-fn]
     :as    form-args
-    :or    {args-anomaly-form-fn args-anomaly-form
+    :or    {args                 args-syms
+            args-anomaly-form-fn args-anomaly-form
             ret-binding-form-fn  ret-binding-form}}]
 
   (let [args-sym           (gensym 'args)
@@ -135,7 +137,7 @@
                              (args-anomaly-form-fn form-args)
                              (ret-binding-form-fn form-args))]
 
-    `(let [~args-sym ~args-syms
+    `(let [~args-sym ~args
 
            ~@(when conform-args?
                [conformed-args-sym `(s/conform ~args-spec-sym ~args-sym)])]
@@ -151,19 +153,21 @@
           body-form))))
 
 (defn received-anomaly-form
-  [{::keys [args-syms args-binding-form-fn]
+  [{::keys [args-syms args args-binding-form-fn]
     :as    form-args
-    :or    {args-binding-form-fn args-binding-form}}]
+    :or    {args                 args-syms
+            args-binding-form-fn args-binding-form}}]
 
   `(if (anomaly/recd-anomaly?* ~args-syms)
-     ~args-syms
+     ~args
      ~(args-binding-form-fn form-args)))
 
 (defn try-form
-  [{::keys [sym metadata args-syms received-anomaly-form-fn
+  [{::keys [sym metadata args-syms args received-anomaly-form-fn
             ret-binding-form-fn]
     :as    form-args
-    :or    {received-anomaly-form-fn received-anomaly-form
+    :or    {args                     args-syms
+            received-anomaly-form-fn received-anomaly-form
             ret-binding-form-fn      ret-binding-form}}]
 
   (let [trace-sym (get-in metadata [:fm/trace ::meta/sym])
@@ -174,14 +178,14 @@
 
     `(try
        ~@(when trace?
-           [`(~trace-sym #:fm.trace{:sym '~sym :args ~args-syms})])
+           [`(~trace-sym #:fm.trace{:sym '~sym :args ~args})])
 
        ~body-form
 
        (catch Throwable throw#
          #::anomaly{:spec ::anomaly/throw
                     :sym  '~sym
-                    :args ~args-syms
+                    :args ~args
                     :data throw#}))))
 
 (defn fn-form
