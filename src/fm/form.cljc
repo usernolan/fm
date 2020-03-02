@@ -49,7 +49,7 @@
                 conformed-ret-sym
                 ret-sym))))
 
-(defn ret-form
+(defn ret-binding-form
   [{::keys [sym metadata body cond-form-fn]
     :as    form-args
     :or    {cond-form-fn cond-form}}]
@@ -88,14 +88,40 @@
           cond-form))))
 
 (defn args-anomaly-form
-  [{::keys [sym metadata args-form args-syms ret-form-fn]
+  [{::keys [sym metadata args-form args-sym conformed-args-sym
+            ret-binding-form-fn]
     :as    form-args
-    :or    {ret-form-fn ret-form}}]
+    :or    {ret-binding-form-fn ret-binding-form}}]
+
+  (let [args-spec-sym (get-in metadata [:fm/args    ::meta/sym])
+        conform?      (get-in metadata [:fm/conform ::meta/form] #{})
+        trace?        (contains? metadata :fm/trace)
+        conform-args? (and
+                       (contains? metadata :fm/args)
+                       (conform? :fm/args))]
+
+    `(if ~(if conform-args?
+            `(s/invalid? ~conformed-args-sym)
+            `(not (s/valid? ~args-spec-sym ~args-sym)))
+
+       #::anomaly{:spec ::anomaly/args
+                  :sym  '~sym
+                  :args ~args-sym
+                  :data (s/explain-data ~args-spec-sym ~args-sym)}
+
+       ~(ret-binding-form-fn form-args))))
+
+(defn args-binding-form
+  [{::keys [sym metadata args-form args-syms args-anomaly-form-fn
+            ret-binding-form-fn]
+    :as    form-args
+    :or    {args-anomaly-form-fn args-anomaly-form
+            ret-binding-form-fn  ret-binding-form}}]
 
   (let [args-sym           (gensym 'args)
         conformed-args-sym (gensym 'conformed-args)
-        trace-sym          (get-in metadata [:fm/trace   ::meta/sym])
         args-spec-sym      (get-in metadata [:fm/args    ::meta/sym])
+        trace-sym          (get-in metadata [:fm/trace   ::meta/sym])
         conform?           (get-in metadata [:fm/conform ::meta/form] #{})
         trace?             (contains? metadata :fm/trace)
         args?              (contains? metadata :fm/args)
@@ -105,48 +131,46 @@
                             {::args-sym args-sym}
                             (when conform-args?
                               {::conformed-args-sym conformed-args-sym}))
-        ret-form           (ret-form-fn form-args)]
+        body-form          (if args?
+                             (args-anomaly-form-fn form-args)
+                             (ret-binding-form-fn form-args))]
 
-    `(if (anomaly/recd-anomaly?* ~args-syms)
-       ~args-syms
+    `(let [~args-sym ~args-syms
 
-       (let [~args-sym ~args-syms
+           ~@(when conform-args?
+               [conformed-args-sym `(s/conform ~args-spec-sym ~args-sym)])]
 
-             ~@(when conform-args?
-                 [conformed-args-sym `(s/conform ~args-spec-sym ~args-sym)])]
+       ~@(when (and trace? conform-args?)
+           [`(~trace-sym
+              #:fm.trace{:sym '~sym :conformed-args ~conformed-args-sym})])
 
-         ~@(when (and trace? conform-args?)
-             [`(~trace-sym
-                #:fm.trace{:sym '~sym :conformed-args ~conformed-args-sym})])
+       ~(if conform-args?
+          `(let [~args-form ~conformed-args-sym]
+             ~body-form)
 
-         ~(if args?
-            `(if ~(if conform-args?
-                    `(s/invalid? ~conformed-args-sym)
-                    `(not (s/valid? ~args-spec-sym ~args-sym)))
+          body-form))))
 
-               #::anomaly{:spec ::anomaly/args
-                          :sym  '~sym
-                          :args ~args-sym
-                          :data (s/explain-data ~args-spec-sym ~args-sym)}
+(defn received-anomaly-form
+  [{::keys [args-syms args-binding-form-fn]
+    :as    form-args
+    :or    {args-binding-form-fn args-binding-form}}]
 
-               ~(if conform-args?
-                  `(let [~args-form ~conformed-args-sym]
-                     ~ret-form)
-                  ret-form))
-
-            ret-form)))))
+  `(if (anomaly/recd-anomaly?* ~args-syms)
+     ~args-syms
+     ~(args-binding-form-fn form-args)))
 
 (defn try-form
-  [{::keys [sym metadata args-syms args-anomaly-form-fn ret-form-fn]
+  [{::keys [sym metadata args-syms received-anomaly-form-fn
+            ret-binding-form-fn]
     :as    form-args
-    :or    {args-anomaly-form-fn args-anomaly-form
-            ret-form-fn          ret-form}}]
+    :or    {received-anomaly-form-fn received-anomaly-form
+            ret-binding-form-fn      ret-binding-form}}]
 
   (let [trace-sym (get-in metadata [:fm/trace ::meta/sym])
         trace?    (contains? metadata :fm/trace)
         body-form (if (seq args-syms)
-                    (args-anomaly-form-fn form-args)
-                    (ret-form-fn form-args))]
+                    (received-anomaly-form-fn form-args)
+                    (ret-binding-form-fn form-args))]
 
     `(try
        ~@(when trace?
@@ -170,14 +194,13 @@
                      (seq body)
                      (and
                       (seq args-syms)
-                      (> (count metadata) 1)))
-        try-form    (try-form-fn form-args)]
+                      (> (count metadata) 1)))]
 
     `(fn ~@(when sym [(symbol (name sym))])
        ~args-form
 
        ~@(when try?
-           [`(let [res# ~try-form]
+           [`(let [res# ~(try-form-fn form-args)]
                (if (s/valid? :fm/anomaly res#)
                  (~handler-sym res#)
                  res#))]))))
