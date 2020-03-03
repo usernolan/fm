@@ -119,3 +119,20 @@
     (fn-form? x) `~x
     (symbol? x)  x
     :else        `(fn [~'_] (prn ~x))))
+
+(defn pred-form
+  [x]
+  (cond
+    (coll? x) (set x)
+    (true? x) `(constantly true)
+    :else     (hash-set x)))
+
+(defmulti  binding-xf (fn [[k _]] k))
+(defmethod binding-xf :fm/conform
+  [[k v]]
+  [k {::form (eval v)}])
+
+(defmethod binding-xf :default
+  [[k v]]
+  [k {::sym  (gensym (name k))
+      ::form v}])
