@@ -188,7 +188,15 @@
     :as    form-args
     :or    {try-form-fn try-form}}]
 
-  (let [handler-sym (get-in bindings [:fm/handler ::form.lib/sym] `identity)]
+  (let [handler-sym (get-in bindings [:fm/handler ::form.lib/sym] `identity)
+        metadata    (into
+                     (hash-map)
+                     (map
+                      (fn [[k v]]
+                        (if (contains? bindings k)
+                          [k (get-in bindings [k ::form.lib/sym])]
+                          [k v])))
+                     metadata)]
 
     `(with-meta
 
