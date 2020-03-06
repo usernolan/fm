@@ -1,167 +1,324 @@
 (ns fm.sequent.form.lib
   (:require
    [clojure.alpha.spec :as s]
-   [fm.macro :refer [defm]]))
+   [clojure.set :as set]
+   [fm.macro :refer [defm]]
+   [fm.form.lib :as form.lib]))
 
-(def nil-ns?
-  (comp nil? namespace))
+(s/def ::seq-form
+  (s/*
+   (s/alt
+    ::ass          #{:as}
+    ::binding-syms ::form.lib/binding-sym
+    ::ns-kws       ::form.lib/ns-kw
+    ::kws          keyword?
+    ::maps         map?)))
 
-(s/def ::ns-kw       (s/and keyword? namespace))
-(s/def ::binding-sym (s/and symbol? nil-ns?))
+(def seq-form?
+  (partial s/valid? ::seq-form))
 
-(def binding-sym?
-  (partial s/valid? ::binding-sym))
-
-(s/def ::ns-kw-or-binding-sym
-  (s/or
-   ::ns-kw       ::ns-kw
-   ::binding-sym ::binding-sym))
-
-(s/def ::binding-map
-  (s/and
-   map?
-   (fn [m]
-     (or
-      (s/valid? (s/every-kv ::ns-kw ::binding-sym) m)
-      (s/valid? (s/every-kv ::binding-sym ::ns-kw) m)))))
-
-(defm properly-bound?
-  ^{:fm/args sequential?
-    :fm/ret  boolean?}
-  [s]
-  (let [as  (filter (comp #{:as} second) s)
-        sym (filter (comp binding-sym? second) s)]
-    (or
-     (and
-      (empty? as)
-      (empty? sym))
-     (and
-      (= 1 (count as))
-      (= 1 (count sym))))))
-
-(s/def ::args-form
-  (s/and
-   (s/*
-    (s/alt
-     :as            #{:as}
-     ::binding-syms ::binding-sym
-     ::ns-kws       ::ns-kw
-     ::binding-maps ::binding-map))
-   properly-bound?))
+(s/def ::ass
+  (s/* #{:as}))
 
 (s/def ::binding-syms
-  (s/tuple ::binding-sym))
+  (s/tuple ::form.lib/binding-sym))
 
 (s/def ::ns-kws
-  (s/* ::ns-kw))
+  (s/coll-of ::form.lib/ns-kw :into #{}))
 
-(s/def ::binding-maps
-  (s/* ::binding-map))
+(s/def ::kws
+  (s/coll-of keyword? :into #{}))
 
-(s/def ::args-form-schema
+(s/def ::maps
+  (s/coll-of map? :into #{}))
+
+(s/def ::seq-form-schema
   (s/schema
-   [::ns-kws
-    ::binding-maps
-    ::binding-map
-    ::binding-syms]))
+   [::ass
+    ::binding-syms
+    ::ns-kws
+    ::kws
+    ::maps]))
 
-(defm args-form->map
-  ^{:fm/args ::args-form
-    :fm/ret  ::args-form-schema}
-  [args-form]
-  (let [xf (fn [[k v]] [k (mapv second v)])]
-    (->>
-     (s/conform ::args-form args-form)
-     (group-by first)
-     (into {} (map xf)))))
-
-(defm binding-map-xf
-  ^{:fm/args ::binding-map
-    :fm/ret  ::binding-map}
-  [m]
-  (if (symbol? (ffirst m))
-    m
-    (zipmap
-     (vals m)
-     (keys m))))
-
-(s/def ::args-select-form any?)
-
-(defm args-form->select-form
-  ^{:fm/args ::args-form
-    :fm/ret  ::args-select-form}
-  [args-form]
-  (let [{::keys [ns-kws binding-maps]}
-        (args-form->map args-form)
-        ks (->>
-            binding-maps
-            (into {} (map binding-map-xf))
-            (vals)
-            (into ns-kws))]
-    `(s/select ~ks [~'*])))
-
-(s/def ::ns-kw-binding-tuple
-  (s/tuple symbol? ::ns-kw))
-
-(defm ns-kw-binding-xf
-  ^{:fm/args ::ns-kw
-    :fm/ret  ::ns-kw-binding-tuple}
-  [ns-kw]
-  [(symbol (name ns-kw)) ns-kw])
-
-(s/def ::fm-args-form
-  (s/or
-   :_1 (s/tuple
-        (s/every-kv
-         (s/or
-          ::binding-sym ::binding-sym
-          :as           #{:as})
-         (s/or
-          ::ns-kw       ::ns-kw
-          ::binding-sym ::binding-sym)))
-   :_0 #{[]}))
-
-(defm args-form->fm-args-form
-  ^{:fm/args ::args-form
-    :fm/ret  ::fm-args-form}
-  [args-form]
-  (if (seq args-form)
-    (let [{::keys [ns-kws binding-maps binding-syms]}
-          (args-form->map args-form)]
-      [(merge
-        (into {} (map binding-map-xf) binding-maps)
-        (into {} (map ns-kw-binding-xf) ns-kws)
-        {:as (if binding-syms (first binding-syms) (gensym))})])
-    []))
-
-(comment
-
-  (def args-form1 [::a ::b {::c 'c} {'d ::d} :as 'x])
-
-  (s/valid? ::binding-map {'a :k/v})
-  (s/valid? ::binding-map {:k/v 'a})
-  (s/valid? ::binding-map {:k 'a})
-  (s/valid? ::binding-map {:k/v 'a/b})
-
-  (s/conform ::args-form args-form1)
-  (s/conform ::args-form [::a ::b {::c 'c}])
-  (s/conform ::args-form [:as 'x])
-  (s/conform ::args-form [])
-
-  (s/def ::a int?)
-  (s/def ::b int?)
-  (s/def ::c int?)
-  (s/def ::d int?)
-
-  (def args-form-map1 (args-form->map args-form1))
-  (s/explain ::args-form-schema args-form-map1)
-
-  (def fm-args-form1 (fm-args-form args-form-map1))
-
+(defm seq-form->map
+  ^{:fm/args    ::seq-form
+    :fm/ret     ::seq-form-schema
+    :fm/conform true}
+  [seq-form]
   (->>
-   [:as 'x]
-   (args-form->map)
-   (fm-args-form))
+   (group-by first seq-form)
+   (into
+    (hash-map)
+    (map (fn [[k v]] [k (mapv second v)])))))
 
-  (args-select-form args-form-map1)
-  (fm-args-form args-form-map1))
+(def map-fmt-xf
+  (partial
+   into
+   (hash-map)
+   (map
+    (fn [[k v]]
+      (if (keyword? k)
+        [v k]
+        [k v])))))
+
+(defm seq-form->sorted-kws
+  ^{:fm/args ::seq-form
+    :fm/ret  ::kws}
+
+  [seq-form]
+
+  (let [{::keys [ass binding-syms ns-kws kws maps]}
+        (seq-form->map seq-form)
+
+        kws'   (set (vals (into {} (map map-fmt-xf) maps)))
+        as-kw? (and
+                (not (contains? kws' :as))
+                (or
+                 (and
+                  (nil? binding-syms)
+                  (> (count ass) 0))
+                 (> (count ass) 1)))
+        kws'   (if as-kw? (conj kws' :as) kws')]
+
+    (vec (sort (set/union ns-kws kws kws')))))
+
+(s/def ::ns          string?)
+(s/def ::form        seq-form?)
+(s/def ::left-form   seq-form?)
+(s/def ::right-form  seq-form?)
+(s/def ::conseq-data (s/keys :req [::ns ::form]))
+(s/def ::seq-data    (s/keys :req [::ns ::left-form ::right-form]))
+
+(s/def ::req    (s/and ::form.lib/ns-kw-vec seq))
+(s/def ::req-un (s/and ::form.lib/ns-kw-vec seq))
+(s/def ::keys
+  (s/keys
+   :opt
+   [::req
+    ::req-un]))
+
+(defm conseq-data->keys
+  ^{:fm/args ::conseq-data
+    :fm/ret  ::keys}
+
+  [{::keys [ns form]}]
+
+  (let [{req    true
+         req-un false} (group-by
+                        (comp boolean namespace)
+                        (seq-form->sorted-kws form))
+        ns-xf          (comp (partial keyword ns) name)
+        req-un         (into [] (map ns-xf) req-un)
+        req            (vec req)]
+
+    (merge
+     (when (seq req)    {::req req})
+     (when (seq req-un) {::req-un req-un}))))
+
+(defm keys->keys-form
+  ^{:fm/args ::keys}
+
+  [{::keys [req
+            req-un]}]
+
+  `(s/keys
+    ~@(when (seq req)    [:req req])
+    ~@(when (seq req-un) [:req-un req-un])))
+
+(def conseq-data->keys-form
+  (comp
+   keys->keys-form
+   conseq-data->keys))
+
+(defn seq-data->keys-form
+  ^{:fm/args (s/or
+              ::seq    ::seq-data
+              ::conseq ::conseq-data)}
+
+  [{::keys [ns form left-form right-form]}]
+
+  (if form
+
+    (conseq-data->keys-form {::ns ns ::form form})
+
+    (let [left-keys  (conseq-data->keys-form {::ns ns ::form left-form})
+          right-keys (conseq-data->keys-form {::ns ns ::form right-form})]
+
+      `(s/or
+        ~@(when (seq left-form)  [:fm.sequent/left left-keys])
+        ~@(when (seq right-form) [:fm.sequent/right right-keys])))))
+
+(defm keys->coll-or-form
+  ^{:fm/args ::keys}
+
+  [{::keys [req
+            req-un]}]
+
+  `(s/or
+    ~@(when (seq req) (interleave req req))
+    ~@(when (seq req-un)
+        `(::req-un
+          (s/keys
+           :req-un
+           ~req-un))))) ; TODO: allow garbage?
+
+(defm keys->coll-form
+  ^{:fm/args ::keys}
+
+  [keys]
+
+  `(s/coll-of
+    ~(keys->coll-or-form keys)
+    :into []))
+
+(defm keys->or-form
+  ^{:fm/args ::keys}
+
+  [{::keys [req req-un] :as keys}]
+
+  (let [ks    (into req req-un)
+        only? (= (count ks) 1)
+        keys? (seq ks)
+        coll? (seq ks)]
+
+    `(s/or
+      ~@(when (and only? (seq req))    [(first req) (first req)])
+      ~@(when keys?                    [::keys (keys->keys-form keys)])
+      ~@(when coll?                    [::coll (keys->coll-form keys)])
+      ~@(when (and only? (seq req-un)) [(keyword (name (first req-un))) `any?]))))
+
+(def conseq-data->or-form
+  (comp
+   keys->or-form
+   conseq-data->keys))
+
+(defm seq-data->or-form
+  ^{:fm/args (s/or
+              ::seq    ::seq-data
+              ::conseq ::conseq-data)}
+
+  [{::keys [ns form left-form right-form]}]
+
+  (if form
+    (conseq-data->or-form {::ns ns ::form form})
+
+    (let [left-or  (conseq-data->or-form {::ns ns ::form left-form})
+          right-or (conseq-data->or-form {::ns ns ::form right-form})]
+
+      `(s/or
+        ~@(when (seq left-form)  [:fm.sequent/left  left-or])
+        ~@(when (seq right-form) [:fm.sequent/right right-or])))))
+
+(def conseq-data->coll-or-form
+  (comp
+   keys->coll-or-form
+   conseq-data->keys))
+
+(defn seq-data->coll-or-form
+  ^{:fm/args (s/or
+              ::seq    ::seq-data
+              ::conseq ::conseq-data)}
+
+  [{::keys [ns form left-form right-form]}]
+
+  (if form
+    (conseq-data->coll-or-form {::ns ns ::form form})
+
+    (let [left-coll-or  (conseq-data->coll-or-form {::ns ns ::form left-form})
+          right-coll-or (conseq-data->coll-or-form {::ns ns ::form right-form})]
+
+      `(s/or
+        ~@(when (seq left-form)  [:fm.sequent/left  left-coll-or])
+        ~@(when (seq right-form) [:fm.sequent/right right-coll-or])))))
+
+(defmulti  binding-xf (fn [[k _]] k))
+(defmethod binding-xf ::left-or
+  [[k v]]
+  [k {::form.lib/sym  (gensym (name k))
+      ::form.lib/form (seq-data->or-form v)}])
+
+(defmethod binding-xf ::right-or
+  [[k v]]
+  [k {::form.lib/sym  (gensym (name k))
+      ::form.lib/form (seq-data->or-form v)}])
+
+(defmethod binding-xf ::nonse-or
+  [[k v]]
+  [k {::form.lib/sym  (gensym (name k))
+      ::form.lib/form (seq-data->or-form v)}])
+
+(defmethod binding-xf ::left-coll-or
+  [[k v]]
+  [k {::form.lib/sym  (gensym (name k))
+      ::form.lib/form (seq-data->coll-or-form v)}])
+
+(defmethod binding-xf ::right-coll-or
+  [[k v]]
+  [k {::form.lib/sym  (gensym (name k))
+      ::form.lib/form (seq-data->coll-or-form v)}])
+
+(defmethod binding-xf ::nonse-coll-or
+  [[k v]]
+  [k {::form.lib/sym  (gensym (name k))
+      ::form.lib/form (seq-data->coll-or-form v)}])
+
+(defmethod binding-xf :default
+  [x]
+  (form.lib/binding-xf x))
+
+(s/def ::syms
+  (s/or
+   :_1 (s/every-kv
+        (s/or
+         ::binding-sym ::form.lib/binding-sym
+         ::as          #{:as})
+        (s/or
+         ::kw          keyword?
+         ::binding-sym ::form.lib/binding-sym))
+   :_0 #{{}}))
+
+(defm seq-form->syms
+  ^{:fm/args ::seq-form
+    :fm/ret  ::syms}
+
+  [seq-form]
+
+  (if (seq seq-form)
+    (let [{::keys [ass binding-syms ns-kws kws maps]}
+          (seq-form->map seq-form)
+
+          map-fmt (into {} (map map-fmt-xf) maps)
+          as-kw?  (and
+                   (not (contains? (set (vals map-fmt)) :as))
+                   (or
+                    (and
+                     (nil? binding-syms)
+                     (> (count ass) 0))
+                    (> (count ass) 1)))
+          kws     (if as-kw? (conj kws :as) kws)]
+
+      (merge
+       (when (seq map-fmt) map-fmt)
+       (when (seq ns-kws)  (zipmap (map (comp symbol name) ns-kws) ns-kws))
+       (when (seq kws)     (zipmap (map symbol kws) kws))
+       {:as (if (seq binding-syms)
+              (first binding-syms)
+              (gensym))}))
+
+    {}))
+
+(defn or-conform-data->map
+  [{::keys [conform? conformed data or-spec]
+    :as    args}]
+  (let [[tag conformed-data] conformed]
+    (case tag
+      :fm.sequent/left  (or-conform-data->map (update args ::conformed second))
+      :fm.sequent/right (or-conform-data->map (update args ::conformed second))
+      ::keys            (if conform? conformed-data data)
+      ::coll            (if conform?
+                          (let [xf (fn [[k v]] (if (= k ::req-un) v [k v]))]
+                            (into {} (map xf) conformed-data))
+                          (zipmap
+                           (map (comp first (partial s/conform or-spec)) data)
+                           (map identity data)))
+      {tag (if conform? conformed-data data)})))
