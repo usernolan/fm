@@ -33,7 +33,7 @@
 
          ~@(when rel?
              (let [ret-sym  (if conform-ret? conf-ret-sym ret-sym)
-                   rel-data {:args args-sym :ret ret-sym}]
+                   rel-data #:fm.rel{:args args-sym :ret ret-sym}]
                [`(not (s/valid? ~rel-spec-sym ~rel-data))
 
                 #::anomaly{:spec ::anomaly/rel
