@@ -25,6 +25,7 @@
              [(if conform-ret?
                 `(s/invalid? ~conf-ret-sym)
                 `(not (s/valid? ~ret-spec-sym ~ret-sym)))
+
               #::anomaly{:spec ::anomaly/ret
                          :sym  `'~sym
                          :args args-sym
@@ -34,6 +35,7 @@
              (let [ret-sym  (if conform-ret? conf-ret-sym ret-sym)
                    rel-data {:args args-sym :ret ret-sym}]
                [`(not (s/valid? ~rel-spec-sym ~rel-data))
+
                 #::anomaly{:spec ::anomaly/rel
                            :sym  `'~sym
                            :args args-sym
