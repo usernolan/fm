@@ -1,7 +1,5 @@
 (ns fm.consequent.form
   (:require
-   [clojure.alpha.spec :as s]
-   [fm.anomaly :as anomaly]
    [fm.form :as form]
    [fm.macro :refer [defm]]
    [fm.sequent.form :as seq.form]

@@ -5,7 +5,6 @@
    [fm.form :as form]
    [fm.form.lib :as form.lib]
    [fm.macro :refer [defm]]
-   [fm.meta :as meta]
    [fm.sequent.form.lib :as seq.form.lib]
    [fm.sequent.meta :as seq.meta]))
 
@@ -44,13 +43,13 @@
 
   (let [ret-sym          (gensym 'ret)
         conf-ret-sym     (gensym 'conformed-ret)
-        conf-args-sym    (get-in bindings [::conformed-args-sym         ::form.lib/sym])
-        left-or-sym      (get-in bindings [::seq.form.lib/left-or       ::form.lib/sym])
-        right-or-sym     (get-in bindings [::seq.form.lib/right-or      ::form.lib/sym])
-        right-seq-sym    (get-in bindings [:fm.sequent/right            ::form.lib/sym])
-        trace-sym        (get-in bindings [:fm/trace                    ::form.lib/sym])
-        sequent          (get-in bindings [:fm/sequent                  ::form.lib/form])
-        conform?         (get-in bindings [:fm/conform                  ::form.lib/form] #{})
+        conf-args-sym    (get-in bindings [::conformed-args-sym    ::form.lib/sym])
+        left-or-sym      (get-in bindings [::seq.form.lib/left-or  ::form.lib/sym])
+        right-or-sym     (get-in bindings [::seq.form.lib/right-or ::form.lib/sym])
+        right-seq-sym    (get-in bindings [:fm.sequent/right       ::form.lib/sym])
+        trace-sym        (get-in bindings [:fm/trace               ::form.lib/sym])
+        sequent          (get-in bindings [:fm/sequent             ::form.lib/form])
+        conform?         (get-in bindings [:fm/conform             ::form.lib/form] #{})
         conf-args-left?  (some conform? [:fm/args :fm.sequent/left])
         conf-args-right? (some conform? [:fm/args :fm.sequent/right])
         conf-ret-left?   (some conform? [:fm/ret :fm.sequent/left])

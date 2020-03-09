@@ -5,7 +5,6 @@
    [fm.form :as form]
    [fm.form.lib :as form.lib]
    [fm.macro :refer [defm]]
-   [fm.meta :as meta]
    [fm.sequent.form :as seq.form]
    [fm.sequent.form.lib :as seq.form.lib]
    [fm.sequent.meta :as seq.meta]))
@@ -13,10 +12,10 @@
 (defm rel-form
   [{::form/keys [sym bindings args left-syms nonse-syms]}]
 
-  (let [nonse-sym         (get-in bindings [::nonse-sym             ::form.lib/sym])
-        conf-nonse-sym    (get-in bindings [::conformed-nonse-sym   ::form.lib/sym])
-        rel-spec-sym      (get-in bindings [:fm/rel                 ::form.lib/sym])
-        conform?          (get-in bindings [:fm/conform             ::form.lib/form] #{})
+  (let [nonse-sym         (get-in bindings [::nonse-sym           ::form.lib/sym])
+        conf-nonse-sym    (get-in bindings [::conformed-nonse-sym ::form.lib/sym])
+        rel-spec-sym      (get-in bindings [:fm/rel               ::form.lib/sym])
+        conform?          (get-in bindings [:fm/conform           ::form.lib/form] #{})
         conf-right-nonse? (some conform? [:fm/right :fm.sequent/nonse])
         rel-data          #:fm.rel{:left  (:as left-syms)
                                    :nonse (:as nonse-syms)}]

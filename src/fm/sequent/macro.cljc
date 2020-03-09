@@ -2,7 +2,6 @@
   (:require
    [fm.consequent.form :as conse.form]
    [fm.form :as form]
-   [fm.macro :refer [fm defm]]
    [fm.mergesequent.form :as merge.form]
    [fm.nonsequent.form :as nonse.form]
    [fm.sequent.form :as seq.form]

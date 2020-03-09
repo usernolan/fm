@@ -1,8 +1,6 @@
 (ns fm.meta
   (:require
-   [clojure.alpha.spec :as s]
-   [fm.form.lib :as form.lib]
-   [fm.lib :as lib]))
+   [fm.form.lib :as form.lib]))
 
 (defmulti  var-xf (fn [[k _]] k))
 (defmethod var-xf :fm/doc
