@@ -135,7 +135,7 @@
               ::seq    ::seq-data
               ::conseq ::conseq-data)}
 
-  [{::keys [ns form left-form right-form]}]
+  [{::keys [ns form left-form right-form right?]}]
 
   (if form
 
@@ -144,9 +144,14 @@
     (let [left-keys  (conseq-data->keys-form {::ns ns ::form left-form})
           right-keys (conseq-data->keys-form {::ns ns ::form right-form})]
 
-      `(s/or
-        ~@(when (seq left-form)  [:fm.sequent/left left-keys])
-        ~@(when (seq right-form) [:fm.sequent/right right-keys])))))
+      (if right?
+        `(s/or
+          ~@(when (seq right-form) [:fm.sequent/right right-keys])
+          ~@(when (seq left-form)  [:fm.sequent/left left-keys]))
+
+        `(s/or
+          ~@(when (seq left-form)  [:fm.sequent/left left-keys])
+          ~@(when (seq right-form) [:fm.sequent/right right-keys]))))))
 
 (defm keys->coll-or-form
   ^{:fm/args ::keys}
@@ -160,7 +165,7 @@
         `(::req-un
           (s/keys
            :req-un
-           ~req-un))))) ; TODO: allow garbage?
+           ~req-un))))) ; TODO: allow dust?
 
 (defm keys->coll-form
   ^{:fm/args ::keys}
@@ -197,7 +202,7 @@
               ::seq    ::seq-data
               ::conseq ::conseq-data)}
 
-  [{::keys [ns form left-form right-form]}]
+  [{::keys [ns form left-form right-form right?]}]
 
   (if form
     (conseq-data->or-form {::ns ns ::form form})
@@ -205,9 +210,14 @@
     (let [left-or  (conseq-data->or-form {::ns ns ::form left-form})
           right-or (conseq-data->or-form {::ns ns ::form right-form})]
 
-      `(s/or
-        ~@(when (seq left-form)  [:fm.sequent/left  left-or])
-        ~@(when (seq right-form) [:fm.sequent/right right-or])))))
+      (if right?
+        `(s/or
+          ~@(when (seq right-form) [:fm.sequent/right right-or])
+          ~@(when (seq left-form)  [:fm.sequent/left  left-or]))
+
+        `(s/or
+          ~@(when (seq left-form)  [:fm.sequent/left  left-or])
+          ~@(when (seq right-form) [:fm.sequent/right right-or]))))))
 
 (def conseq-data->coll-or-form
   (comp
@@ -219,7 +229,7 @@
               ::seq    ::seq-data
               ::conseq ::conseq-data)}
 
-  [{::keys [ns form left-form right-form]}]
+  [{::keys [ns form left-form right-form right?]}]
 
   (if form
     (conseq-data->coll-or-form {::ns ns ::form form})
@@ -227,9 +237,14 @@
     (let [left-coll-or  (conseq-data->coll-or-form {::ns ns ::form left-form})
           right-coll-or (conseq-data->coll-or-form {::ns ns ::form right-form})]
 
-      `(s/or
-        ~@(when (seq left-form)  [:fm.sequent/left  left-coll-or])
-        ~@(when (seq right-form) [:fm.sequent/right right-coll-or])))))
+      (if right?
+        `(s/or
+          ~@(when (seq right-form) [:fm.sequent/right right-coll-or])
+          ~@(when (seq left-form)  [:fm.sequent/left  left-coll-or]))
+
+        `(s/or
+          ~@(when (seq left-form)  [:fm.sequent/left  left-coll-or])
+          ~@(when (seq right-form) [:fm.sequent/right right-coll-or]))))))
 
 (defmulti  binding-xf (fn [[k _]] k))
 (defmethod binding-xf ::left-or
@@ -240,7 +255,7 @@
 (defmethod binding-xf ::right-or
   [[k v]]
   [k {::form.lib/sym  (gensym (name k))
-      ::form.lib/form (seq-data->or-form v)}])
+      ::form.lib/form (seq-data->or-form (assoc v ::right? true))}])
 
 (defmethod binding-xf ::nonse-or
   [[k v]]
@@ -255,7 +270,7 @@
 (defmethod binding-xf ::right-coll-or
   [[k v]]
   [k {::form.lib/sym  (gensym (name k))
-      ::form.lib/form (seq-data->coll-or-form v)}])
+      ::form.lib/form (seq-data->coll-or-form (assoc v ::right? true))}])
 
 (defmethod binding-xf ::nonse-coll-or
   [[k v]]
@@ -307,6 +322,26 @@
 
     {}))
 
+(defn req-un-xf
+  [[k v]]
+  (if (= k ::req-un)
+    v
+    [k v]))
+
+(def directional?
+  (comp
+   #{:fm.sequent/left
+     :fm.sequent/right}
+   first))
+
+(defn match-xf
+  [or-spec x]
+  (let [c (s/conform or-spec x)]
+    (cond
+      (s/invalid? c)   c
+      (directional? c) (first (second c))
+      :else            (first c))))
+
 (defn or-conform-data->map
   [{::keys [conform? conformed data or-spec]
     :as    args}]
@@ -316,9 +351,11 @@
       :fm.sequent/right (or-conform-data->map (update args ::conformed second))
       ::keys            (if conform? conformed-data data)
       ::coll            (if conform?
-                          (let [xf (fn [[k v]] (if (= k ::req-un) v [k v]))]
-                            (into {} (map xf) conformed-data))
-                          (zipmap
-                           (map (comp first (partial s/conform or-spec)) data)
-                           (map identity data)))
+                          (into {} (map req-un-xf) conformed-data)
+                          (into
+                           (hash-map)
+                           (map req-un-xf)
+                           (zipmap
+                            (map (partial match-xf or-spec) data)
+                            (map identity data))))
       {tag (if conform? conformed-data data)})))

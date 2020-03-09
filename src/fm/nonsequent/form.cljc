@@ -2,115 +2,140 @@
   (:require
    [clojure.alpha.spec :as s]
    [fm.anomaly :as anomaly]
+   [fm.form :as form]
+   [fm.form.lib :as form.lib]
    [fm.macro :refer [defm]]
    [fm.meta :as meta]
-   [fm.sequent.form.lib :as form.lib]
-   [fm.nonsequent.meta :as nonseq.meta]))
+   [fm.sequent.form :as seq.form]
+   [fm.sequent.form.lib :as seq.form.lib]
+   [fm.sequent.meta :as seq.meta]))
 
-(defm body-form
-  [{:fm/keys [sym metadata args-syms nonse-form body]}]
-  (let [nonse-sym      (gensym 'nonse)
-        nonse-spec-sym (get-in metadata [:fm/nonse  ::meta/sym])
-        rel-spec-sym   (get-in metadata [:fm/rel    ::meta/sym])
-        ignore?        (get-in metadata [:fm/ignore ::meta/form] #{})]
+(defm rel-form
+  [{::form/keys [sym bindings args left-syms nonse-syms]}]
 
-    `(let [~nonse-sym (do ~@body)]
-       (cond
-         (s/valid? :fm/anomaly ~nonse-sym)
-         ~nonse-sym
+  (let [nonse-sym         (get-in bindings [::nonse-sym             ::form.lib/sym])
+        conf-nonse-sym    (get-in bindings [::conformed-nonse-sym   ::form.lib/sym])
+        nonse-or-sym      (get-in bindings [::seq.form.lib/nonse-or ::form.lib/sym])
+        rel-spec-sym      (get-in bindings [:fm/rel                 ::form.lib/sym])
+        conform?          (get-in bindings [:fm/conform             ::form.lib/form] #{})
+        conf-right-nonse? (some conform? [:fm/right :fm.sequent/nonse])
+        rel-data          #:fm.rel{:left  (:as left-syms)
+                                   :nonse (:as nonse-syms)}]
 
-         ~@(when (and
-                  (contains? metadata :fm/nonse)
-                  (not (ignore? :fm/nonse)))
+    `(let [~nonse-syms
+           (seq.form.lib/or-conform-data->map
+            #::seq.form.lib{:conform?  ~conf-right-nonse?
+                            :conformed ~conf-nonse-sym
+                            :data      ~nonse-sym
+                            :or-spec   ~nonse-or-sym})]
 
-             [`(not (s/valid? ~nonse-spec-sym ~nonse-sym))
-              `#::anomaly{:spec ::anomaly/nonse
+       (if (s/valid? ~rel-spec-sym ~rel-data)
+         ~(:as left-syms)
+
+         #::anomaly{:spec ::anomaly/rel
+                    :sym  '~sym
+                    :args ~args
+                    :data (s/explain-data ~rel-spec-sym ~rel-data)}))))
+
+(defm quent-form
+  [{::form/keys [sym left-form body bindings args left-syms rel-form-fn]
+    :as         form-args
+    :or         {rel-form-fn rel-form}}]
+
+  (let [nonse-sym         (gensym 'nonse)
+        conf-nonse-sym    (gensym 'conformed-nonse)
+        conf-args-sym     (get-in bindings [::seq.form/conformed-args-sym ::form.lib/sym])
+        left-or-sym       (get-in bindings [::seq.form.lib/left-or        ::form.lib/sym])
+        nonse-or-sym      (get-in bindings [::seq.form.lib/nonse-or       ::form.lib/sym])
+        left-coll-or-sym  (get-in bindings [::seq.form.lib/left-coll-or   ::form.lib/sym])
+        nonse-coll-or-sym (get-in bindings [::seq.form.lib/nonse-coll-or  ::form.lib/sym])
+        trace-sym         (get-in bindings [:fm/trace                     ::form.lib/sym])
+        conform?          (get-in bindings [:fm/conform                   ::form.lib/form] #{})
+        conf-args-left?   (some conform? [:fm/args :fm.sequent/left])
+        trace?            (contains? bindings :fm/trace)
+        rel?              (contains? bindings :fm/rel)
+        quent-bindings    {::conformed-nonse-sym {::form.lib/sym conf-nonse-sym}
+                           ::nonse-sym           {::form.lib/sym nonse-sym}}
+        form-args         (update form-args ::form/bindings merge quent-bindings)]
+
+    `(let [~left-syms
+           (seq.form.lib/or-conform-data->map
+            #::seq.form.lib{:conform?  ~conf-args-left?
+                            :conformed ~conf-args-sym
+                            :data      ~args
+                            :or-spec   ~left-coll-or-sym})]
+
+       ~@(when trace?
+           [`(~trace-sym #:fm.trace{:sym '~sym :left ~(:as left-syms)})])
+
+       (let [~nonse-sym (do ~@body)]
+
+         ~@(when trace?
+             [`(~trace-sym #:fm.trace{:sym '~sym :nonse ~nonse-sym})])
+
+         (if (s/valid? :fm/anomaly ~nonse-sym)
+           ~nonse-sym
+
+           (let [~conf-nonse-sym (s/conform ~nonse-or-sym ~nonse-sym)]
+
+             ~@(when trace?
+                 [`(~trace-sym
+                    #:fm.trace{:sym '~sym :conformed-nonse ~conf-nonse-sym})])
+
+             (if (s/invalid? ~conf-nonse-sym)
+               #::anomaly{:spec ::anomaly/nonse
                           :sym  '~sym
-                          :args ~args-syms
-                          :data (s/explain-data ~nonse-spec-sym ~nonse-sym)}])
+                          :args ~args
+                          :data (s/explain-data ~nonse-or-sym ~nonse-sym)}
 
-         ~@(when (and
-                  (contains? metadata :fm/rel)
-                  (not (ignore? :fm/rel)))
-
-             [`(not (s/valid? ~rel-spec-sym {:args ~args-syms :ret ~nonse-sym}))
-              `#::anomaly{:spec ::anomaly/rel
-                          :sym  '~sym
-                          :args ~args-syms
-                          :data (s/explain-data ~rel-spec-sym {:args ~args-syms :ret ~nonse-sym})}])
-
-         :else
-         ~(first args-syms)))))
+               ~(if rel?
+                  (rel-form-fn form-args)
+                  (:as left-syms)))))))))
 
 (defm nonsequent
-  [{:fm/keys [macro-sym sym args-form nonse-form]
-    :as      form-args}]
+  [{::form/keys [sym left-form right-form]
+    :as         form-args}]
 
-  (let [ignore?      (:fm/ignore (meta args-form) (hash-set))
-        metadata     (into
-                      (hash-map)
-                      (map nonseq.meta/nonse-xf)
-                      (merge
-                       (meta args-form)
-                       {:fm/sym    sym
-                        :fm/ignore ignore?}
-                       (when (seq args-form)  {:fm/args  args-form})
-                       (when (seq nonse-form) {:fm/nonse nonse-form})))
-        bindings-map (select-keys metadata [:fm/nonse :fm/rel])
-        bindings     (interleave
-                      (map ::meta/sym  (vals bindings-map))
-                      (map ::meta/form (vals bindings-map)))
-        path         (vector :fm/ignore ::meta/form)
-        fm-metadata  (update-in metadata path conj :fm/rel)
-        fm-args-form (with-meta
-                       (form.lib/args-form->fm-args-form args-form)
-                       (not-empty
-                        (zipmap
-                         (keys fm-metadata)
-                         (map ::meta/form (vals fm-metadata)))))
-        args-syms    (if (seq fm-args-form)
-                       (vector (:as (first fm-args-form)))
-                       (vector))
-        fm-body-form (body-form
-                      (merge
-                       form-args
-                       {:fm/metadata  metadata
-                        :fm/args-syms args-syms}))]
+  (let [left-data  #::seq.form.lib{:ns (namespace sym) :form left-form}
+        right-data #::seq.form.lib{:ns (namespace sym) :form right-form}
+        metadata   (into
+                    (hash-map)
+                    (map seq.meta/nonse-xf)
+                    (merge
+                     (meta left-form)
+                     {:fm/sym           sym
+                      :fm/args          left-data
+                      :fm/ret           left-data
+                      :fm/sequent       :fm.sequent/nonsequent
+                      :fm/nonse         right-data
+                      :fm.sequent/left  left-form
+                      :fm.sequent/right left-form
+                      :fm.sequent/nonse right-form}))
+        bindings   (into
+                    (hash-map)
+                    (map seq.form.lib/binding-xf)
+                    (merge
+                     metadata
+                     {::seq.form.lib/left-or       left-data
+                      ::seq.form.lib/nonse-or      right-data
+                      ::seq.form.lib/left-coll-or  left-data
+                      ::seq.form.lib/nonse-coll-or right-data}))
+        args-sym   (gensym 'arg)
+        args-form  (vector args-sym)
+        left-syms  (seq.form.lib/seq-form->syms left-form)
+        right-syms (seq.form.lib/seq-form->syms right-form)
+        form-args  (merge
+                    form-args
+                    {::form/bindings             bindings
+                     ::form/metadata             metadata
+                     ::form/args-form            args-form
+                     ::form/args-syms            args-form
+                     ::form/args                 args-sym
+                     ::form/left-syms            left-syms
+                     ::form/nonse-syms           right-syms
+                     ::form/args-binding-form-fn seq.form/args-binding-form
+                     ::form/ret-binding-form-fn  quent-form
+                     ::form/quent-form-fn        quent-form
+                     ::form/rel-form-fn          rel-form})]
 
-    `(let [~@bindings]
-       (~macro-sym
-        ~@(when sym [(symbol (name sym))])
-        ~fm-args-form
-        ~fm-body-form))))
-
-(comment
-
-  (require '[fm.sequent.macro :refer [nonsequent defnonsequent]])
-  (require '[clojure.alpha.spec :as s])
-
-  (s/def ::a int?)
-  (s/def ::b int?)
-
-  (nonsequent [] [])
-
-  (nonsequent [::a] [::b])
-  ((nonsequent [::a] [::b] {::b 2}) {::a 1})
-  ((nonsequent [::a] [::b] {::b 'b}) {::a 1})
-  ((nonsequent [::a] [::b] {::b 2}) {::a 'a})
-
-  (nonsequent [::a ::b] [])
-  ((nonsequent [::a ::b] []) {::a 1 ::b 2})
-  ((nonsequent [::a ::b] []) {::a 1 ::b 'b})
-
-  (nonsequent [] [::a ::b])
-  ((nonsequent [] [::a ::b] {::a 1 ::b 2}))
-  ((nonsequent [] [::a ::b] {::a 1 ::b 'b}))
-
-  (->>
-   {::a 1 ::b 2}
-   ((nonsequent
-     [::a ::b]
-     []
-     (prn "!"))))
-
-  )
+    (form/binding-form form-args)))

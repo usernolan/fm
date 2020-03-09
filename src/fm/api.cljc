@@ -1,11 +1,13 @@
 (ns fm.api
   (:require
-   [clojure.alpha.spec.gen :as gen]
    [clojure.alpha.spec :as s]
    [fm.anomaly :as anomaly]))
 
 (def fm?
   (comp boolean :fm/sym meta))
+
+(def sequent?
+  (comp boolean :fm/sequent meta))
 
 (def anomaly?
   (partial s/valid? :fm/anomaly))
@@ -15,6 +17,9 @@
 
 (def ret-anomaly?
   (partial s/valid? ::anomaly/ret))
+
+(def nonse-anomaly?
+  (partial s/valid? ::anomaly/nonse))
 
 (def rel-anomaly?
   (partial s/valid? ::anomaly/rel))
@@ -27,10 +32,3 @@
 
 (def not-anomaly?
   (comp not anomaly?))
-
-(defn genform
-  [tagging-spec x]
-  (let [c (s/conform tagging-spec x)]
-    (if (s/invalid? c)
-      x
-      (gen/generate (s/gen (first c))))))

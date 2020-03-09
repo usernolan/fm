@@ -15,6 +15,12 @@
    (fn [{::keys [spec]}]
      (= spec ::ret))))
 
+(s/def ::nonse
+  (s/and
+   map?
+   (fn [{::keys [spec]}]
+     (= spec ::nonse))))
+
 (s/def ::rel
   (s/and
    map?
@@ -40,6 +46,7 @@
            (s/or
             ::args  ::args
             ::ret   ::ret
+            ::nonse ::nonse
             ::rel   ::rel
             ::throw ::throw)
            x))
@@ -67,6 +74,7 @@
   (s/or
    ::args     ::args
    ::ret      ::ret
+   ::nonse    ::nonse
    ::rel      ::rel
    ::throw    ::throw
    ::received ::received))

@@ -12,14 +12,22 @@
 (defm rel-form
   [{::form/keys [sym bindings args left-syms right-syms reverse?]}]
 
-  (let [rel-spec-sym (get-in bindings [:fm/rel ::form.lib/sym])
-        rel-data     #:fm.rel{:left  ~(:as left-syms)
-                              :right ~(:as right-syms)}]
+  (let [right-seq-sym (get-in bindings [:fm.sequent/right ::form.lib/sym])
+        rel-spec-sym  (get-in bindings [:fm/rel           ::form.lib/sym])
+        sequent       (get-in bindings [:fm/sequent       ::form.lib/form])
+        merge?        (contains? #{:fm.sequent/mergesequent} sequent)
+        rel-data      #:fm.rel{:left  ~(:as left-syms)
+                               :right ~(:as right-syms)}]
 
     `(if (s/valid? ~rel-spec-sym ~rel-data)
-       ~(if reverse?
-          (:as left-syms)
-          (:as right-syms))
+       ~(cond
+          reverse? (:as left-syms)
+          merge?   `(into
+                     ~(:as left-syms)
+                     (select-keys
+                      ~(:as right-syms)
+                      ~right-seq-sym))
+          :else    (:as right-syms))
 
        #::anomaly{:spec ::anomaly/rel
                   :sym  '~sym
@@ -27,10 +35,12 @@
                   :data (s/explain-data ~rel-spec-sym ~rel-data)})))
 
 (defm quent-form
-  [{::form/keys [sym left-form bindings args left-syms right-syms
-                 forward-form reverse-form reverse? rel-form-fn]
+  [{::form/keys [sym bindings body forward-form reverse-form args
+                 left-syms right-syms reverse? rel-form-fn]
     :as         form-args
-    :or         {rel-form-fn rel-form}}]
+    :or         {reverse?     false
+                 forward-form `(do ~@body)
+                 rel-form-fn  rel-form}}]
 
   (let [ret-sym           (gensym 'ret)
         conf-ret-sym      (gensym 'conformed-ret)
@@ -39,14 +49,17 @@
         right-or-sym      (get-in bindings [::seq.form.lib/right-or      ::form.lib/sym])
         left-coll-or-sym  (get-in bindings [::seq.form.lib/left-coll-or  ::form.lib/sym])
         right-coll-or-sym (get-in bindings [::seq.form.lib/right-coll-or ::form.lib/sym])
+        right-seq-sym     (get-in bindings [:fm.sequent/right            ::form.lib/sym])
         trace-sym         (get-in bindings [:fm/trace                    ::form.lib/sym])
+        sequent           (get-in bindings [:fm/sequent                  ::form.lib/form])
         conform?          (get-in bindings [:fm/conform                  ::form.lib/form] #{})
         conf-args-left?   (some conform? [:fm/args :fm.sequent/left])
         conf-args-right?  (some conform? [:fm/args :fm.sequent/right])
         conf-ret-left?    (some conform? [:fm/ret :fm.sequent/left])
-        conf-ret-right?   (some conform? [:fm/ret :fm.seqent/right])
+        conf-ret-right?   (some conform? [:fm/ret :fm.sequent/right])
         trace?            (contains? bindings :fm/trace)
         rel?              (contains? bindings :fm/rel)
+        merge?            (contains? #{:fm.sequent/mergesequent} sequent)
         quent-bindings    {::conformed-ret-sym {::form.lib/sym conf-ret-sym}
                            ::ret-sym           {::form.lib/sym ret-sym}}
         form-args         (update form-args ::form/bindings merge quent-bindings)]
@@ -103,19 +116,28 @@
 
                        [`(~trace-sym ~trace-data)]))
 
-                 ~(if rel? rel-form (if reverse? (:as left-syms) (:as right-syms)))))))))))
+                 ~(cond
+                    rel?     (rel-form-fn form-args)
+                    reverse? (:as left-syms)
+                    merge?   `(into
+                               ~(:as left-syms)
+                               (select-keys
+                                ~(:as right-syms)
+                                ~right-seq-sym))
+                    :else    (:as right-syms))))))))))
 
 (defm args-binding-form
-  [{::form/keys [sym bindings args reversible? quent-form-fn]
+  [{::form/keys [sym bindings args quent-form-fn]
     :as         form-args
-    :or         {reversible?   false
-                 quent-form-fn quent-form}}]
+    :or         {quent-form-fn quent-form}}]
 
   (let [conf-args-sym (gensym 'conformed-args)
         reverse?-sym  (gensym 'reverse?)
         left-or-sym   (get-in bindings [::seq.form.lib/left-or ::form.lib/sym])
         trace-sym     (get-in bindings [:fm/trace              ::form.lib/sym])
+        sequent       (get-in bindings [:fm/sequent            ::form.lib/form])
         trace?        (contains? bindings :fm/trace)
+        reversible?   (contains? #{:fm.sequent/sequent} sequent)
         args-bindings {::conformed-args-sym {::form.lib/sym conf-args-sym}
                        ::reverse?-sym       {::form.lib/sym reverse?-sym}}
         form-args     (update form-args ::form/bindings merge args-bindings)]
@@ -183,9 +205,9 @@
                      ::form/args                 args-sym
                      ::form/left-syms            left-syms
                      ::form/right-syms           right-syms
-                     ::form/reversible?          true
                      ::form/args-binding-form-fn args-binding-form
                      ::form/ret-binding-form-fn  quent-form
-                     ::form/quent-form-fn        quent-form})]
+                     ::form/quent-form-fn        quent-form
+                     ::form/rel-form-fn          rel-form})]
 
     (form/binding-form form-args)))
