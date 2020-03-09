@@ -1,52 +1,42 @@
 (ns fm.sequent.usage
   (:require
+   [clojure.alpha.spec :as s]
    [fm.sequent.macro
     :refer
     [defnonsequent
      defconsequent
-     defsequent
-     defmergesequent]]))
+     defmergesequent
+     defsequent]]))
 
-(s/def ::a int?)
-(s/def ::b int?)
-(s/def ::c int?)
-(s/def ::d int?)
+(s/def ::a #{::a})
+(s/def ::b #{::b})
 
-(def ! (comp (constantly 0) prn))
+(defnonsequent   a<b> ; id
+  [::a]
+  [::b]
+  ::b)
 
-(defnonsequent   AB<>AB   ; id
-  [::a ::b :as x]
-  [::c ::d]
-  {::c (! 'c)
-   ::d (! 'd)})
+(a<b> ::a)
 
-(AB<>AB {::a 1 ::b 2})
+(defconsequent   a->b ; directional xf
+  [::a]
+  [::b]
+  ::b)
 
-(defconsequent   AB->CD   ; directional xf
-  [::a ::b]
-  [::c ::d]
-  {::c (+ a b)
-   ::d (- a b)})
+(a->b ::a)
 
-(AB->CD {::a 1 ::b 2})
+(defmergesequent a>>b ; merge xf
+  [::a]
+  [::b]
+  ::b)
 
-(defsequent      AB<>CD   ; reversible xf
-  [::a ::b]
-  [::c ::d]
-  {::c (+ a 2)
-   ::d (* b 2)}
-  {::a (- c 2)
-   ::b (/ d 2)})
+(a>>b ::a)
 
-(AB<>CD {::a 1 ::b 2})
-(AB<>CD {::c 3 ::d 4})
-(s/conform ::AB<>CD {::a 1 ::b 2})
-(s/unform  ::AB<>CD {::c 3 ::d 4})
+(defsequent      a<>b ; bidirectional xf
+  [::a]
+  [::b]
+  ::b
+  ::a)
 
-(defmergesequent AB<>ABCD ; merge xf
-  [::a ::b]
-  [::c ::d]
-  {::c (* a a)
-   ::d (* b b)})
-
-(AB<>ABCD {::a 1 ::b 2})
+(a<>b ::a)
+(a<>b ::b)
