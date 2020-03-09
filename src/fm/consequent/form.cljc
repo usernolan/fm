@@ -30,10 +30,8 @@
                     (map seq.form.lib/binding-xf)
                     (merge
                      metadata
-                     {::seq.form.lib/left-or       left-data
-                      ::seq.form.lib/right-or      right-data
-                      ::seq.form.lib/left-coll-or  left-data
-                      ::seq.form.lib/right-coll-or right-data}))
+                     {::seq.form.lib/left-or  left-data
+                      ::seq.form.lib/right-or right-data}))
         args-sym   (gensym 'arg)
         args-form  (vector args-sym)
         left-syms  (seq.form.lib/seq-form->syms left-form)

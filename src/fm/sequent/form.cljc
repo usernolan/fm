@@ -42,34 +42,31 @@
                  forward-form `(do ~@body)
                  rel-form-fn  rel-form}}]
 
-  (let [ret-sym           (gensym 'ret)
-        conf-ret-sym      (gensym 'conformed-ret)
-        conf-args-sym     (get-in bindings [::conformed-args-sym         ::form.lib/sym])
-        left-or-sym       (get-in bindings [::seq.form.lib/left-or       ::form.lib/sym])
-        right-or-sym      (get-in bindings [::seq.form.lib/right-or      ::form.lib/sym])
-        left-coll-or-sym  (get-in bindings [::seq.form.lib/left-coll-or  ::form.lib/sym])
-        right-coll-or-sym (get-in bindings [::seq.form.lib/right-coll-or ::form.lib/sym])
-        right-seq-sym     (get-in bindings [:fm.sequent/right            ::form.lib/sym])
-        trace-sym         (get-in bindings [:fm/trace                    ::form.lib/sym])
-        sequent           (get-in bindings [:fm/sequent                  ::form.lib/form])
-        conform?          (get-in bindings [:fm/conform                  ::form.lib/form] #{})
-        conf-args-left?   (some conform? [:fm/args :fm.sequent/left])
-        conf-args-right?  (some conform? [:fm/args :fm.sequent/right])
-        conf-ret-left?    (some conform? [:fm/ret :fm.sequent/left])
-        conf-ret-right?   (some conform? [:fm/ret :fm.sequent/right])
-        trace?            (contains? bindings :fm/trace)
-        rel?              (contains? bindings :fm/rel)
-        merge?            (contains? #{:fm.sequent/mergesequent} sequent)
-        quent-bindings    {::conformed-ret-sym {::form.lib/sym conf-ret-sym}
-                           ::ret-sym           {::form.lib/sym ret-sym}}
-        form-args         (update form-args ::form/bindings merge quent-bindings)]
+  (let [ret-sym          (gensym 'ret)
+        conf-ret-sym     (gensym 'conformed-ret)
+        conf-args-sym    (get-in bindings [::conformed-args-sym         ::form.lib/sym])
+        left-or-sym      (get-in bindings [::seq.form.lib/left-or       ::form.lib/sym])
+        right-or-sym     (get-in bindings [::seq.form.lib/right-or      ::form.lib/sym])
+        right-seq-sym    (get-in bindings [:fm.sequent/right            ::form.lib/sym])
+        trace-sym        (get-in bindings [:fm/trace                    ::form.lib/sym])
+        sequent          (get-in bindings [:fm/sequent                  ::form.lib/form])
+        conform?         (get-in bindings [:fm/conform                  ::form.lib/form] #{})
+        conf-args-left?  (some conform? [:fm/args :fm.sequent/left])
+        conf-args-right? (some conform? [:fm/args :fm.sequent/right])
+        conf-ret-left?   (some conform? [:fm/ret :fm.sequent/left])
+        conf-ret-right?  (some conform? [:fm/ret :fm.sequent/right])
+        trace?           (contains? bindings :fm/trace)
+        rel?             (contains? bindings :fm/rel)
+        merge?           (contains? #{:fm.sequent/mergesequent} sequent)
+        quent-bindings   {::conformed-ret-sym {::form.lib/sym conf-ret-sym}
+                          ::ret-sym           {::form.lib/sym ret-sym}}
+        form-args        (update form-args ::form/bindings merge quent-bindings)]
 
     `(let [~(if reverse? right-syms left-syms)
            (seq.form.lib/or-conform-data->map
             #::seq.form.lib{:conform?  ~(if reverse? conf-args-right? conf-args-left?)
                             :conformed ~conf-args-sym
-                            :data      ~args
-                            :or-spec   ~(if reverse? right-coll-or-sym left-coll-or-sym)})]
+                            :data      ~args})]
 
        ~@(when trace?
 
@@ -104,8 +101,7 @@
                      (seq.form.lib/or-conform-data->map
                       #::seq.form.lib{:conform?  ~(if reverse? conf-ret-left? conf-ret-right?)
                                       :conformed ~conf-ret-sym
-                                      :data      ~ret-sym
-                                      :or-spec   ~(if reverse? left-coll-or-sym right-coll-or-sym)})]
+                                      :data      ~ret-sym})]
 
                  ~@(when trace?
 
@@ -188,10 +184,8 @@
                     (map seq.form.lib/binding-xf)
                     (merge
                      metadata
-                     {::seq.form.lib/left-or       seq-data
-                      ::seq.form.lib/right-or      seq-data
-                      ::seq.form.lib/left-coll-or  seq-data
-                      ::seq.form.lib/right-coll-or seq-data}))
+                     {::seq.form.lib/left-or  seq-data
+                      ::seq.form.lib/right-or seq-data}))
         args-sym   (gensym 'arg)
         args-form  (vector args-sym)
         left-syms  (seq.form.lib/seq-form->syms left-form)

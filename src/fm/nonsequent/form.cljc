@@ -15,7 +15,6 @@
 
   (let [nonse-sym         (get-in bindings [::nonse-sym             ::form.lib/sym])
         conf-nonse-sym    (get-in bindings [::conformed-nonse-sym   ::form.lib/sym])
-        nonse-or-sym      (get-in bindings [::seq.form.lib/nonse-or ::form.lib/sym])
         rel-spec-sym      (get-in bindings [:fm/rel                 ::form.lib/sym])
         conform?          (get-in bindings [:fm/conform             ::form.lib/form] #{})
         conf-right-nonse? (some conform? [:fm/right :fm.sequent/nonse])
@@ -26,8 +25,7 @@
            (seq.form.lib/or-conform-data->map
             #::seq.form.lib{:conform?  ~conf-right-nonse?
                             :conformed ~conf-nonse-sym
-                            :data      ~nonse-sym
-                            :or-spec   ~nonse-or-sym})]
+                            :data      ~nonse-sym})]
 
        (if (s/valid? ~rel-spec-sym ~rel-data)
          ~(:as left-syms)
@@ -42,28 +40,24 @@
     :as         form-args
     :or         {rel-form-fn rel-form}}]
 
-  (let [nonse-sym         (gensym 'nonse)
-        conf-nonse-sym    (gensym 'conformed-nonse)
-        conf-args-sym     (get-in bindings [::seq.form/conformed-args-sym ::form.lib/sym])
-        left-or-sym       (get-in bindings [::seq.form.lib/left-or        ::form.lib/sym])
-        nonse-or-sym      (get-in bindings [::seq.form.lib/nonse-or       ::form.lib/sym])
-        left-coll-or-sym  (get-in bindings [::seq.form.lib/left-coll-or   ::form.lib/sym])
-        nonse-coll-or-sym (get-in bindings [::seq.form.lib/nonse-coll-or  ::form.lib/sym])
-        trace-sym         (get-in bindings [:fm/trace                     ::form.lib/sym])
-        conform?          (get-in bindings [:fm/conform                   ::form.lib/form] #{})
-        conf-args-left?   (some conform? [:fm/args :fm.sequent/left])
-        trace?            (contains? bindings :fm/trace)
-        rel?              (contains? bindings :fm/rel)
-        quent-bindings    {::conformed-nonse-sym {::form.lib/sym conf-nonse-sym}
-                           ::nonse-sym           {::form.lib/sym nonse-sym}}
-        form-args         (update form-args ::form/bindings merge quent-bindings)]
+  (let [nonse-sym       (gensym 'nonse)
+        conf-nonse-sym  (gensym 'conformed-nonse)
+        conf-args-sym   (get-in bindings [::seq.form/conformed-args-sym ::form.lib/sym])
+        nonse-or-sym    (get-in bindings [::seq.form.lib/nonse-or       ::form.lib/sym])
+        trace-sym       (get-in bindings [:fm/trace                     ::form.lib/sym])
+        conform?        (get-in bindings [:fm/conform                   ::form.lib/form] #{})
+        conf-args-left? (some conform? [:fm/args :fm.sequent/left])
+        trace?          (contains? bindings :fm/trace)
+        rel?            (contains? bindings :fm/rel)
+        quent-bindings  {::conformed-nonse-sym {::form.lib/sym conf-nonse-sym}
+                         ::nonse-sym           {::form.lib/sym nonse-sym}}
+        form-args       (update form-args ::form/bindings merge quent-bindings)]
 
     `(let [~left-syms
            (seq.form.lib/or-conform-data->map
             #::seq.form.lib{:conform?  ~conf-args-left?
                             :conformed ~conf-args-sym
-                            :data      ~args
-                            :or-spec   ~left-coll-or-sym})]
+                            :data      ~args})]
 
        ~@(when trace?
            [`(~trace-sym #:fm.trace{:sym '~sym :left ~(:as left-syms)})])
@@ -116,10 +110,8 @@
                     (map seq.form.lib/binding-xf)
                     (merge
                      metadata
-                     {::seq.form.lib/left-or       left-data
-                      ::seq.form.lib/nonse-or      right-data
-                      ::seq.form.lib/left-coll-or  left-data
-                      ::seq.form.lib/nonse-coll-or right-data}))
+                     {::seq.form.lib/left-or  left-data
+                      ::seq.form.lib/nonse-or right-data}))
         args-sym   (gensym 'arg)
         args-form  (vector args-sym)
         left-syms  (seq.form.lib/seq-form->syms left-form)

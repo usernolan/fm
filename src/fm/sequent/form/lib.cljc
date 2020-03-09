@@ -165,16 +165,50 @@
         `(::req-un
           (s/keys
            :req-un
-           ~req-un))))) ; TODO: allow dust?
+           ~req-un)))))
+
+(defn coll-reducer
+  [or-spec ks acc x]
+  (let [c (s/conform or-spec x)]
+    (if (s/invalid? c)
+      acc
+      (let [data {::data x ::conformed-data (second c)}
+            acc  (assoc acc (first c) data)]
+        (if (every? (partial contains? acc) ks)
+          (reduced acc)
+          acc)))))
+
+(defn coll-conform
+  [or-spec ks xs]
+  (let [ys (reduce
+             (partial coll-reducer or-spec ks)
+             (hash-map)
+             (if (map? xs)
+               (vals xs)
+               xs))]
+    (if (every? (partial contains? ys) ks)
+      ys
+      ::s/invalid)))
+
+(defn coll-unform
+  [keys-spec xs]
+  (if (s/valid? keys-spec xs)
+    (vec (vals xs))
+    ::s/invalid))
 
 (defm keys->coll-form
   ^{:fm/args ::keys}
 
-  [keys]
+  [{::keys [req req-un] :as keys}]
 
-  `(s/coll-of
-    ~(keys->coll-or-form keys)
-    :into []))
+  (let [ks-vec    (into (or req []) (when (seq req-un) [::req-un]))
+        or-form   (keys->coll-or-form keys)
+        keys-form (keys->keys-form keys)]
+    `(s/and
+      coll?
+      (s/conformer
+       (partial coll-conform ~or-form ~ks-vec)
+       (partial coll-unform ~keys-form)))))
 
 (defm keys->or-form
   ^{:fm/args ::keys}
@@ -323,39 +357,22 @@
     {}))
 
 (defn req-un-xf
-  [[k v]]
-  (if (= k ::req-un)
-    v
-    [k v]))
-
-(def directional?
-  (comp
-   #{:fm.sequent/left
-     :fm.sequent/right}
-   first))
-
-(defn match-xf
-  [or-spec x]
-  (let [c (s/conform or-spec x)]
-    (cond
-      (s/invalid? c)   c
-      (directional? c) (first (second c))
-      :else            (first c))))
+  [conform? [k v]]
+  (let [v (if conform?
+            (::conformed-data v)
+            (::data v))]
+    (if (#{::req-un} k)
+      v
+      [k v])))
 
 (defn or-conform-data->map
-  [{::keys [conform? conformed data or-spec]
+  [{::keys [conform? conformed data]
     :as    args}]
   (let [[tag conformed-data] conformed]
     (case tag
       :fm.sequent/left  (or-conform-data->map (update args ::conformed second))
       :fm.sequent/right (or-conform-data->map (update args ::conformed second))
       ::keys            (if conform? conformed-data data)
-      ::coll            (if conform?
-                          (into {} (map req-un-xf) conformed-data)
-                          (into
-                           (hash-map)
-                           (map req-un-xf)
-                           (zipmap
-                            (map (partial match-xf or-spec) data)
-                            (map identity data))))
+      ::coll            (let [xf (partial req-un-xf conform?)]
+                          (into (hash-map) (map xf) conformed-data))
       {tag (if conform? conformed-data data)})))
