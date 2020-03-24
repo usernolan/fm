@@ -11,7 +11,8 @@
     :as         form-args}]
 
   (let [left-data  #::seq.form.lib{:ns (namespace sym) :form left-form}
-        right-data {::seq.form.lib/ns         (namespace sym)
+        right-data #::seq.form.lib{:ns (namespace sym) :form right-form}
+        seq-data   {::seq.form.lib/ns         (namespace sym)
                     ::seq.form.lib/left-form  left-form
                     ::seq.form.lib/right-form right-form}
         metadata   (into
@@ -21,10 +22,10 @@
                      (meta left-form)
                      {:fm/sym           sym
                       :fm/args          left-data
-                      :fm/ret           right-data
+                      :fm/ret           seq-data
                       :fm/sequent       :fm.sequent/mergesequent
                       :fm.sequent/left  left-form
-                      :fm.sequent/right right-data}))
+                      :fm.sequent/right seq-data}))
         bindings   (into
                     (hash-map)
                     (map seq.form.lib/binding-xf)
