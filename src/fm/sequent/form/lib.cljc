@@ -155,64 +155,6 @@
           :fm.sequent/left ~left-keys
           :fm.sequent/right ~right-keys)))))
 
-(defm keys->coll-or-form
-  ^{:fm/args ::keys}
-
-  [{::keys [req
-            req-un]}]
-
-  `(s/or
-    ~@(when (seq req) (interleave req req))
-    ~@(when (seq req-un)
-        `(::req-un
-          (s/keys
-           :req-un
-           ~req-un)))))
-
-(defn coll-reducer
-  [or-spec ks acc x]
-  (let [c (s/conform or-spec x)]
-    (if (s/invalid? c)
-      acc
-      (let [data {::data x ::conformed-data (second c)}
-            acc  (assoc acc (first c) data)]
-        (if (every? (partial contains? acc) ks)
-          (reduced acc)
-          acc)))))
-
-(defn coll-conform
-  [or-spec ks xs]
-  (let [ys (reduce
-             (partial coll-reducer or-spec ks)
-             (hash-map)
-             (if (map? xs)
-               (vals xs)
-               xs))]
-    (if (every? (partial contains? ys) ks)
-      ys
-      ::s/invalid)))
-
-(defn coll-unform
-  [keys-spec xs]
-  (if (s/valid? keys-spec xs)
-    (vec (vals xs))
-    ::s/invalid))
-
-(defm keys->coll-form
-  ^{:fm/args ::keys}
-
-  [{::keys [req req-un] :as keys}]
-
-  (let [ks-vec    (into (or req []) (when (seq req-un) [::req-un]))
-        or-form   (keys->coll-or-form keys)
-        keys-form (keys->keys-form keys)]
-
-    `(s/and
-      coll?
-      (s/conformer
-       (partial coll-conform ~or-form ~ks-vec)
-       (partial coll-unform ~keys-form)))))
-
 (defm keys->or-form
   ^{:fm/args ::keys}
 
@@ -223,13 +165,11 @@
                (= (count ks) 1)
                (seq req))
         keys? (seq ks)
-        col?? (seq ks)
-        any?? (not (or only? keys? col??))]
+        any?? (not (or only? keys?))]
 
     `(s/or
       ~@(when only? [(first req) (first req)])
       ~@(when keys? [::keys (keys->keys-form keys)])
-      ~@(when col?? [::coll (keys->coll-form keys)])
       ~@(when any?? [::any  `map?]))))
 
 (def conseq-data->or-form
@@ -258,33 +198,6 @@
         `(s/or
           :fm.sequent/left  ~left-or
           :fm.sequent/right ~right-or)))))
-
-(def conseq-data->coll-or-form
-  (comp
-   keys->coll-or-form
-   conseq-data->keys))
-
-(defn seq-data->coll-or-form
-  ^{:fm/args (s/or
-              ::seq    ::seq-data
-              ::conseq ::conseq-data)}
-
-  [{::keys [ns form left-form right-form right?]}]
-
-  (if form
-    (conseq-data->coll-or-form {::ns ns ::form form})
-
-    (let [left-coll-or  (conseq-data->coll-or-form {::ns ns ::form left-form})
-          right-coll-or (conseq-data->coll-or-form {::ns ns ::form right-form})]
-
-      (if right?
-        `(s/or
-          :fm.sequent/left  left-coll-or
-          :fm.sequent/right right-coll-or)
-
-        `(s/or
-          :fm.sequent/left  left-coll-or
-          :fm.sequent/right right-coll-or)))))
 
 (defmulti  binding-xf (fn [[k _]] k))
 (defmethod binding-xf ::left-or
@@ -364,7 +277,5 @@
       :fm.sequent/left  (or-conform-data->map (update args ::conformed second))
       :fm.sequent/right (or-conform-data->map (update args ::conformed second))
       ::keys            (if conform? conformed-data data)
-      ::coll            (let [xf (partial req-un-xf conform?)]
-                          (into (hash-map) (map xf) conformed-data))
       ::any             data
       {tag (if conform? conformed-data data)})))
