@@ -34,8 +34,8 @@
                   :data (s/explain-data ~rel-spec-sym ~rel-data)})))
 
 (defm quent-form
-  [{::form/keys [sym bindings body forward-form reverse-form args
-                 left-syms right-syms reverse? rel-form-fn]
+  [{::form/keys [sym left-form right-form bindings body forward-form reverse-form
+                 args left-syms right-syms reverse? rel-form-fn]
     :as         form-args
     :or         {reverse?     false
                  forward-form `(do ~@body)
@@ -76,7 +76,12 @@
 
            [`(~trace-sym ~trace-data)]))
 
-       (let [~ret-sym ~(if reverse? reverse-form forward-form)]
+       (let [~ret-sym ~(if reverse? reverse-form forward-form)
+             ~ret-sym (if (and
+                           (nil? ~ret-sym)
+                           (empty? ~(if reverse? left-form right-form)))
+                        {}
+                        ~ret-sym)]
 
          ~@(when trace?
              [`(~trace-sym #:fm.trace{:sym '~sym :ret ~ret-sym})])
