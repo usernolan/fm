@@ -1,8 +1,9 @@
 (ns fm.test.check-test
-  (:require [fm.macros :refer [defm]]
-            [clojure.test :as t]
-            [fm.test.check :as check]
-            [fm.test.report :as report]))
+  (:require
+   [clojure.test :as t]
+   [fm.macro :refer [defm]]
+   [fm.test.check :as check]
+   [fm.test.report :as report]))
 
 ;; Passing case
 (defm defm-test-with-args-and-ret

@@ -1,90 +1,58 @@
 (ns fm.usage
   (:require
+   [clojure.alpha.spec :as s]
    [clojure.alpha.spec.gen :as gen]
    [clojure.alpha.spec.test :as stest]
-   [clojure.alpha.spec :as s]
-   [fm.macros :refer [fm defm]]
-   [fm.test.check :as fm.check]
-   [fm.utils :as fm]))
+   [fm.anomaly :as fm.anomaly]
+   [fm.api :as fm]
+   [fm.macro :refer [fm defm]]
+   [fm.test.check :as fm.check]))
 
   ;; control group
-(defn inc_
+(defn fn1
   [n]
   (inc n))
 
-(inc_ 1)
-(inc_ 'a)
+(fn1 1)
+(fn1 'a)
 
-(meta inc_)
-(meta #'inc_)
+(meta fn1)
+(meta #'fn1)
 
-  ;; fm is just fn
-(macroexpand '(defm inc_
-                [n]
-                (inc n)))
+  ;; fm is just (with-meta fn ,,,)
+(macroexpand '(fm [n] (inc n)))
 
-(defm inc_
+(defm fm1
   [n]
   (inc n))
 
-(inc_ 1)
-(inc_ 'a) ; `:fm.anomaly/throw`
+(fm1 1)
+(fm1 'a) ; `:fm.anomaly/throw`
 
-(meta inc_)
-(meta #'inc_)
+(meta fm1)
+(meta #'fm1)
 
-(defm inc_
+(defm fm2
   ^{:fm/args number?}
   [n]
   (inc n))
 
-(inc_ 1)
-(inc_ 'a) ; `:fm.anomaly/args`
+(fm2 1)
+(fm2 'a) ; `:fm.anomaly/args`
 
   ;; anomalies are data
-(:fm.anomaly/sym  (inc_ 'a)) ; qualified function symbol
-(:fm.anomaly/args (inc_ 'a)) ; args that triggered the anomaly
-(:fm.anomaly/data (inc_ 'a)) ; output of `s/explain-data`
+(:fm.anomaly/sym  (fm2 'a)) ; where'd you come from, anomaly?
+(:fm.anomaly/spec (fm2 'a)) ; oof, what happened?
+(:fm.anomaly/args (fm2 'a)) ; and those `:fm.anomaly/args` were?
+(:fm.anomaly/data (fm2 'a)) ; why are they anomalous?
+  ;; thanks, `fm.usage/fm2`.
 
-  ;; what kind of anomaly are you?
-(->>
- (inc_ 'a)
- (s/conform :fm/anomaly)
- (first))
-
-  ;; or just
-(:fm.anomaly/spec (inc_ 'a))
-
-  ;; fishing for `:fm.anomaly/ret`
-(defm bad-ret
-  ^{:fm/args number?
-    :fm/ret  symbol?}
-  [n]
-  (inc n))
-
-(bad-ret 1) ; we caught one
-
-  ;; anomaly contains the args and ret values
-(:fm.anomaly/sym   (bad-ret 1))  ; qualified function symbol
-(:fm.anomaly/args  (bad-ret 1))  ; args that caused anomalous ret
-(:fm.anomaly/data  (bad-ret 1))  ; output of `s/explain-data`
-(:clojure.spec.alpha/value
- (:fm.anomaly/data (bad-ret 1))) ; return value that triggered anomaly
-
-  ;; `:fm.anomaly/rel`
-(defm bad-rel
-  ^{:fm/args number?
-    :fm/ret  number?
-    :fm/rel  (fn [{[n] :args ret :ret}]
-               (> n ret))} ; bait
-  [n]
-  (inc n))
-
-(bad-rel 1)
-
-(:fm.anomaly/sym  (bad-rel 1)) ; qualified function symbol
-(:fm.anomaly/args (bad-rel 1)) ; args that caused anomalous ret
-(:fm.anomaly/data (bad-rel 1)) ; output of `s/explain-data`
+(def failed-val
+  (comp
+   :val
+   first
+   :clojure.spec.alpha/problems
+   :fm.anomaly/data))
 
 (def failed-pred
   (comp
@@ -93,7 +61,42 @@
    :clojure.spec.alpha/problems
    :fm.anomaly/data))
 
-(failed-pred (bad-rel 1))
+(failed-val       (fm2 'a))
+(failed-pred      (fm2 'a))
+
+  ;; fishing for `:fm.anomaly/ret`
+(defm bad-ret
+  ^{:fm/args number?
+    :fm/ret  symbol?} ; the bait
+  [n]
+  (inc n))
+
+(bad-ret 1) ; we caught one
+
+(:fm.anomaly/sym  (bad-ret 1))
+(:fm.anomaly/spec (bad-ret 1))
+(:fm.anomaly/args (bad-ret 1))
+(:fm.anomaly/data (bad-ret 1))
+(failed-val       (bad-ret 1))
+(failed-pred      (bad-ret 1))
+
+  ;; `:fm.anomaly/rel`
+(defm bad-rel
+  ^{:fm/args number?
+    :fm/ret  number?
+    :fm/rel  (fn [{[n] :args ret :ret}]
+               (> n ret))} ; the bait
+  [n]
+  (inc n))
+
+(bad-rel 1)
+
+(:fm.anomaly/sym  (bad-rel 1))
+(:fm.anomaly/spec (bad-rel 1))
+(:fm.anomaly/args (bad-rel 1))
+(:fm.anomaly/data (bad-rel 1))
+(failed-val       (bad-rel 1))
+(failed-pred      (bad-rel 1))
 
   ;; `fm.anomaly/throw` again
 (defm throws
@@ -102,99 +105,156 @@
 
 (throws)
 
-(:fm.anomaly/sym   (throws))  ; qualified function symbol
-(:fm.anomaly/args  (throws))  ; args that caused the throw, same shape as args
-(:fm.anomaly/data  (throws))  ; a throwable
+(:fm.anomaly/sym   (throws))
+(:fm.anomaly/spec  (throws))
+(:fm.anomaly/args  (throws))
+(:fm.anomaly/data  (throws))
+(failed-val        (throws))
+(failed-pred       (throws))
 (ex-data
- (:fm.anomaly/data (throws))) ; uh...
+ (:fm.anomaly/data (throws)))
 
   ;; anonymous fm
 ((fm ^{:fm/args number?} [n] (inc n)) 1)
 ((fm ^{:fm/args number?} [n] (inc n)) 'a)
 
-  ;; doc
-(defm doct
-  ^{:fm/doc "Is documented."}
-  [n]
-  (inc n))
-
-(meta doct)
-(meta #'doct)
-
   ;; variadic signatures aren't ready yet, but otherwise...
-(defm add_
+(defm fm3
   ^{:fm/args [number? [float? [int? int?]] {:body even?}]}
   [x [y [z w]] {:keys [body]}]
   (+ x y z w body))
 
-(add_ 1/2 [2.5 [36 1]] {:body 2})
+(fm3 1/2 [2.5 [36 1]] {:body 2})
 
   ;; anomalies are reported as a sequence of `:clojure.spec.alpha/problems`
-(add_ 'a [2.5 ['b 1]] {:body 2})
-
 (->>
- (add_ 'a [2.5 ['b 1]] {:body 2})
+ (fm3 'a [2.5 ['b 1]] {:body 2})
  (:fm.anomaly/data)
  (:clojure.spec.alpha/problems))
 
-  ;; custom anomaly handling
-(defm custom-anomaly
+  ;; doc
+(defm docd
+  ^{:fm/doc "Is documented."}
+  [n]
+  (inc n))
+
+(meta docd)
+(meta #'docd)
+
+  ;; anomaly handling
+(defm handled1
   ^{:fm/handler "dang!"}
   []
   (throw (ex-info "darn!" {})))
 
-(custom-anomaly)
+(handled1)
 
 (defn log!
   [a]
   (prn "logging!")
   a)
 
-(defm custom-anomaly2
+(defm handled2
   ^{:fm/handler log!}
   []
   (throw (ex-info "darn!" {})))
 
-(custom-anomaly2)
+(handled2)
 
-(defm custom-anomaly3
+(defm handled3
   ^{:fm/handler (fn [anomaly] (prn anomaly))}
   []
   (throw (ex-info "darn!" {})))
 
-(custom-anomaly3)
+(handled3)
 
-(s/def ::http-req
+  ;; thin trace facility
+(defm traced1
+  ^{:fm/trace true} ; defaults to `clojure.core/prn`
+  []
+  (rand))
+
+(traced1)
+
+(defm traced2
+  ^{:fm/trace (fn [{:keys [fm.trace/sym fm.trace/args fm.trace/ret]}]
+                (prn sym (symbol "trace:") args ret))}
+  []
+  (rand))
+
+(traced2)
+
+(def state-atom (atom 0))
+
+(defm traced3
+  ^{:fm/trace @state-atom}
+  []
+  (swap! state-atom inc)
+  (rand))
+
+(traced3)
+(traced3)
+
+(defm traced4
+  ^{:fm/trace true}
+  []
+  (inc (traced1)))
+
+(traced4)
+
+(defm conformed1
+  ^{:fm/doc     "conformer beware."
+    :fm/conform #{:fm/args}
+    :fm/args    (s/coll-of int? :into #{})}
+  [ns]
+  (conj ns 4))
+
+(conformed1 [1 2 3])
+
+(defm conformed2
+  ^{:fm/conform #{:fm/args}
+    :fm/args    [{:a (s/coll-of int? :into #{})
+                  :b (s/coll-of string? :into [])}
+                 (s/coll-of boolean? :into #{})]}
+  [{:keys [a b] :as x} c]
+  [a b x c])
+
+(conformed2
+ {:a [1 2 2 3 3 3]
+  :b #{"b1" "b2" "b3"}}
+ [true false false true])
+
+(s/def ::req
   (s/select
    [{:body (s/and string? not-empty)}]
    [*]))
 
-(s/def ::http-resp
+(s/def ::resp
   (s/select
    [{:status #{200 400 500}
      :body   (s/and string? not-empty)}]
    [*]))
 
-(gen/generate (s/gen ::http-req))
-(gen/sample (s/gen ::http-resp))
+(gen/generate (s/gen ::req))
+(gen/sample (s/gen ::resp))
 
 (s/def ::echo-resp
   (s/and
-   ::http-resp
+   ::resp
    (fn [{:keys [status body]}]
      (and
       (= status 200)
       (clojure.string/starts-with? body "echo: ")))))
 
 (defm echo
-  ^{:fm/args ::http-req
+  ^{:fm/args ::req
     :fm/ret  ::echo-resp}
   [{:keys [body]}]
   {:status 200
    :body   (str "echo: " body)})
 
 (macroexpand '(defm echo
-                ^{:fm/args ::http-req
+                ^{:fm/args ::req
                   :fm/ret  ::echo-resp}
                 [{:keys [body]}]
                 {:status 200
@@ -252,7 +312,7 @@
  (first-arg-spec (meta exclaim)))
 
 (->>
- (s/gen ::http-req)
+ (s/gen ::req)
  (gen/sample)
  (map echo-exclaim))
 
@@ -307,7 +367,7 @@
     :as   anomaly}]
   (cond
     ;; propagate any previous anomalous response
-    (s/valid? ::http-resp (first args))
+    (s/valid? ::resp (first args))
     (first args)
     ;; `:fm.anomaly/args` treated as bad request
     (s/valid? :fm.anomaly/args anomaly)
@@ -317,7 +377,7 @@
     http-500))
 
 (defm echo2
-  ^{:fm/args    ::http-req
+  ^{:fm/args    ::req
     :fm/ret     ::echo-resp
     :fm/handler http-anomaly-handler}
   [{:keys [body]}]
@@ -345,8 +405,8 @@
  (exclaim2))
 
 (defm echo3
-  ^{:fm/args ::http-req
-    :fm/ret  ::http-resp
+  ^{:fm/args ::req
+    :fm/ret  ::resp
     :fm/rel  (fn [{[req] :args resp :ret}] ; same interface as `:fn` in `s/fdef`
                (=
                 (:body resp)
@@ -370,88 +430,61 @@
  (:fm/sym)
  (stest/check)) ; generates tests from fdefs
 
-  ;; thin trace facility
-(defm traced
-  ^{:fm/trace true} ; defaults to `clojure.core/prn`
-  []
-  (rand))
-
-(traced)
-
-(defm traced2
-  ^{:fm/trace (fn [{:keys [fm.trace/sym fm.trace/args fm.trace/ret]}]
-                (prn sym (symbol "trace:") args ret))}
-  []
-  (rand))
-
-(traced2)
-
-(def state-atom (atom 0))
-
-(defm traced3
-  ^{:fm/trace @state-atom}
-  []
-  (swap! state-atom inc)
-  (rand))
-
-(traced3)
-(traced3)
-
-(defm traced4
-  ^{:fm/trace true}
-  []
-  (inc (traced)))
-
-(traced4)
-
 (s/def ::n int?)
 
-(defm inc_
+(defm fm4
   ^{:fm/args (s/tuple int? ::n)
     :fm/ret  ::n}
   [[n m]]
   (inc (+ n m)))
 
-(inc_ [1 2])
-(inc_ [1 'a])
+(fm4 [1 2])
+(fm4 [1 'a])
 
-(defm inc_
+(defm fm5
   ^{:fm/args (s/tuple int? int?)
     :fm/ret  (s/and int? pos?)}
   [[n m]]
   (let [i (inc (+ n m))]
     (* i i)))
 
-(inc_ [1 2])
-(inc_ [1 -2])
-(inc_ [-1 -3])
+(fm5 [1 2])
+(fm5 [1 -2])
+(fm5 [-1 -3])
 
-(defm inc_
+(defm fm6
   ^{:fm/args [(fn [n] (= n 1))]
     :fm/ret  (fn [n] (= n 2))}
   [n]
   (inc n))
 
-(inc_ 1)
-(inc_ 'a)
+(fm6 1)
+(fm6 'a)
 
-(defm inc_
+(defm fm7
   ^{:fm/args #{1}
     :fm/ret  #{2}}
   [n]
   (inc n))
 
-(inc_ 1)
-(inc_ 'a)
+(fm7 1)
+(fm7 'a)
 
-(defm inc_
+(defm fm8
   ^{:fm/args {:body int?}
     :fm/ret  {:body int?}}
   [{:keys [body]}]
   {:body (inc body)})
 
-(inc_ {:body 1})
-(inc_ {:a 1})
-(inc_ {:body 'a})
-(inc_ nil)
-(inc_ 'a)
+(fm8 {:body 1})
+(fm8 {:a 1})
+(fm8 {:body 'a})
+(fm8 nil)
+(fm8 'a)
+
+(defm fm9
+  [a [b [c [d [e f] g]]] h]
+  [a b c d e f g h])
+
+(fm9 1 [2 [3 [4 [5 6] 7]]] 8)
+(fm9 1 [2 [3 [4 [5 {:fm.anomaly/spec :fm.anomaly/args}] 7]]] 8)
