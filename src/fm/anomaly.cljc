@@ -1,80 +1,50 @@
 (ns fm.anomaly
   (:require
-   [clojure.alpha.spec :as s]
+   [clojure.spec.alpha :as s]
    [fm.lib :as lib]))
 
-(s/def ::args
-  (s/and
-   map?
-   (fn [{::keys [spec]}]
-     (= spec ::args))))
-
-(s/def ::ret
-  (s/and
-   map?
-   (fn [{::keys [spec]}]
-     (= spec ::ret))))
-
-(s/def ::nonse
-  (s/and
-   map?
-   (fn [{::keys [spec]}]
-     (= spec ::nonse))))
-
-(s/def ::rel
-  (s/and
-   map?
-   (fn [{::keys [spec]}]
-     (= spec ::rel))))
-
-(s/def ::throw
-  (s/and
-   map?
-   (fn [{::keys [spec data]}]
-     (and
-      (= spec ::throw)
-      (instance? Throwable data)))))
-
-(defn contains-anomaly?*
-  [recur? xs]
-  (lib/reduce*
-   recur?
-   (fn [acc x]
-     (if (or
-          (true? acc)
-          (s/valid?
-           (s/or
-            ::args  ::args
-            ::ret   ::ret
-            ::nonse ::nonse
-            ::rel   ::rel
-            ::throw ::throw)
-           x))
-       (reduced true)
-       false))
-   false
-   xs))
-
-(defn recd-recur?
-  [_ x]
-  (vector? x))
-
-(def recd-anomaly?*
-  (partial
-   contains-anomaly?*
-   recd-recur?))
-
-(s/def ::received
-  (s/and
-   vector?
-   not-empty
-   recd-anomaly?*))
+(def ^:dynamic *indicator-keyset*
+  "Set of keys whose presence indicates anomality"
+  #{::ident})
 
 (s/def :fm/anomaly
+  (s/and
+   map?
+   (fn [m]
+     (some
+      (partial contains? m)
+      *indicator-keyset*))))
+
+(def anomaly?
+  (partial s/valid? :fm/anomaly))
+
+(def contains-anomaly?
+  (partial
+   lib/rreduce
+   (fn recur? [acc x]
+     (if (anomaly? x)
+       (reduced true)
+       (coll? x)))
+   (constantly false)))
+
+(s/def :fm/contains-anomaly
+  contains-anomaly?)
+
+(s/def :fm/anomalous
   (s/or
-   ::args     ::args
-   ::ret      ::ret
-   ::nonse    ::nonse
-   ::rel      ::rel
-   ::throw    ::throw
-   ::received ::received))
+   :fm/anomaly :fm/anomaly
+   :fm/contains-anomaly :fm/contains-anomaly))
+
+(def anomalous?
+  (partial s/valid? :fm/anomalous))
+
+#_(def idents
+    #{::args
+      ::ret
+      ::rel
+      ::nonse
+      ::throw
+      ::received})
+
+#_(s/def ::ident
+    idents)

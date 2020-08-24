@@ -1,138 +1,95 @@
 (ns fm.form.lib
   (:require
-   [clojure.alpha.spec :as s]))
+   [clojure.spec.alpha :as s]
+   [fm.lib :as lib]))
 
-(s/def ::ns-kw
-  (s/and keyword? namespace))
+(def rreduce lib/rreduce)
+(def conthrow lib/conthrow)
+(def consplain lib/consplain)
 
-(def ns-kw?
-  (partial s/valid? ::ns-kw))
+(s/def ::arg-symbol
+  (s/and
+   symbol?
+   (complement #{'&})))
 
-(s/def ::ns-kw-vec
-  (s/coll-of ::ns-kw :kind vector?))
+(def ^:dynamic *fn-symbol-set*
+  #{'fn 'fn* `fn
+    'constantly `constantly
+    'memfn `memfn
+    'comp `comp
+    'complement `complement
+    'partial `partial
+    'juxt `juxt
+    'memoize `memoize
+    'fnil `fnil
+    'every-pred `every-pred
+    'some-fn `some-fn
+    #_#_#_#_#_#_#_'fm
+                'consequent 'mergesequent 'insequent
+          'sequent 'match 'branch})
 
-(def ns-kw-vec?
-  (partial s/valid? ::ns-kw-vec))
+(s/def ::fn-symbol
+  (fn [x] (*fn-symbol-set* x))) ; NOTE: `s/def` evaluates set, breaks rebinding
 
-(def nil-ns?
-  (comp nil? namespace))
-
-(s/def ::nil-ns-kw
-  (s/and keyword? nil-ns?))
-
-(def nil-ns-kw?
-  (partial s/valid? ::nil-ns-kw))
-
-(s/def ::binding-sym
-  (s/and symbol? nil-ns?))
-
-(def binding-sym?
-  (partial s/valid? ::binding-sym))
-
-(defn args-form->form
-  [args-form]
-  (cond
-    (vector? args-form) (mapv args-form->form args-form)
-    (map? args-form)    (update args-form :as (fnil identity (gensym 'arg)))
-    :else               args-form))
-
-(defn args-form->syms
-  [args-form]
-  (cond
-    (vector? args-form) (mapv args-form->syms args-form)
-    (map? args-form)    (:as args-form)
-    :else               args-form))
-
-(defn any?*
-  [x]
-  (if (vector? x)
-    (mapv any?* x)
-    `any?))
-
-(defn schema-keys*
-  [schema]
-  (let [f #(cond (keyword? %) [%] (map? %) (keys %))]
-    (cond
-      (vector? schema)     (distinct (mapcat f schema))
-      (map? schema)        (keys schema)
-      (or
-       (keyword? schema)
-       (s/schema? schema)) (schema-keys* (second (s/form schema)))
-      (seqable? schema)    (schema-keys* (second schema)))))
-
-(s/def ::spec-form
-  (fn [x]
-    (and
-     (seqable? x)
-     (= (first x) `s/spec))))
-
-(defn spec-form?
-  [x]
-  (s/valid? ::spec-form x))
-
-(defn tuple-spec-form*
-  [x]
-  (cond
-    (map? x)     `(s/select [~x] ~(vec (schema-keys* x)))
-    (and
-     (vector? x)
-     (empty? x)) `(s/spec #{[]})
-    (vector? x)  `(s/tuple ~@(mapv tuple-spec-form* x))
-    :else        x))
-
-(defn spec-form
-  [x]
-  (cond
-    (keyword? x)             `(when (s/form ~x) (s/get-spec ~x))
-    (map? x)                 `(s/select [~x] ~(vec (schema-keys* x)))
-    (or
-     (symbol? x)
-     (set? x)
-     (and
-      (seqable? x)
-      (not (spec-form? x)))) `(s/spec ~x)
-    :else                    x))
-
-(def fn-symbols-set
-  #{'fn 'fn* `fn 'fm})
+(def fn-symbol?
+  (partial s/valid? ::fn-symbol))
 
 (s/def ::fn-form
-  (fn [x]
-    (and
-     (seqable? x)
-     (fn-symbols-set (first x)))))
+  (s/and
+   seq?
+   not-empty
+   (comp fn-symbol? first)))
 
-(defn fn-form?
-  [x]
-  (s/valid? ::fn-form x))
+(def fn-form?
+  (partial s/valid? ::fn-form))
 
-(defn handler-form
-  [x]
-  (cond
-    (fn-form? x) `~x
-    (symbol? x)  x
-    :else        `(fn [~'_] ~x)))
+(def multi?
+  (partial instance? clojure.lang.MultiFn))
 
-(defn trace-form
-  [x]
-  (cond
-    (fn-form? x) `~x
-    (symbol? x)  x
-    :else        `(fn [~'_] (prn ~x))))
+(def fn??
+  (some-fn fn? multi?))
 
-(defn pred-form
-  [x]
-  (cond
-    (coll? x) (set x)
-    (true? x) `(constantly true)
-    :else     (hash-set x)))
+(def -spec-form?
+  (comp
+   (hash-set
+    (namespace
+     `s/*)) ; TODO: revisit
+   namespace
+   symbol
+   resolve
+   first))
 
-(defmulti  binding-xf (fn [[k _]] k))
-(defmethod binding-xf :fm/conform
-  [[k v]]
-  [k {::form (eval v)}])
+(s/def ::spec-form
+  (s/and
+   seq?
+   not-empty
+   -spec-form?))
 
-(defmethod binding-xf :default
-  [[k v]]
-  [k {::sym  (gensym (name k))
-      ::form v}])
+(def spec-form?
+  (partial s/valid? ::spec-form))
+
+(def ^:dynamic
+  *sequence-spec-symbol-set*
+  #{`s/cat
+    `s/alt
+    `s/*
+    `s/+
+    `s/?
+    `s/&})
+
+(s/def ::sequence-spec-form
+  (s/and
+   ::spec-form
+   (fn [x] ; NOTE: `comp` evaluates set, breaks rebinding
+     (*sequence-spec-symbol-set*
+      (symbol
+       (resolve
+        (first x)))))))
+
+(def sequence-spec-form?
+  (partial s/valid? ::sequence-spec-form))
+
+  ;; NOTE: alt `s/get-spec`
+  ;; NOTE: spec respects TBD specs by their qualified keywords
+(s/def ::spec-keyword
+  qualified-keyword?)

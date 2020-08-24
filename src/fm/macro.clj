@@ -1,41 +1,94 @@
 (ns fm.macro
-  (:require
-   [fm.form :as form]
-   [fm.meta :as meta]))
+  (:require [fm.form :as form]))
 
+  ;; TODO: multiple definitions
+  ;; TODO: variable arity
 (defmacro fm
-  [& signature]
-  (let [named?    (symbol? (first signature))
-        ns-sym    (->>
-                   (if named?
-                     (first signature)
-                     'fm)
-                   (gensym)
-                   (str *ns* "/")
-                   (symbol))
-        args-form (if named?
-                    (second signature)
-                    (first signature))
-        body      (if named?
-                    (drop 2 signature)
-                    (drop 1 signature))]
-    (form/fm
-     {::form/sym       ns-sym
-      ::form/args-form args-form
-      ::form/body      body})))
+  [& definition]
+  (form/fm
+   {::form/ns         *ns*
+    ::form/definition definition}))
 
+(comment
+
+  (macroexpand
+   '(fm ^{:fm/doc "bad!"}
+        fm1
+        ^{:fm/args int?}
+        [a]
+        a))
+
+  (fm [a] a)
+
+  ;;
+  )
+
+#_
 (defmacro defm
-  [sym args-form & body]
-  (let [ns-sym   (symbol (str *ns* "/" sym))
-        var-meta (into
-                  (hash-map)
-                  (map meta/var-xf)
-                  (merge
-                   (meta args-form)
-                   {:fm/arglists args-form}))
-        fm-sym   (with-meta sym var-meta)
-        fm-form  (form/fm
-                  {::form/sym       ns-sym
-                   ::form/args-form args-form
-                   ::form/body      body})]
-    `(def ~fm-sym ~fm-form)))
+  [& definition]
+  (form/defm
+   {::form/ns         *ns*
+    ::form/definition definition}))
+
+#_
+(defmacro consequent
+  [& definition]
+  (form/consequent
+   {::form/ns         *ns*
+    ::form/definition definition}))
+
+#_
+(defmacro nonsequent
+  [& definition]
+  (form/insequent
+   {::form/ns         *ns*
+    ::form/definition definition}))
+
+#_
+(defmacro mergesequent
+  [& definition]
+  (form/mergesequent
+   {::form/ns         *ns*
+    ::form/definition definition}))
+
+#_
+(defmacro isoquent
+  [& definition]
+  (form/isoquent
+   {::form/ns         *ns*
+    ::form/definition definition}))
+
+#_
+(defmacro multiquent
+  [& definition]
+  (form/multiquent
+   {::form/ns         *ns*
+    ::form/definition definition}))
+
+#_
+(defmacro comp
+  [& definition]
+  (form/comp
+   {::form/ns         *ns*
+    ::form/definition definition}))
+
+#_
+(defmacro sequent
+  [& definition]
+  (form/comp
+   {::form/ns         *ns*
+    ::form/definition definition}))
+
+#_
+(defmacro match
+  [& definition]
+  (form/match
+   {::form/ns         *ns*
+    ::form/definition definition}))
+
+#_
+(defmacro branch
+  [& definition]
+  (form/branch
+   {::form/ns         *ns*
+    ::form/definition definition}))
