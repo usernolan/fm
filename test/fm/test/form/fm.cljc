@@ -6,7 +6,7 @@
   (def definition1
     (list
      (with-meta 'fm1 {:fm/doc "fm1"})
-     (with-meta ['a] {:fm/args (complement nil?)})
+     (with-meta '[a] {:fm/args '[(complement nil?)]})
      'a))
 
   #_(fm ^{:fm/doc "fm1"}
@@ -17,11 +17,11 @@
     (list
      (with-meta 'fm1 {:fm/doc "fm1"})
      (list
-      (with-meta ['a] {:fm/args (complement nil?)})
+      (with-meta '[a] {:fm/args '[(complement nil?)]})
       'a)
      (list
-      (with-meta ['a 'b] {:fm/args [(complement nil?) (complement nil?)]})
-      ['a 'b])))
+      (with-meta '[a b] {:fm/args '[(complement nil?) (complement nil?)]})
+      '[a b])))
 
   (lib/consplain ::fm/definition definition1)
   (lib/consplain ::fm/definition definition2)
@@ -77,7 +77,7 @@
   (lib/consplain ::fm/arg '[int? [string?]])
   (lib/consplain ::fm/arg [int? string?])
 
-    ;; NOTE: litmus recursion 
+    ;; NOTE: litmus recursion
   (def args1 '[int? (s/or :a int? :b string?) ::s1 (fn [x] (nil? x))])
   (def args2 '[int? (s/or :a int? :b string?) [::s1 (fn [x] (nil? x))]])
   (def args3 '[int? (s/or :a int? :b string?) [::s1 [(fn [x] (nil? x))]]])
@@ -85,7 +85,6 @@
   (lib/consplain ::fm/args args1)
   (lib/consplain ::fm/args args2)
   (lib/consplain ::fm/args args3)
-
   #_[int? int? & int?]
   ((fn [x1 x2 & xs]
      [x1 x2 xs (type xs)])

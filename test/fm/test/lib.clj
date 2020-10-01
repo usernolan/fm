@@ -1,6 +1,6 @@
 (comment
 
-  (lib/rreduce
+  (rreduce
    (fn -rec? [acc x]
      (prn "rec?" acc x)
      (vector? x))
@@ -28,4 +28,104 @@
    {:path [0] :data []} 
    '[a [b [c d] [e] [[[f]]]] g [h]])
 
+  (zip
+   vector?
+   '[a [b [c]]]
+   '[int? ::m1])
+
+  (zip
+   vector?
+   '[a [b [c]]]
+   '[int? [:m1 [int?]]])
+
+  (zip
+   vector?
+   '[a [b [c] :as bs] & ds]
+   '[int? [::m1 [int?]] & int?])
+
+  (zip
+   vector?
+   '[a [b]]
+   '[int? [::m1 [int?]] & int?])
+
+  (zipv
+   vector?
+   '[a [b [c]]]
+   '[int? ::m1])
+
+  (zipv
+   vector?
+   '[a [b [c]]]
+   '[int? [:m1 [int?]]])
+
+  (zipv
+   vector?
+   '[a [b [c] :as bs] & ds]
+   '[int? [::m1 [int?]] & int?])
+
+  (zipv
+   vector?
+   '[a [b]]
+   '[int? [::m1 [int?]] & int?])
+
+  (zipf
+   vector?
+   (fn [a b] b)
+   '[a [b [c]]]
+   '[int? ::m1])
+
+  (zipf
+   vector?
+   (fn [a b] b)
+   '[a [b [c]]]
+   '[int? [::m1 [int?]]])
+
+  (zipf
+   vector?
+   (fn [a b] b)
+   '[a [b [c] :as bs] & ds]
+   '[int? [::m1 [int?]] & int?])
+
+  (zipf
+   vector?
+   (fn [a b] b)
+   '[a [b]]
+   '[int? [::m1 [int?]] & int?])
+
+  (zipvf
+   vector?
+   (fn [a b] b)
+   '[a [b [c]]]
+   '[int? ::m1])
+
+  (zipvf
+   vector?
+   (fn [a b] b)
+   '[a [b [c]]]
+   '[int? [::m1 [int?]]])
+
+  (zipvf
+   vector?
+   (fn [a b] b)
+   '[a [b [c] :as bs] & ds]
+   '[int? [::m1 [int?]] & int?])
+
+  (zipvf
+   vector?
+   (fn [a b] b)
+   '[a [b]]
+   '[int? [::m1 [int?]] & int?])
+
+  (zipvf
+   vector?
+   (fn [a b] b)
+   '[a [b]]
+   (repeat `any?))
+
+  (zipvf
+   vector?
+   (fn [a] (if (= a '&) '& `any?))
+   '[a [b [c]] [d] & [e]])
+
+  ;;;
   )

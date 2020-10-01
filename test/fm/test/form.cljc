@@ -5,51 +5,69 @@
   ((fn [a [:as b]] [a b]) 1 2)
   ((fn [a [:as]] [a]) 1 2)
 
+  (lib/consplain
+   ::fn/definition
+   (list
+    (with-meta 'fm1 {:fm/doc "fm1"})
+    (with-meta '[a] {:fm/args '[int?]})
+    'a))
+
+  (lib/consplain
+   ::fn/definition
+   (list
+    (with-meta 'fm1 {:fm/doc "fm1"})
+    (list
+     (with-meta '[a [b [c]]] {:fm/args '[int? [int? [int?]]]})
+     '[a b c])
+    (list
+     (with-meta '[a [b [c]] & ds] {:fm/args '[int? [int? [int?]] & int?]})
+     '[a b c ds])))
+
   (->context
-   {::ident      ::fm
+   {::ident      ::fn
     ::ns         *ns*
     ::definition (list
-                  (with-meta 'fm1 {:fm/doc "fm1"})
+                  (with-meta 'fn1 {:fm/doc "fn1"})
                   (with-meta '[a] {:fm/args '[int?]})
                   'a)})
 
   (->context
-   {::ident      ::fm
+   {::ident      ::fn
     ::ns         *ns*
     ::definition (list
-                  (with-meta 'fm1 {:fm/doc "fm1"})
+                  (with-meta 'fn1 {:fm/doc "fn1"})
                   (with-meta '[a [b [c]] & ds] {:fm/args '[int? [int? [int?]] & int?]})
                   '[a b c ds])})
 
   (->context
-   {::ident      ::fm
+   {::ident      ::fn
     ::ns         *ns*
     ::definition (list
-                  (with-meta 'fm1 {:fm/doc "fm1"})
+                  (with-meta 'fn1 {:fm/doc "fn1"})
                   (with-meta '[a [b [c] :as b&c] & ds] {:fm/args '[int? [int? [int?]] & int?]})
                   '[a b c ds])})
 
   (->context
-   {::ident      ::fm
+   {::ident      ::fn
     ::ns         *ns*
     ::definition (list
-                  (with-meta 'fm1 {:fm/doc "fm1"})
+                  (with-meta 'fn1 {:fm/doc "fn1"})
                   (with-meta '[a [b [c] :as b&c] & [d]] {:fm/args '[int? [int? [int?]] & [int?]]})
                   '[a b c ds])})
 
   (->context
-   {::ident      ::fm
+   {::ident      ::fn
     ::ns         *ns*
     ::definition (list
-                  (with-meta 'fm1 {:fm/doc "fm1"})
+                  (with-meta 'fn1 {:fm/doc "fn1"})
                   (with-meta '[a [b [c] :as b&c] & [d :as f]] {:fm/args '[int? [int? [int?]] & [int?]]})
                   '[a b c ds])})
 
   (->context
-   {::ident      ::fm
+   {::ident      ::fn
     ::ns         *ns*
     ::definition (list
-                  (with-meta 'fm1 {:fm/doc "fm1"})
+                  (with-meta 'fn1 {:fm/doc "fm1"})
                   (list
                    (with-meta '[a] {:fm/args '[int?]})
                    'a)
@@ -58,10 +76,10 @@
                    '[a b]))})
 
   (->context
-   {::ident      ::fm
+   {::ident      ::fn
     ::ns         *ns*
     ::definition (list
-                  (with-meta 'fm1 {:fm/doc "fm1"})
+                  (with-meta 'fn1 {:fm/doc "fn1"})
                   (list
                    (with-meta '[a [b [c]]] {:fm/args '[int? [int? [int?]]]})
                    '[a b c])
@@ -70,18 +88,18 @@
                    '[a b c ds]))})
 
   (->context
-   {::ident      ::fm
+   {::ident      ::fn
     ::ns         *ns*
     ::definition (list
-                  (with-meta 'fm1 {:fm/doc "fm1" :fm/args '[int? int?]})
+                  (with-meta 'fn1 {:fm/doc "fn1" :fm/args '[int? int?]})
                   (list '[a] 'a)
                   (list '[a b] '[a b]))})
 
   (->context
-   {::ident      ::fm
+   {::ident      ::fn
     ::ns         *ns*
     ::definition (list
-                  (with-meta 'fm1 {:fm/doc "fm1" :fm/args '[int? & int?]})
+                  (with-meta 'fn1 {:fm/doc "fn1" :fm/args '[int? & int?]})
                   (list '[a] 'a)
                   (list '[a & bs] '[a bs]))})
 
@@ -117,51 +135,51 @@
 
   (->metadata-form
    nil
-   [::fm/args
+   [::fn/args
     (lib/conthrow
-     ::fm/args
+     ::fn/args
      '[int? [int? [int?]] & int?])])
 
   (->metadata-form
    nil
-   [::fm/args
+   [::fn/args
     (lib/conthrow
-     ::fm/args
+     ::fn/args
      '[int? [int? [int?]] & {:kw int?}])])
 
   (->metadata-form
    nil
-   [::fm/args
+   [::fn/args
     (lib/conthrow
-     ::fm/args
+     ::fn/args
      '[int? [int? [int?]] & [int?]])])
 
   (->metadata-form
    nil
-   [::fm/args
+   [::fn/args
     (lib/conthrow
-     ::fm/args
+     ::fn/args
      '[int? [int? [int?]] & (s/* int?)])])
 
   (->metadata-form
    nil
-   [::fm/args
+   [::fn/args
     (lib/conthrow
-     ::fm/args
+     ::fn/args
      '[& (s/cat :int? (s/* int?))])])
 
   (->metadata-form
    nil
-   [::fm/args
-    (lib/conthrow ::fm/args '[& int?])])
+   [::fn/args
+    (lib/conthrow ::fn/args '[& int?])])
 
   (lib/consplain
-   ::fm/signatures-args
+   ::fn/signatures-args
    '[nil
      [nil nil]])
 
   (lib/consplain
-   ::fm/signatures-args
+   ::fn/signatures-args
    '[[int? [int? [int?]] & int?]
      [nil nil]])
 
@@ -170,48 +188,48 @@
   (def args1 '[int? [int? [int?]] ::m1 & int?])
   (def argv1 '[a [b [c :as cs] :as bs] {:keys [d] :as e} & fs])
 
-  (def conformed-args1 (lib/consplain ::fm/args args1))
+  (def conformed-args1 (lib/consplain ::fn/args args1))
 
   (->form-data
    nil
-   [::fm/arg* nil])
+   [::fn/arg* nil])
 
   (->form-data
    nil
-   [::fm/arg* (::fm/arg* conformed-args1)])
+   [::fn/arg* (::fn/arg* conformed-args1)])
 
   (->form-data
-   {::fm/argv argv1}
-   [::fm/arg* (::fm/arg* conformed-args1)])
-
-  (->form-data
-   nil
-   [::fm/variadic? nil])
+   {::fn/argv argv1}
+   [::fn/arg* (::fn/arg* conformed-args1)])
 
   (->form-data
    nil
-   [::fm/variadic? (::fm/variadic? conformed-args1)])
+   [::fn/variadic? nil])
 
   (->form-data
-   {::fm/argv argv1}
-   [::fm/variadic? (::fm/variadic? conformed-args1)])
+   nil
+   [::fn/variadic? (::fn/variadic? conformed-args1)])
+
+  (->form-data
+   {::fn/argv argv1}
+   [::fn/variadic? (::fn/variadic? conformed-args1)])
 
   (def form-data1
     (into
      (->form-data
-      {::fm/argv argv1}
-      [::fm/arg* (::fm/arg* conformed-args1)])
+      {::fn/argv argv1}
+      [::fn/arg* (::fn/arg* conformed-args1)])
      (->form-data
-      {::fm/argv argv1}
-      [::fm/variadic? (::fm/variadic? conformed-args1)])))
+      {::fn/argv argv1}
+      [::fn/variadic? (::fn/variadic? conformed-args1)])))
 
   (->metadata-form
-   {::fm/argv argv1}
-   [::fm/form-data form-data1])
+   {::fn/argv argv1}
+   [::fn/form-data form-data1])
 
   (->metadata-form
-   {::fm/argv '[a [b [c]] {:keys [d]} & fs]}
-   [::fm/args conformed-args1])
+   {::fn/argv '[a [b [c]] {:keys [d]} & fs]}
+   [::fn/args conformed-args1])
 
   '[int? [int? [int?]] ::m1 & [int?]]
   '[a [b [c :as cs] :as bs] {:keys [d] :as e} & [f]]
@@ -223,6 +241,16 @@
     (partial keyword "fm.form.fm.signature")
     (partial format "_%03d"))
    (range 5 11))
+
+  (def bindings1
+    {:fm/k1 [{::symbol 's1 ::form 'f1}
+             {::symbol 's2 ::form 'f2}
+             {::symbol 's3 ::form 'f3}]
+     :fm/k2 [{::symbol 's3 ::form 'f3}
+             {::symbol 's3 ::form 'f3}
+             {::symbol 's4 ::form 'f4}]})
+
+  (->form ::fn/context-bindings {::bindings bindings1})
 
   ;;;
   )

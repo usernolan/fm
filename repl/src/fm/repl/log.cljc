@@ -125,3 +125,19 @@
 
   ;;;
   )
+
+(comment
+
+  (require '[criterium.core :as crit])
+
+  (crit/bench (vec (map (fn [a] a) (range 0 1000))))
+  (crit/bench (vec (map identity (range 0 1000))))
+
+  (defn id1 [a] a)
+  (crit/bench (vec (map id1 (range 0 1000))))
+
+  (let [id2 (fn [a] a)]
+    (crit/bench (vec (map id2 (range 0 1000)))))
+
+  ;;;
+  )

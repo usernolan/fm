@@ -1,4 +1,4 @@
-(ns fm.form.fm
+(ns fm.form.fn
   (:require
    [clojure.spec.alpha :as s]
    [fm.form.lib :as lib]))
@@ -57,19 +57,13 @@
       ::variadic-arg ::variadic-arg)))
    seq)) ; NOTE: disallow ^{:fm/args []}
 
-(s/def ::args?
-  (s/or
-   ::args ::args
-   :nil nil?))
-
-(s/def ::signatures-args
-  (s/cat
-   ::outer-args? ::args?
-   ::inner-args?+ (s/spec (s/+ ::args?))))
-
 (defn arg->sym
   [arg]
   (cond
     (vector? arg) (when (some #{:as} arg) (last arg))
     (map? arg)    (:as arg)
     :else         arg))
+
+(defn zipv-args
+  ([argv]      (lib/zipvf vector? (fn [a] (if (= a '&) '& `any?)) argv))
+  ([argv args] (lib/zipvf vector? (fn [_ a] a) argv args)))

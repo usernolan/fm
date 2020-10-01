@@ -3,6 +3,10 @@
    [clojure.spec.alpha :as s]
    [fm.lib :as lib]))
 
+(def zip lib/zip)
+(def zipv lib/zipv)
+(def zipf lib/zipf)
+(def zipvf lib/zipvf)
 (def rreduce lib/rreduce)
 (def conthrow lib/conthrow)
 (def consplain lib/consplain)

@@ -2,6 +2,46 @@
   (:require
    [clojure.spec.alpha :as s]))
 
+(defn zip
+  [recur? & xs]
+  (apply
+   map
+   (fn [& ys]
+     (if (every? recur? ys)
+       (apply zip recur? ys)
+       ys))
+   xs))
+
+(defn zipf
+  [recur? f & xs]
+  (apply
+   map
+   (fn [& ys]
+     (if (every? recur? ys)
+       (apply zipf recur? f ys)
+       (apply f ys)))
+   xs))
+
+(defn zipv
+  [recur? & xs]
+  (apply
+   mapv
+   (fn [& ys]
+     (if (every? recur? ys)
+       (apply zipv recur? ys)
+       ys))
+   xs))
+
+(defn zipvf
+  [recur? f & xs]
+  (apply
+   mapv
+   (fn [& ys]
+     (if (every? recur? ys)
+       (apply zipvf recur? f ys)
+       (apply f ys)))
+   xs))
+
 (defn -rreduce
   ([recur? rf xs]         (-rreduce recur? (fn initf [acc _] acc) rf (fn cf [_ r] r) (rf) xs))
   ([recur? rf init xs]    (-rreduce recur? (fn initf [acc _] acc) rf (fn cf [_ r] r) init xs))
@@ -32,16 +72,6 @@
 
 (def rreduce
   (comp unreduced -rreduce))
-
-(defn rzip
-  ([recur? & xs]
-   (apply
-    map
-    (fn [& ys]
-      (if (every? recur? ys)
-        (apply rzip recur? ys)
-        ys))
-    xs)))
 
 (defn consplain
   [spec x]

@@ -336,3 +336,16 @@ fm?
      ::right vector?
      ::forward any?
      ::reverse any?))
+
+sequent | sequent-signature
+(->>
+ req
+ ((fm/conse
+   unauthsequent
+   authsequent
+   ([::a ::session/unauth]
+    [::c]
+    'ab->c)
+   ([::a ::session/auth]
+    [::d]
+    'ac->d))))

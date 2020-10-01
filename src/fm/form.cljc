@@ -3,7 +3,7 @@
    [clojure.spec.alpha :as s]
    [clojure.string :as string]
    [fm.anomaly :as anomaly]
-   [fm.form.fm :as fm]
+   [fm.form.fn :as fn]
    [fm.form.lib :as lib]))
 
   ;; TODO: refactor into `context`
@@ -13,157 +13,480 @@
 (def ^:dynamic *variadic-argument-prefix-symbol*
   `variadic-argument)
 
-(def ^:dynamic *positional-signature-prefix-symbol*
-  `positional-signature)
+(def ^:dynamic *signature-prefix-symbol*
+  `signature)
 
-(defmulti  <<definition ::ident)
-(defmethod <<definition ::fm
-  [{::keys [definition] :as context}]
+(s/def ::metadata
+  (s/keys
+   :req
+   [:fm/ident]           ; :some.ns1/fm1
+   :opt
+   [:fm/doc              ; '(",,," nil ",,,") | ""
+    :fm/arglists         ; '([a])
+    :fm/args             ; '([int?])
+    :fm/ret              ; '(int?)
+    :fm/rel              ; '(#function[,,,]) '???
+    :fm/trace            ; '(true) | '(#{,,,})
+    :fm/conform          ; '(true) | '(#{,,,})
+    :fm.anomaly/handler  ; '(#function[,,,]) '???
+    :fm.anomaly/handler? ; '(true)
+    ]))
+
+(s/def ::bindings
+  #_{:fm/k1 [{::symbol ,,, ::form}]
+     :fm/k2 [{::symbol ,,, ::form}]})
+
+(s/def ::context
+  (s/keys
+   :opt
+   [::ns
+    ::definition
+    ::metadata
+    ::bindings
+    ::fn/conformed-definition
+    ::fn/outer-metadata
+    ::fn/inner-metadatas]))
+
+'^{:fm/args} (^{:fm/args} [a] a)
+'([::a
+   {::b b
+    c   ::c
+    ::d [d1 d2 d3 :as ds]
+    ::e {:keys [ek1 ek2 ek3] :as ekv}}
+   :as args]
+  [::f ::g ::h])
+'([[::a
+    {::b b
+     c   ::c
+     ::d [d1 d2 d3 :as ds]
+     ::e {:keys [ek1 ek2 ek3] :as ekv}}
+    :as args]]
+  [[::f ::g ::h]])
+
+(fm.form/->form ::fn/body {})
+
+(defmulti  <<conformed-definition ::ident)
+(defmethod <<conformed-definition ::fn
+  [{::keys [definition] :as ctx}]
   (assoc
-   context
-   ::fm/conformed-definition
-   (lib/conthrow ::fm/definition definition)))
+   ctx
+   ::fn/conformed-definition
+   (lib/conthrow ::fn/definition definition)))
+
+#_(defmethod <<conformed-definition :default
+    [{::keys [definition] :as ctx}]
+    (assoc
+     ctx
+     ::conformed-definition
+     (lib/conthrow ::definition definition)))
+
+(defmulti  ->definition-tag ::ident)
+(defmethod ->definition-tag ::fn
+  [ctx]
+  (get-in ctx [::fn/conformed-definition ::fn/rest 0]))
 
 (defmulti  ->ident ::ident)
-(defmethod ->ident ::fm
-  [{::fm/keys [definition]
-    ::keys    [ns]}]
+(defmethod ->ident ::fn
+  [ctx]
   (keyword
-   (str ns)
+   (str (get ctx ::ns))
    (name
     (or
-     (::fm/simple-symbol?? definition)
+     (get-in ctx [::fn/conformed-definition ::fn/simple-symbol??])
      (gensym 'fm)))))
 
-(defmulti ->metadata-form (fn [_context [tag _form]] tag))
-(defmulti ->form-data     (fn [_context [tag _form]] tag))
+#_(defmethod ->ident :default
+    [ctx]
+    (keyword
+     (str (get ctx ::ns))
+     (name
+      (or
+       (get-in ctx [::conformed-definition ::lib/simple-symbol??])
+       (get-in ctx)
+       (gensym 'fm)))))
 
-(defmulti  -signature-dispatch ::ident)
-(defmethod -signature-dispatch ::fm
-  [{::fm/keys [conformed-definition]}]
-  (first (::fm/rest conformed-definition)))
+(def ->symbol
+  (comp symbol ->ident))
 
-(defn -metadata-form-kv-dispatch
-  [context k]
-  [(-signature-dispatch context) k])
+(def ->simple-symbol
+  (comp symbol name ->ident))
 
-(defmulti  ->metadata-form-kv -metadata-form-kv-dispatch)
-(defmethod ->metadata-form-kv :default ; NOTE: keep all metadata
-  [{::fm/keys [raw-metadata raw-outer-metadata raw-inner-metadatas] :as context} k]
-  [k (case (-signature-dispatch context)
-       ::fm/signature  (get raw-metadata k)
-       ::fm/signatures (let [vs (map k (cons raw-outer-metadata raw-inner-metadatas))]
-                         (if (= (count (remove nil? vs)) 1) (first (filter some? vs)) vs)))])
+(defmulti  ->default-metadata-form (fn [ctx k] :default #_[(->definition-tag ctx) k]))
+(defmethod ->default-metadata-form :default
+  [ctx k]
+  (let [outer  (get-in ctx [::fn/outer-metadata k])
+        inners (map k (get ctx ::fn/inner-metadatas))
+        form   (cond
+                 (every? nil? inners) outer
+                 (nil? outer)         (apply list inners) ; NOTE: at least one
+                 :else                (apply list (cons outer inners)))]
+    form))
 
-  ;; TODO: warn on `:fm/args`/`::fm/argv` incompat
-(defmethod ->metadata-form-kv [::fm/signature :fm/args]
-  [{::fm/keys [conformed-definition raw-metadata] :as context} k]
-  (let [argv    (get-in conformed-definition [::fm/rest 1 ::fm/argv])
-        context (assoc context ::fm/argv argv)
-        args    (lib/conthrow ::fm/args (:fm/args raw-metadata))
-        form    (->metadata-form context [::fm/args args])]
-    [k form]))
+(defmulti  ->metadata-form (fn [_ctx tag] tag))
+(defmethod ->metadata-form :default ; NOTE: keep all metadata
+  [ctx tag]
+  (->default-metadata-form ctx tag))
 
-(defmethod ->metadata-form-kv [::fm/signatures :fm/args]
-  [{::fm/keys [conformed-definition raw-outer-metadata raw-inner-metadatas] :as context} k]
-  (let [argv+        (map ::fm/argv (get-in conformed-definition [::fm/rest 1]))
-        context      (assoc context ::fm/argv+ argv+)
-        outer-args?  (:fm/args raw-outer-metadata)
-        inner-args?+ (map :fm/args raw-inner-metadatas)
-        args         (lib/conthrow ::fm/signatures-args [outer-args? inner-args?+])
-        form         (->metadata-form context [::fm/signatures-args args])]
-    [k form]))
+(s/def ::metadata
+  (s/keys
+   :req
+   [:fm/ident            ; :some.ns1/fm1
+    :fm/arglists]        ; '([a])
+   :opt
+   [:fm/doc              ; '(",,," nil ",,,") | ""
+    :fm/args             ; '([int?])
+    :fm/ret              ; '(int?)
+    :fm/rel              ; '(#function[,,,]) '???
+    :fm/trace            ; '(true) | '(#{,,,})
+    :fm/conform          ; '(true) | '(#{,,,})
+    :fm.anomaly/handler  ; '(#function[,,,]) '???
+    :fm.anomaly/handler? ; '(true)
+    ]))
 
-(defmulti  ->metadata -signature-dispatch)
-(defmethod ->metadata ::fm/signature
-  [{::fm/keys [conformed-definition] :as context}]
-  (let [ident    (->ident context)
-        raw-meta (merge
-                  {:fm/ident ident}
-                  (meta (::fm/simple-symbol?? conformed-definition))
-                  (meta (::fm/argv (second (::fm/rest conformed-definition)))))
-        context  (assoc context ::fm/raw-metadata raw-meta)]
-    (into
-     (hash-map)
-     (map (partial ->metadata-form-kv context))
-     (keys raw-meta))))
+(defmethod ->metadata-form :fm/ident
+  [ctx _]
+  (->ident ctx))
+
+(defmethod ->metadata-form :fm/arglists
+  [ctx tag]
+  (let [tag [tag (->definition-tag ctx)]]
+    (->metadata-form ctx tag)))
+
+(defmethod ->metadata-form [:fm/arglists ::fn/signature]
+  [ctx _]
+  (let [signature (get-in ctx [::fn/conformed-definition ::fn/rest 1])
+        argv      (get signature ::fn/argv)]
+    (list argv)))
+
+(defmethod ->metadata-form [:fm/arglists ::fn/signatures]
+  [ctx _]
+  (let [signatures (get-in ctx [::fn/conformed-definition ::fn/rest 1])
+        argvs      (map ::fn/argv signatures)]
+    (apply list argvs))) ; FIXME: `(apply list ~@argvs) ?
 
 (comment
 
-  (defn rzip
-    ([recur? & xs]
-     (apply
-      map
-      (fn [& ys]
-        (if (every? recur? ys)
-          (apply rzip recur? ys)
-          ys))
-      xs)))
+  (def params1
+    {::ident      ::fn
+     ::ns         *ns*
+     ::definition (list
+                   (with-meta 'fn1 {:fm/doc "fn1"})
+                   (with-meta '[a] {:fm/args '[int?]})
+                   'a)})
 
-  (rzip
-   vector?
-   '[a [b [c]]]
-   '[int? ::m1])
+  (def params2
+    {::ident      ::fn
+     ::ns         *ns*
+     ::definition (list
+                   (with-meta 'fn1 {:fm/doc "fn1"})
+                   (with-meta '[a [b [c]] & ds] {:fm/args '[int? [int? [int?]] & int?]})
+                   '[a b c ds])})
 
-  (rzip
-   vector?
-   '[a [b [c]]]
-   '[int? [:m1 [int?]]])
+  (def params3
+    {::ident      ::fn
+     ::ns         *ns*
+     ::definition (list
+                   (with-meta 'fn1 {:fm/doc "fm1"})
+                   (list
+                    (with-meta '[a] {:fm/args '[int?]})
+                    'a)
+                   (list
+                    (with-meta '[a b] {:fm/args '[int? int?]})
+                    '[a b]))})
 
-  (rzip
-   vector?
-   '[a [b [c] :as bs] & ds]
-   '[int? [::m1 [int?]] & int?])
+  (def params4
+    {::ident      ::fn
+     ::ns         *ns*
+     ::definition (list
+                   (with-meta 'fn1 {:fm/doc "fn1"})
+                   (list
+                    (with-meta '[a [b [c]]] {:fm/args '[int? [int? [int?]]]})
+                    '[a b c])
+                   (list
+                    (with-meta '[a [b [c]] & ds] {:fm/args '[int? [int? [int?]] & int?]})
+                    '[a b c ds]))})
 
-  (rzip
-   vector?
-   '[a [b]]
-   '[int? [::m1 [int?]] & int?])
+  (def params5
+    {::ident      ::fn
+     ::ns         *ns*
+     ::definition (list
+                   (with-meta 'fn1 {:fm/doc "fn1" :fm/args '[int? int?]})
+                   (list '[a] 'a)
+                   (list '[a b] '[a b]))})
 
-  ;;
+  (def params6
+    {::ident      ::fn
+     ::ns         *ns*
+     ::definition (list
+                   (with-meta 'fn1 {:fm/doc "fn1" :fm/args '[int? & int?]})
+                   (list '[a] 'a)
+                   (list '[a & bs] '[a bs]))})
+
+  (->metadata-form
+   {::ident      ::fn
+    ::ns         *ns*
+    ::definition (list
+                  (with-meta 'fn1 {:fm/doc "fn1"})
+                  (with-meta '[a] {:fm/args '[int?]})
+                  'a)}
+   :fm/ident)
+
+  (->metadata-form
+   (->>
+    {::ident      ::fn
+     ::ns         *ns*
+     ::definition (list
+                   (with-meta 'fn1 {:fm/doc "fn1"})
+                   (with-meta '[a] {:fm/args '[int?]})
+                   'a)}
+    <<conformed-definition)
+   :fm/ident)
+
+  (->metadata-form
+   (->>
+    {::ident      ::fn
+     ::ns         *ns*
+     ::definition (list
+                   (with-meta 'fn1 {:fm/doc "fn1"})
+                   (with-meta '[a] {:fm/args '[int?]})
+                   'a)}
+    <<conformed-definition)
+   :fm/arglists)
+
+  (->metadata-form
+   (->>
+    {::ident      ::fn
+     ::ns         *ns*
+     ::definition (list
+                   (with-meta 'fn1 {:fm/doc "fn1"})
+                   (with-meta '[a [b [c]] & ds] {:fm/args '[int? [int? [int?]] & int?]})
+                   '[a b c ds])}
+    <<conformed-definition)
+   :fm/arglists)
+
+  (->metadata-form
+   (->>
+    {::ident      ::fn
+     ::ns         *ns*
+     ::definition (list
+                   (with-meta 'fn1 {:fm/doc "fn1" :fm/args '[int? & int?]})
+                   (list '[a] 'a)
+                   (list '[a & bs] '[a bs]))}
+    <<conformed-definition)
+   :fm/arglists)
+
+  (type *1)
+
+  (->metadata-form
+   (->>
+    {::ident      ::fn
+     ::ns         *ns*
+     ::definition (list
+                   (with-meta 'fn1 {:fm/doc "fn1"})
+                   (with-meta '[a [b [c]] & ds] {:fm/args '[int? [int? [int?]] & int?]})
+                   '[a b c ds])}
+    <<conformed-definition
+    <<metadata)
+   :fm/args)
+
+  (->metadata-form
+   (->>
+    {::ident      ::fn
+     ::ns         *ns*
+     ::definition (list
+                   (with-meta 'fn1 {:fm/doc "fn1" :fm/args '[int? & int?]})
+                   (list '[a] 'a)
+                   (list '[a & bs] '[a bs])
+                   (list
+                    (with-meta '[a [b [c]] & ds] {:fm/args '[int? [int? [int?]] & int?]})
+                    '[a b c ds]))}
+    <<conformed-definition
+    <<metadata)
+   :fm/args)
+
+  (->metadata-form
+   (->>
+    {::ident      ::fn
+     ::ns         *ns*
+     ::definition (list
+                   (with-meta 'fn1 {:fm/doc "fn1" :fm/args '[int? & int?]})
+                   (list
+                    (with-meta '[a] {:fm/doc "sig1" :fm/args '[even?]})
+                    'a)
+                   (list '[a & bs] '[a bs])
+                   (list
+                    (with-meta '[a [b [c]] & ds] {:fm/args '[int? [int? [int?]] & int?]})
+                    '[a b c ds]))}
+    <<conformed-definition
+    <<metadata)
+   :fm/args)
+
+  (->metadata-form
+   (->>
+    {::ident      ::fn
+     ::ns         *ns*
+     ::definition (list
+                   (with-meta 'fn1 {:fm/doc "fn1" :fm/args '[int? & int?]})
+                   (list
+                    (with-meta '[a [b [c]] & ds] {:fm/args '[int? [int? [int?]] & int?]})
+                    '[a b c ds])
+                   (list
+                    (with-meta '[a] {:fm/doc "sig1" :fm/args '[even?]})
+                    'a)
+                   (list '[a & bs] '[a bs]))}
+    <<conformed-definition
+    <<metadata)
+   :fm/args)
+
+  (->metadata-form
+   (->>
+    {::ident      ::fn
+     ::ns         *ns*
+     ::definition (list
+                   (with-meta 'fn1 {:fm/doc "fn1" :fm/args '[int? & int?]})
+                   (list
+                    (with-meta '[a [b [c]] & ds] {:fm/args '[int? [int? [int?]] & int?]})
+                    '[a b c ds])
+                   (list
+                    (with-meta '[a] {:fm/doc "sig1" :fm/args '[even?]})
+                    'a)
+                   (list '[a & bs] '[a bs]))}
+    <<conformed-definition
+    <<metadata)
+   :fm/doc)
+
+  ;;;
   )
 
-(defmethod ->metadata ::fm/signatures
-  [{::fm/keys [conformed-definition]
-    ::keys    [definition]
-    :as       context}]
-  (let [sym?            (symbol? (first definition))
-        signatures      (if sym?
-                          (next definition)
-                          definition)
-        ident           (->ident context)
-        raw-outer-meta  (merge
-                         {:fm/ident ident}
-                         (meta (first signatures))
-                         (meta (::fm/simple-symbol?? conformed-definition)))
-        raw-inner-metas (map
-                         (comp meta ::fm/argv)
-                         (second (::fm/rest conformed-definition)))
-        context         (assoc
-                         context
-                         ::fm/raw-outer-metadata  raw-outer-meta
-                         ::fm/raw-inner-metadatas raw-inner-metas)
-        meta-keys       (into
-                         (hash-set)
-                         (mapcat keys)
-                         (cons raw-outer-meta raw-inner-metas))]
+(defmethod ->metadata-form :fm/args
+  [ctx tag]
+  (let [tag [tag (->definition-tag ctx)]]
+    (->metadata-form ctx tag)))
+
+(defmethod ->metadata-form [:fm/args ::fn/signature]
+  [ctx _]
+  (let [args (get-in ctx [::fn/outer-metadata :fm/args]) ; ALT: `::fn/metadata`
+        _    (lib/conthrow ::fn/args args)]
+    (list args)))
+
+(defmethod ->metadata-form [:fm/args ::fn/signatures]
+  [ctx _]
+  (let [outer      (get-in ctx [::fn/outer-metadata :fm/args])
+        inners     (map :fm/args (get ctx ::fn/inner-metadatas))
+        _          (map
+                    (partial lib/conthrow ::fn/args)
+                    (remove nil? (cons outer inners)))
+        signatures (get-in ctx [::fn/conformed-definition ::fn/rest 1])
+        argvs      (map ::fn/argv signatures)
+        args       (map-indexed
+                    (fn [i inner]
+                      (let [argv (nth argvs i)]
+                        (if-let [args (or inner outer)]
+                          (fn/zipv-args argv args)
+                          (fn/zipv-args argv)))) ; TODO: warn
+                    inners)]
+    (apply list args)))
+
+(defmethod ->metadata-form :fm/ret)
+(defmethod ->metadata-form :fm/rel)
+(defmethod ->metadata-form :fm/trace)
+(defmethod ->metadata-form :fm/conform)
+(defmethod ->metadata-form :fm.anomaly/handler)
+(defmethod ->metadata-form :fm.anomaly/handler?)
+
+(defmethod ->metadata-form [:fm/arglists ::sequent/signature]
+  [ctx tag]
+  (let [tag (conj tag (->sequent-context-tag ctx))]
+    (->metadata-form ctx tag)))
+(defmethod ->metadata-form [:fm/arglists ::sequent/signature ::sequent/positional] [ctx _]) #_[::a ::b] #_-> #_([a b])
+(defmethod ->metadata-form [:fm/arglists ::sequent/signature ::sequent/associative] [ctx _]) #_[[::a ::b]] #_-> #_([{a ::a b ::b}])
+(defmethod ->metadata-form [:fm/arglists ::sequent/signatures] [ctx _]) ; TODO: delegate
+(defmethod ->metadata-form [:fm/arglists ::sequent/signatures ::sequent/positional] [ctx _])
+(defmethod ->metadata-form [:fm/arglists ::sequent/signatures ::sequent/associative] [ctx _])
+
+(defmethod ->arglists ::fn
+  [{::fn/keys [definition]}]
+  (case (first (::fn/rest definition))
+    ::fn/signature  (list (::fn/argv (second (::fn/rest definition))))
+    ::fn/signatures (apply list (map ::fn/argv (second (::fn/rest definition))))))
+
+  ;; TODO: warn on `:fm/args`/`::fn/argv` incompat
+(defmethod ->metadata-form [::fn/signature :fm/args]
+  [ctx k]
+  (let [form (list (get-in ctx [::fn/outer-metadata k]))
+        _    (lib/conthrow ::fn/args form)]
+    form))
+
+(defmethod ->metadata-form [::fn/signatures :fm/args]
+  [ctx k]
+  (let [outer  (get-in ctx [::fn/outer-metadata k])
+        inners (map k (get ctx [::fn/inner-metadatas]))
+        _      (map (partial lib/conthrow ::fn/args) (cons outer inners))
+        argvs  (map ::fn/argv (get-in ctx [::fn/conformed-definition ::fn/rest 1]))
+        forms  (map-indexed
+                (fn [i inner]
+                  (let [argv (nth argvs i)]
+                    (if-let [args (or inner outer)]
+                      (fn/zipv-args argv args)
+                      (fn/zipv-args argv)))) ; TODO: warn
+                inners)
+        form   (apply list forms)]
+    form))
+
+(defmulti  ->metadata ->definition-tag)
+(defmethod ->metadata ::fn/signature
+  [{::fn/keys [conformed-definition] :as ctx}]
+  (let [outer-meta (merge
+                    (meta (::fn/simple-symbol? conformed-definition))
+                    (meta (::fn/argv (second (::fn/rest conformed-definition)))))
+        ctx        (assoc ctx ::fn/outer-metadata outer-meta)
+        #_#_
+        meta-keys  (into [:fm/ident :fm/arglists] (keys outer-meta))]
+    #_
     (into
      (hash-map)
-     (map (partial ->metadata-form-kv context))
-     meta-keys)))
+     (map (juxt identity (partial ->metadata-form ctx)))
+     meta-keys)
+    ctx))
+
+(defmethod ->metadata ::fn/signatures
+  [{::fn/keys [conformed-definition]
+    ::keys    [definition]
+    :as       ctx}]
+  (let [signatures  (if (symbol? (first definition)) (next definition) definition)
+        outer-meta  (merge
+                     (meta (first signatures))
+                     (meta (::fn/simple-symbol?? conformed-definition)))
+        inner-metas (map
+                     (comp meta ::fn/argv)
+                     (second (::fn/rest conformed-definition)))
+        ctx         (assoc ctx ::fn/outer-metadata outer-meta ::fn/inner-metadatas inner-metas)
+        #_#_
+        meta-keys   (into
+                     [:fm/ident :fm/arglists]
+                     (mapcat keys)
+                     (cons outer-meta inner-metas))]
+    #_
+    (into
+     (hash-map)
+     (map (juxt identity (partial ->metadata-form ctx)))
+     meta-keys)
+    ctx))
 
 (defmulti  <<metadata ::ident)
-(defmethod <<metadata ::fm
-  [context]
+(defmethod <<metadata ::fn
+  [ctx]
+  (->metadata ctx)
+  #_
   (assoc
-   context
+   ctx
    ::metadata
-   (->metadata context)))
+   (->metadata ctx)))
 
 #_(defn <<bindings
-    [{::keys [metadata] :as context}]
+    [{::keys [metadata] :as ctx}]
     (assoc
-     context
+     ctx
      ::bindings
      (into
       (hash-map)
@@ -178,13 +501,115 @@
 
   ;; ALT: `interpret`, `analyze`
 (defmulti  ->context ::ident)
-(defmethod ->context ::fm
+(defmethod ->context ::fn
   [parameters]
   (->>
    parameters
-   <<definition
+   <<conformed-definition
    <<metadata
-   #_<<bindings))
+   <<bindings))
+
+(defmulti  ->form (fn [tag _ctx] tag))
+(defmethod ->form ::fn
+  [_ ctx]
+  (let [bindings   (->forms ::fn/context-bindings ctx)
+        sym        (->form ::fn/symbol ctx)
+        definition (->form ::fn/definition ctx)
+        metadata   (->form ::fn/metadata ctx)]
+    `(let [~@bindings]
+       (with-meta
+         (fn ~sym ~definition)
+         ~metadata))))
+
+(defmulti  ->forms (fn [tag _ctx] tag))
+(defmethod ->forms ::fn/context-bindings
+  [_ ctx]
+  (->>
+   (get ctx ::bindings) ; TODO: warn on conflict
+   (vals)
+   (flatten)
+   (distinct)
+   (mapcat (juxt ::symbol ::form))))
+
+(defmethod ->form ::fn/symbol
+  [_ ctx]
+  (symbol (name (get-in ctx [::metadata :fm/ident]))))
+
+(defmethod ->form ::fn/definition
+  [tag ctx]
+  (let [tag [tag (->definition-tag ctx)]]
+    (->form tag ctx)))
+
+(defmethod ->form [::fn/definition ::fn/signature]
+  [_ ctx]
+  (let [index     (or (get ctx ::signature-index) 0)
+        signature (or
+                   (get ctx ::fn/signature)
+                   (get-in ctx [::fn/conformed-definition ::fn/rest 1]))
+        argv      (get signature ::fn/argv)
+        ctx       (->
+                   ctx
+                   (update
+                    ::bindings
+                    (fn [bindings]
+                      (into
+                       (hash-map)
+                       (map
+                        (juxt
+                         (comp i ::forms)
+                         (comp i ::symbols))) bindings)))
+                   (update [::metadata] (fn [metadata])))
+        body      (->form ::fn/body ctx)]
+    #_(update ctx ::bindings (comp (map i) vals))
+    `(~argv ~body)))
+
+(defmethod ->form [::fn/definition ::fn/signatures]
+  [_ ctx]
+  (let [signatures (get-in ctx [::fn/conformed-definition ::fn/rest 1])
+        forms      (map-indexed
+                    (fn [i signature]
+                      (let [tag [::fn/definition ::fn/signature]
+                            ctx (into ctx {::fn/signature signature ::signature-index i})]
+                        (->form tag ctx)))
+                    signatures)]
+    (apply list forms)))
+
+(defmethod ->form ::fn/metadata
+  [_ ctx]
+  (into
+   (hash-map)
+   (map
+    (fn [[k forms]]
+      (map-indexed
+       (fn [i form]
+         (if-let [sym (get-in ctx [::bindings k i ::symbol])]
+           [k sym]
+           [k form]))
+       forms)))
+   (get ctx ::metadata)))
+
+(defmethod ->form ::fn/body
+  [_ ctx]
+  (let [handler (get-in ctx [::bindings ::anomaly/handler ::symbol])
+        try     (->form ::fn/try ctx)]
+    `(let [res# ~try]
+       (if (anomaly/anomalous? res#)
+         (~handler res#)
+         res#))))
+
+(defmethod ->form ::fn/try
+  [_ ctx]
+  (let [trace `(~trace-sym #:fm.trace{:sym '~sym :args ~args})]
+    `(try
+       ~@(when trace? [~trace])
+       ~nested-form
+       (catch Throwable throw#
+         #::anomaly{:spec ::anomaly/throw
+                    :sym  '~sym
+                    :args ~args
+                    :data throw#}))))
+
+(defmethod ->form ::sequent/body [_ ctx])
 
 (defn ->context-binding-form
   [context]
@@ -192,16 +617,16 @@
 
 (defn fm
   [parameters]
-  (let [context (->context (into parameters {::ident ::fm}))
+  (let [context (->context (into parameters {::ident ::fn}))
         form    (->context-binding-form context)]
     form))
 
 (defmulti  ->arglists ::ident)
-(defmethod ->arglists ::fm
-  [{::fm/keys [definition]}]
-  (case (first (::fm/rest definition))
-    ::fm/signature  (list (::fm/argv (second (::fm/rest definition))))
-    ::fm/signatures (map ::fm/argv (second (::fm/rest definition)))))
+(defmethod ->arglists ::fn
+  [{::fn/keys [definition]}]
+  (case (first (::fn/rest definition))
+    ::fn/signature  (list (::fn/argv (second (::fn/rest definition))))
+    ::fn/signatures (apply list (map ::fn/argv (second (::fn/rest definition))))))
 
 (defmulti ->var-metadata-kv key)
 (defmulti ->var-metadata-kv :fm/arglists)
@@ -225,7 +650,7 @@
 
 (defn defm
   [parameters]
-  (let [context (->context (into parameters {::ident ::fm}))
+  (let [context (->context (into parameters {::ident ::fn}))
         sym     (->var-sym context)]
     `(def ~sym ~(fm parameters))))
 
@@ -361,6 +786,8 @@
     :fm/ignore           ; ,,,
     ]))
 
+  ;; NOTE: cut elimination, runtime `*ignore*`
+
 #_(def -metadata-acc-init
     {:fm/doc              []
      :fm/args             []
@@ -456,17 +883,17 @@
 
   ;; TODO: warn on `:else`, dedup cases?
   ;; NOTE: we only reach this function if at least one `:fm/args` key is
-  ;; supplied in the definition, i.e. either in `::fm/raw-outer-metadata` or in
-  ;; at least one of the `::fm/raw-inner-metadatas`. that implies that the
+  ;; supplied in the definition, i.e. either in `::fm/outer-metadata` or in
+  ;; at least one of the `::fm/inner-metadatas`. that implies that the
   ;; resulting `s/or` spec will contain at least one relevant specification, and
   ;; that it may be necessary to fill in unspecified signatures using `any?`—
   ;; i.e. trigger the `:else` clause.
   ;;    in other words, triggering the `:else` clause implies that at least one
   ;; signature is specified w.r.t. its arguments, _and_ that at least one
   ;; signature is _un_specified w.r.t. its arguments. the design intent is that
-  ;; either all signatures are specified at once in `::fm/raw-outer-metadata`,
+  ;; either all signatures are specified at once in `::fm/outer-metadata`,
   ;; or that each signature is individually specified in its respective
-  ;; `::fm/raw-inner-metadata`. mixing and matching these approaches and leaving
+  ;; `::fm/inner-metadata`. mixing and matching these approaches and leaving
   ;; certain signatures unspecified is supported and likely matches expectations
   ;; w.r.t. specificity (inner takes precedence over outer), but a style warning
   ;; might be appropriate when `:else` is triggered.
@@ -481,7 +908,7 @@
            context (assoc context ::fm/argv argv)
            form    (cond
                      (second inner-args?) (->metadata-form context [::fm/args (second inner-args?)])
-                     (second outer-args?) (let [args (get-in context [::fm/raw-outer-metadata :fm/args])
+                     (second outer-args?) (let [args (get-in context [::fm/outer-metadata :fm/args])
                                                 args (take (count argv) args)
                                                 args (lib/conthrow ::fm/args args)]
                                             (->metadata-form context [::fm/args args]))
@@ -581,7 +1008,7 @@
     f3
     f4) {:a 1 :b 2 :c 3})
 
-  (defmacro )
+  (defmacro)
 
   ;;;
   )
