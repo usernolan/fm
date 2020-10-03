@@ -73,21 +73,21 @@
 (def rreduce
   (comp unreduced -rreduce))
 
-(defn consplain
+(defn conform-explain
   [spec x]
   (let [c (s/conform spec x)]
     (if (s/invalid? c)
       (s/explain spec x)
       c)))
 
-(defn conthrow
+(defn conform-throw
   [spec x]
   (let [c (s/conform spec x)]
     (if (s/invalid? c)
       (throw
        (ex-info
         (s/explain-str spec x)
-        #:fm.anomaly{:ident :fm.anomaly/conform
+        #:fm.anomaly{:ident :fm.anomaly/assert
                      :args  [x]
                      :data  (s/explain-data spec x)}))
       c)))

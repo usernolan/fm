@@ -17,7 +17,7 @@
 
 (s/def ::definition
   (s/cat
-   ::simple-symbol?? (s/? simple-symbol?)
+   ::simple-symbol? (s/? simple-symbol?)
    ::rest
    (s/alt
     ::signature  ::signature
@@ -57,7 +57,15 @@
       ::variadic-arg ::variadic-arg)))
    seq)) ; NOTE: disallow ^{:fm/args []}
 
-(defn arg->sym
+(s/def ::doc string?)
+(s/def ::ret any?)     ; fn, spec
+(s/def ::rel any?)     ; fn, spec?
+(s/def ::trace any?)   ; bool, set, fn
+(s/def ::conform any?) ; bool, set, fn?
+(s/def ::handler any?) ; fn
+(s/def ::handler? boolean?)
+
+(defn arg->symbol
   [arg]
   (cond
     (vector? arg) (when (some #{:as} arg) (last arg))

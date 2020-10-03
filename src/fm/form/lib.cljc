@@ -8,8 +8,8 @@
 (def zipf lib/zipf)
 (def zipvf lib/zipvf)
 (def rreduce lib/rreduce)
-(def conthrow lib/conthrow)
-(def consplain lib/consplain)
+(def conform-throw lib/conform-throw)
+(def conform-explain lib/conform-explain)
 
 (s/def ::arg-symbol
   (s/and
@@ -28,9 +28,7 @@
     'fnil `fnil
     'every-pred `every-pred
     'some-fn `some-fn
-    #_#_#_#_#_#_#_'fm
-                'consequent 'mergesequent 'insequent
-          'sequent 'match 'branch})
+    #_#_#_#_'fm 'conse 'nonse 'merge})
 
 (s/def ::fn-symbol
   (fn [x] (*fn-symbol-set* x))) ; NOTE: `s/def` evaluates set, breaks rebinding
@@ -42,7 +40,7 @@
   (s/and
    seq?
    not-empty
-   (comp fn-symbol? first)))
+   (comp fn-symbol? first))) ; ALT: (comp fn?? eval)
 
 (def fn-form?
   (partial s/valid? ::fn-form))

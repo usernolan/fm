@@ -1,10 +1,10 @@
 (comment
 
-  (lib/consplain :fm/anomaly {::ident :a})
-  (lib/consplain :fm/anomaly {:cognitect/anomaly 'a})
-  (lib/consplain :fm/anomaly {::ide :a})
-  (lib/consplain :fm/anomaly nil)
-  (lib/consplain :fm/anomaly 'a)
+  (lib/conform-explain :fm/anomaly {::ident :a})
+  (lib/conform-explain :fm/anomaly {:cognitect/anomaly 'a})
+  (lib/conform-explain :fm/anomaly {::ide :a})
+  (lib/conform-explain :fm/anomaly nil)
+  (lib/conform-explain :fm/anomaly 'a)
 
   (anomaly? {::ident :a})
 

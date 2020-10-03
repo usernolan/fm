@@ -23,8 +23,8 @@
       (with-meta '[a b] {:fm/args '[(complement nil?) (complement nil?)]})
       '[a b])))
 
-  (lib/consplain ::fm/definition definition1)
-  (lib/consplain ::fm/definition definition2)
+  (lib/conform-explain ::fm/definition definition1)
+  (lib/conform-explain ::fm/definition definition2)
 
   (def params1
     {::ident      ::fm
@@ -58,33 +58,33 @@
 
   (s/def ::s1 any?)
 
-  (lib/consplain ::fm/arg 'int?)
-  (lib/consplain ::fm/arg int?)
-  (lib/consplain ::fm/arg '(fn [x] x))
-  (lib/consplain ::fm/arg (fn [x] x))
-  (lib/consplain ::fm/arg '(partial (fn [x y z] z) 'x 'y))
-  (lib/consplain ::fm/arg ::s1)
-  (lib/consplain ::fm/arg ::valid) ; NOTE: accepts "to-be-defined" because spec does
-  (lib/consplain ::fm/arg '(s/or ::s1 ::s1))
-  (lib/consplain ::fm/arg 1)
-  (lib/consplain ::fm/arg 'a)
-  (lib/consplain ::fm/arg nil)
-  (lib/consplain ::fm/arg '())
-  (lib/consplain ::fm/arg [])
-  (lib/consplain ::fm/arg {})
-  (lib/consplain ::fm/arg #{})
-  (lib/consplain ::fm/arg '[int? string?])
-  (lib/consplain ::fm/arg '[int? [string?]])
-  (lib/consplain ::fm/arg [int? string?])
+  (lib/conform-explain ::fm/arg 'int?)
+  (lib/conform-explain ::fm/arg int?)
+  (lib/conform-explain ::fm/arg '(fn [x] x))
+  (lib/conform-explain ::fm/arg (fn [x] x))
+  (lib/conform-explain ::fm/arg '(partial (fn [x y z] z) 'x 'y))
+  (lib/conform-explain ::fm/arg ::s1)
+  (lib/conform-explain ::fm/arg ::valid) ; NOTE: accepts "to-be-defined" because spec does
+  (lib/conform-explain ::fm/arg '(s/or ::s1 ::s1))
+  (lib/conform-explain ::fm/arg 1)
+  (lib/conform-explain ::fm/arg 'a)
+  (lib/conform-explain ::fm/arg nil)
+  (lib/conform-explain ::fm/arg '())
+  (lib/conform-explain ::fm/arg [])
+  (lib/conform-explain ::fm/arg {})
+  (lib/conform-explain ::fm/arg #{})
+  (lib/conform-explain ::fm/arg '[int? string?])
+  (lib/conform-explain ::fm/arg '[int? [string?]])
+  (lib/conform-explain ::fm/arg [int? string?])
 
     ;; NOTE: litmus recursion
   (def args1 '[int? (s/or :a int? :b string?) ::s1 (fn [x] (nil? x))])
   (def args2 '[int? (s/or :a int? :b string?) [::s1 (fn [x] (nil? x))]])
   (def args3 '[int? (s/or :a int? :b string?) [::s1 [(fn [x] (nil? x))]]])
 
-  (lib/consplain ::fm/args args1)
-  (lib/consplain ::fm/args args2)
-  (lib/consplain ::fm/args args3)
+  (lib/conform-explain ::fm/args args1)
+  (lib/conform-explain ::fm/args args2)
+  (lib/conform-explain ::fm/args args3)
   #_[int? int? & int?]
   ((fn [x1 x2 & xs]
      [x1 x2 xs (type xs)])
@@ -131,34 +131,34 @@
 
   (type int?) ; ???
 
-  (lib/consplain ::fm/var-arg '{:kw int?})
-  (lib/consplain ::fm/var-arg '{:kw [int? int? [int?]]})
-  (lib/consplain ::fm/var-arg {:kw int?})
-  (lib/consplain ::fm/var-arg '{})
-  (lib/consplain ::fm/var-arg '[])
+  (lib/conform-explain ::fm/var-arg '{:kw int?})
+  (lib/conform-explain ::fm/var-arg '{:kw [int? int? [int?]]})
+  (lib/conform-explain ::fm/var-arg {:kw int?})
+  (lib/conform-explain ::fm/var-arg '{})
+  (lib/conform-explain ::fm/var-arg '[])
 
-  (lib/consplain ::fm/var-args '[& int?])
-  (lib/consplain ::fm/var-args '[& {:kw int?}])
-  (lib/consplain ::fm/var-args '[& {:kw nil}])
-  (lib/consplain ::fm/var-args '[& {}])
-  (lib/consplain ::fm/var-args '[&])
-  (lib/consplain ::fm/var-args '[& nil])
+  (lib/conform-explain ::fm/var-args '[& int?])
+  (lib/conform-explain ::fm/var-args '[& {:kw int?}])
+  (lib/conform-explain ::fm/var-args '[& {:kw nil}])
+  (lib/conform-explain ::fm/var-args '[& {}])
+  (lib/conform-explain ::fm/var-args '[&])
+  (lib/conform-explain ::fm/var-args '[& nil])
 
-  (lib/consplain ::fm/args '[int? [int? [int?]]])
-  (lib/consplain ::fm/args '[int? [int? [int?]] & int?])
-  (lib/consplain ::fm/args '[int? [int? [int?]] & {:kw int?}])
-  (lib/consplain ::fm/args '[int? [int? [int?]] & [int?]])
-  (lib/consplain ::fm/args '[int? [int? [int?]] & (s/* any?)])
-  (lib/consplain ::fm/args '[])
-  (lib/consplain ::fm/args '[nil])
-  (lib/consplain ::fm/args '[int? [int? [int?]] &])
-  (lib/consplain ::fm/args '[int? [int? [int?]] & nil])
-  (lib/consplain ::fm/args '[&])
-  (lib/consplain ::fm/args '[& int?])
-  (lib/consplain ::fm/args '[& {:kw int?}])
-  (lib/consplain ::fm/args '[& [:kw]])
-  (lib/consplain ::fm/args '[& [:ns/kw]])
-  (lib/consplain ::fm/args '[& [[int?]]])
+  (lib/conform-explain ::fm/args '[int? [int? [int?]]])
+  (lib/conform-explain ::fm/args '[int? [int? [int?]] & int?])
+  (lib/conform-explain ::fm/args '[int? [int? [int?]] & {:kw int?}])
+  (lib/conform-explain ::fm/args '[int? [int? [int?]] & [int?]])
+  (lib/conform-explain ::fm/args '[int? [int? [int?]] & (s/* any?)])
+  (lib/conform-explain ::fm/args '[])
+  (lib/conform-explain ::fm/args '[nil])
+  (lib/conform-explain ::fm/args '[int? [int? [int?]] &])
+  (lib/conform-explain ::fm/args '[int? [int? [int?]] & nil])
+  (lib/conform-explain ::fm/args '[&])
+  (lib/conform-explain ::fm/args '[& int?])
+  (lib/conform-explain ::fm/args '[& {:kw int?}])
+  (lib/conform-explain ::fm/args '[& [:kw]])
+  (lib/conform-explain ::fm/args '[& [:ns/kw]])
+  (lib/conform-explain ::fm/args '[& [[int?]]])
 
   ((fn [x1 x2 &]
      [x1 x2 & (type &)])
@@ -179,7 +179,7 @@
    1 2 :x4 4 :x3 3)
 
   ((fn [x1 x2 & {:keys [x3 x4] :as xs}]
-     (prn (lib/consplain (s/map-of keyword? int?) xs))
+     (prn (lib/conform-explain (s/map-of keyword? int?) xs))
      [x1 x2 x3 x4 xs])
    1 2 :x3 3 :x4 4 :x4 5)
 
@@ -191,7 +191,7 @@
      [x1 x2 x3 x4 xs])
    1 2 "x3" 3 "x4" 4)
 
-  (lib/consplain
+  (lib/conform-explain
    (s/*
     (s/alt
      :x3 (s/cat ::k #{:x3} ::v int?)
