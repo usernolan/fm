@@ -43,7 +43,7 @@
       ::ret
       ::rel
       ::nonse
-      ::throw
+      ::thrown
       ::received})
 
 #_(s/def ::ident

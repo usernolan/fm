@@ -337,6 +337,22 @@ fm?
      ::forward any?
      ::reverse any?))
 
+#_(s/def :fm.sequent/signature)
+'([::a
+   {::b b
+    c   ::c
+    ::d [d1 d2 d3 :as ds]
+    ::e {:keys [ek1 ek2 ek3] :as ekv}}
+   :as args]
+  [::f ::g ::h])
+'([[::a
+    {::b b
+     c   ::c
+     ::d [d1 d2 d3 :as ds]
+     ::e {:keys [ek1 ek2 ek3] :as ekv}}
+    :as args]]
+  [[::f ::g ::h]])
+
 sequent | sequent-signature
 (->>
  req

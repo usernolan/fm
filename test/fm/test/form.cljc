@@ -443,6 +443,25 @@
           :fm/ret   even?}
         [a b] (+ a b)))}))
 
+  (->form
+   ::fn
+   (->context
+    {::ident ::fn
+     ::ns    *ns*
+     ::definition
+     '(^{:fm/doc             "fn1"
+         :fm/args            [int? int?]
+         :fm/ret             int?
+         :fm/rel             (fn [{args :args ret :ret}]
+                               (>= ret (apply + args)))
+         :fm/trace           #{:fm/args :fm/ret :fm/conformed-args}
+         :fm/conform         #{:fm/args}
+         :fm.anomaly/handler (fn [a] a)}
+       ([] 1)
+       (^{:fm/trace #{}
+          :fm/ret   even?}
+        [a b] (+ a b)))}))
+
   (def trace-idents #{:fm/args :fm/ret})
   (def conform-idents #{:fm/args})
 
