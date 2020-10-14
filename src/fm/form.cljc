@@ -7,6 +7,7 @@
    [fm.form.lib :as lib]))
 
   ;; TODO: runtime `*ignore*`, `s/*compile-asserts*`, etc.; config
+  ;; TODO: clarify contextual dependencies?
   ;; TODO: "cut elimination"
 
 (def ^:dynamic *trace*
@@ -184,7 +185,7 @@
                       (let [argv (nth argvs i)]
                         (if-let [args (or inner outer)]
                           (fn/zipv-args argv args)
-                          (fn/zipv-args argv)))) ; TODO: warn
+                          (fn/zipv-args argv)))) ; TODO: warn; ALT: nil
                     inners)]
     (vec args)))
 
@@ -682,17 +683,43 @@
     arg))
 
 (defmethod ->forms [::fn/args-spec ::fn/variadic?]
-  [_ ctx]
+  [tag ctx]
   (let [index (or (get ctx ::signature-index) 0)
         args  (get-in ctx [::metadata :fm/args index])]
     (when-let [arg (and (some #{'&} args) (last args))]
-      (let [[tag _] (lib/conform-throw ::fn/variadic-arg arg)
-            form    (case tag
-                      ::fn/arg                 `(s/* (->form [::fn/args-spec ::fn/arg] arg))
-                      ::fn/keyword-args-map    `(s/* (s/alt ~@(mapcat (juxt (comp keyword key) val) arg)))
-                      ::lib/sequence-spec-form arg)
-            forms   (vector form)] ; NOTE: `->forms` :: seq | nil
+      (let [[t _] (lib/conform-throw ::fn/variadic-arg arg)
+            form  (case t
+                    ::fn/arg                 (->form [::fn/args-spec ::fn/variadic? ::fn/arg] ctx) ; ALT: (conj tag t)
+                    ::fn/keyword-args-map    (->form [::fn/args-spec ::fn/variadic? ::fn/keyword-args-map] arg) ; ALT (conj tag t)
+                    ::lib/sequence-spec-form arg)
+            forms (vector form)] ; NOTE: `->forms` :: seq | nil
         forms))))
+
+(defmethod ->form [::fn/args-spec ::fn/variadic? ::fn/arg]
+  [_ ctx]
+  (let [index   (or (get ctx ::signature-index) 0)
+        args    (get-in ctx [::metadata :fm/args index])
+        arg     (last args)
+        [tag _] (lib/conform-throw ::fn/arg arg)]
+    (case tag
+      ::fn/arg+ (->form [::fn/args-spec ::fn/variadic? ::fn/arg ::fn/arg+] ctx) ; ALT: (conj tag t)
+      `(s/* ~arg))))
+
+(defmethod ->form [::fn/args-spec ::fn/variadic? ::fn/arg ::fn/arg+]
+  [_ ctx]
+  (let [index   (or (get ctx ::signature-index) 0)
+        args    (get-in ctx [::metadata :fm/args index])
+        arg     (last args)
+        [tag _] (lib/conform-throw ::fn/arg arg)]
+    (case tag
+      ::fn/arg+ (->form [::fn/args-spec ::fn/variadic? ::fn/arg+] ctx)
+      `(s/* ~arg))))
+
+(defmethod ->form [::fn/args-spec ::fn/variadic? ::fn/keyword-args-map]
+  [_ arg]
+  (let [f     (juxt (comp keyword key) val) ; NOTE: ensure keyword
+        forms (mapcat f arg)]
+    `(s/* (s/alt ~@forms))))
 
 (defmethod ->form ::fn/conformed-args
   [_ ctx]

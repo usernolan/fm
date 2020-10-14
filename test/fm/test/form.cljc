@@ -469,6 +469,40 @@
      ::ns    *ns*
      ::definition
      '(^{:fm/doc             "fn1"
+         :fm/ret             int?
+         :fm/rel             (fn [{args :args ret :ret}]
+                               (>= ret (apply + args)))
+         :fm/trace           #{:fm/args :fm/ret}
+         :fm/conform         #{:fm/args}
+         :fm.anomaly/handler (fn [a] a)}
+       ([] 1)
+       (^{:fm/args [int? int?]}
+        [a b] (+ a b)))}))
+
+  (->form
+   ::fn
+   (->context
+    {::ident ::fn
+     ::ns    *ns*
+     ::definition
+     '(^{:fm/doc             "fn1"
+         :fm/ret             int?
+         :fm/rel             (fn [{args :args ret :ret}]
+                               (>= ret (apply + args)))
+         :fm/trace           #{:fm/args :fm/ret}
+         :fm/conform         #{:fm/args}
+         :fm.anomaly/handler (fn [a] a)}
+       ([a] (inc a))
+       (^{:fm/args [int? int?]}
+        [a b] (+ a b)))}))
+
+  (->form
+   ::fn
+   (->context
+    {::ident ::fn
+     ::ns    *ns*
+     ::definition
+     '(^{:fm/doc             "fn1"
          :fm/args            [int? int? & int?]
          :fm/ret             int?
          :fm/rel             (fn [{args :args ret :ret}]
