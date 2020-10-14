@@ -5,6 +5,7 @@
 
   ;; TODO: revisit tags
   ;; TODO: generators
+  ;; TODO: order tags according to observed frequency
 
 (s/def ::signature
   (s/cat
@@ -25,10 +26,10 @@
 
 (s/def ::arg
   (s/or
-   ::lib/arg-symbol ::lib/arg-symbol
-   ::lib/fn-form ::lib/fn-form
-   ::lib/spec-form ::lib/spec-form
    ::lib/spec-keyword ::lib/spec-keyword
+   ::lib/arg-symbol ::lib/arg-symbol
+   ::lib/spec-form ::lib/spec-form
+   ::lib/fn-form ::lib/fn-form
    ::arg+ (s/+ ::arg))) ; NOTE: disallow [,,, [] ,,,]
 
   ;; NOTE: keyword arguments are poorly named in Clojure's case
@@ -42,9 +43,9 @@
 
 (s/def ::variadic-arg
   (s/or
-   ::lib/sequence-spec-form ::lib/sequence-spec-form
+   ::arg ::arg
    ::keyword-args-map ::keyword-args-map
-   ::arg ::arg))
+   ::lib/sequence-spec-form ::lib/sequence-spec-form))
 
 (s/def ::args
   (s/&

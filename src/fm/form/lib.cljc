@@ -70,6 +70,7 @@
 (def spec-form?
   (partial s/valid? ::spec-form))
 
+  ;; TODO: rename e.g. `regex-op` ,,,
 (def ^:dynamic
   *sequence-spec-symbol-set*
   #{`s/cat
@@ -92,6 +93,6 @@
   (partial s/valid? ::sequence-spec-form))
 
   ;; NOTE: alt `s/get-spec`
-  ;; NOTE: spec respects TBD specs by their qualified keywords
+  ;; NOTE: `spec` respects TBD specs by their qualified keywords
 (s/def ::spec-keyword
   qualified-keyword?)

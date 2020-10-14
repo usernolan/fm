@@ -497,6 +497,8 @@
          :fm.anomaly/handler (fn [a] a)}
        [a b] (+ a b))}))
 
+  ((fn [a b & [c d e]] [a b c d e]) 'a 'b 'c 'd)
+
   (def context2 *1)
   (lib/conform-explain (eval (get-in context2 [::metadata :fm/args])) [1])
   (lib/conform-explain (eval (get-in context2 [::metadata :fm/args])) [1 [2]])
@@ -524,107 +526,12 @@
    ::fn/context-bindings
    {::bindings bindings1})
 
-(clojure.core/let
- [trace8309
-  #{:fm/args :fm/ret}
-  arglists8310
-  '[a b]
-  doc8311
-  "fn1"
-  rel8312
-  (fn [{args :args, ret :ret}] (>= ret (apply + args)))
-  conform8313
-  #{:fm/args}
-  args8314
-  [int? int?]
-  handler8315
-  (fn [a] a)
-  ident8316
-  :fm.form/fm8308
-  ret8317
-  int?]
- (clojure.core/with-meta
-  (clojure.core/fn
-   fm8308
-   [a b]
-   (clojure.core/let
-    [res__8149__auto__
-     (try
-      (trace8309 {:fm/ident :fm.form/fm8318, :fm.trace/args [a b]})
-      nil
-      (catch
-       java.lang.Throwable
-       throw__8160__auto__
-       {:fm.anomaly/data throw__8160__auto__,
-        :fm.anomaly/ident :fm.anomaly/throw,
-        :fm.anomaly/args [a b],
-        :fm/ident :fm.form/fm8318}))]
-    (if
-     (fm.anomaly/anomalous? res__8149__auto__)
-     (handler8315 res__8149__auto__)
-     res__8149__auto__)))
-  {:fm/trace [trace8309],
-   :fm/arglists [arglists8310],
-   :fm/doc doc8311,
-   :fm/rel [rel8312],
-   :fm/conform [conform8313],
-   :fm/args [args8314],
-   :fm.anomaly/handler [handler8315],
-   :fm/ident ident8316,
-   :fm/ret [ret8317]}))
-
-(clojure.core/let
- [trace8405
-  #{:fm/args :fm/ret}
-  arglists8406
-  '[a b]
-  doc8407
-  "fn1"
-  rel8408
-  (fn [{args :args, ret :ret}] (>= ret (apply + args)))
-  conform8409
-  #{:fm/args}
-  args8410
-  [int? int?]
-  handler8411
-  (fn [a] a)
-  ident8412
-  :fm.form/fm8404
-  ret8413
-  int?]
- (clojure.core/with-meta
-  (clojure.core/fn
-   fm8404
-   [a b]
-   (clojure.core/let
-    [res__8149__auto__
-     (try
-      (trace8405 {:fm/ident :fm.form/fm8414, :fm.trace/args [a b]})
-      nil
-      (catch
-       java.lang.Throwable
-       throw__8160__auto__
-       {:fm.anomaly/data throw__8160__auto__,
-        :fm.anomaly/ident :fm.anomaly/throw,
-        :fm.anomaly/args [a b],
-        :fm/ident :fm.form/fm8414}))]
-    (if
-     (fm.anomaly/anomalous? res__8149__auto__)
-     (handler8411 res__8149__auto__)
-     res__8149__auto__)))
-  {:fm/trace (clojure.core/list trace8405),
-   :fm/arglists (clojure.core/list arglists8406),
-   :fm/doc doc8407,
-   :fm/rel (clojure.core/list rel8408),
-   :fm/conform (clojure.core/list conform8409),
-   :fm/args (clojure.core/list args8410),
-   :fm.anomaly/handler (clojure.core/list handler8411),
-   :fm/ident ident8412,
-   :fm/ret (clojure.core/list ret8413)}))
-
-
-(def argv-kw [::a ::b ::cs])
-
+  (defmulti  multi1 (fn [tag _arg] tag))
+  (defmethod multi1 [::args ::arg]
+    [tag arg]
+    (if (= arg ::a)
+      (recur tag ::b)
+      arg))
 
   ;;;
   )
