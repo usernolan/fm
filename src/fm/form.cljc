@@ -6,6 +6,13 @@
    [fm.form.fn :as fn]
    [fm.form.lib :as lib]))
 
+(comment
+
+  (def last-tag-atom (atom nil))
+
+  ;;;
+  )
+
   ;; TODO: runtime `*ignore*`, `s/*compile-asserts*`, etc.; config
   ;; TODO: clarify contextual dependencies?
   ;; TODO: "cut elimination"
@@ -110,7 +117,7 @@
                  :else                (vec (cons outer inners)))]
     form))
 
-(defmulti  ->metadata-form (fn [tag _ctx] tag))
+(defmulti  ->metadata-form (fn [tag _ctx] (reset! last-tag-atom tag) tag))
 (defmethod ->metadata-form :default
   [tag ctx]
   (->default-metadata-form tag ctx)) ; NOTE: keep all metadata
@@ -183,9 +190,8 @@
         args       (map-indexed
                     (fn [i inner]
                       (let [argv (nth argvs i)]
-                        (if-let [args (or inner outer)]
-                          (fn/zipv-args argv args)
-                          (fn/zipv-args argv)))) ; TODO: warn; ALT: nil
+                        (when-let [args (or inner outer)]
+                          (fn/zipv-args argv args))))
                     inners)]
     (vec args)))
 
@@ -362,6 +368,7 @@
 (defmulti  ->metadata-bindings ::ident)
 (defmethod ->metadata-bindings ::fn
   [ctx]
+  (reset! last-tag-atom "->metadata-bindings")
   (let [metadata (get ctx ::metadata)
         xf       (map (fn [[k form]]
                         [k (if (sequential? form)
@@ -376,7 +383,7 @@
                                    acc))
                                {::form=>symbol {} ::bindings []}
                                form))
-                             [{::symbol (gensym (name k)) ::form form}])]))
+                             (vector {::symbol (gensym (name k)) ::form form}))]))
         bindings (into {} xf metadata)]
     bindings))
 
@@ -401,8 +408,8 @@
    <<metadata
    <<bindings))
 
-(defmulti  ->forms (fn [tag _ctx] tag))
-(defmulti  ->form  (fn [tag _ctx] tag))
+(defmulti  ->forms (fn [tag _ctx] (reset! last-tag-atom tag) tag))
+(defmulti  ->form  (fn [tag _ctx] (reset! last-tag-atom tag) tag))
 (defmethod ->form ::fn
   [_ ctx]
   (let [bindings   (->forms ::fn/bindings ctx)
@@ -490,6 +497,7 @@
 
 (defn bind
   [ctx tags]
+  (reset! last-tag-atom ["bind" tags])
   (reduce
    (fn [ctx tag]
      (let [binding {::symbol (gensym (name tag)) ::form (->form tag ctx)}]
@@ -500,6 +508,7 @@
   ;; TODO: refactor `->form`?
 (defn ->bindings
   [ctx tags]
+  (reset! last-tag-atom ["->bindings" tags])
   (mapcat
    (fn [tag]
      [(get-in ctx [::bindings tag ::symbol])
@@ -508,6 +517,7 @@
 
 (defn ->trace?
   [ctx]
+  (reset! last-tag-atom "->trace?")
   (let [index (or (get ctx ::signature-index) 0)
         form  (or (get-in ctx [::bindings :fm/trace index ::form]) *trace*)]
     (cond
@@ -516,7 +526,7 @@
       :else       (constantly true))))
 
   ;; TODO: refactor `->form`?
-(defmulti  ->trace (fn [tag _ctx] tag))
+(defmulti  ->trace (fn [tag _ctx] (reset! last-tag-atom ["->trace" tag]) tag))
 (defmethod ->trace :fm.trace/args
   [_ ctx]
   (let [trace? (->trace? ctx)]
@@ -526,7 +536,7 @@
             args  (->form ::fn/args ctx)]
         [(list trace {:fm/ident ident :fm.trace/args args})])))) ; NOTE: splice
 
-(defmulti  ->spec? (fn [tag _ctx] tag))
+(defmulti  ->spec? (fn [tag _ctx] (reset! last-tag-atom ["->spec?" tag]) tag))
 (defmethod ->spec? :fm/args
   [_ ctx]
   (let [index (or (get ctx ::signature-index) 0)]
@@ -542,7 +552,7 @@
         ident    (->form ::fn/ident ctx)
         body     (if (->spec? :fm/args ctx)
                    (->form ::fn/args-anomaly? ctx)
-                   (->form ::fn/ret-binding))]
+                   (->form ::fn/ret-binding ctx))]
     `(let [~@bindings]
        ~@trace
        (if (anomaly/anomalous? ~args)
@@ -554,6 +564,7 @@
 
 (defn ->conform?
   [ctx]
+  (reset! last-tag-atom "->conform?")
   (let [index (or (get ctx ::signature-index) 0)
         form  (or (get-in ctx [::bindings :fm/conform index ::form]) *conform*)]
     (cond
@@ -631,7 +642,7 @@
   (or
    (get-in ctx [::bindings ::fn/args ::symbol])
    (let [argv (->form ::fn/argv ctx)
-         xf   (comp (remove #{'&}) (map fn/arg->symbol))
+         xf   (comp (remove #{'&}) (map fn/arg->symbol)) ; ALT: keep `&`
          form (into (vector) xf argv)]
      form)))
 
@@ -656,23 +667,108 @@
   (let [index (or (get ctx ::signature-index) 0)]
     (get-in ctx [::fn/conformed-definition ::fn/rest 1 index ::fn/argv])))
 
+  ;; TODO: detect regex-op, insert `s/spec`
+  ;; TODO: delegate to meta->spec-obj fn, `s/form`; (s/form (fn/meta->args-spec-obj {:fm/args args :fm/arglist argv}))
+  ;; TODO: respect `:as`
 (defmethod ->form ::fn/args-spec
   [_ ctx]
   (or
    (get-in ctx [::bindings ::fn/args-spec ::symbol])
-   (let [arg*      (->forms [::fn/args-spec ::fn/arg*] ctx)
-         variadic? (->forms [::fn/args-spec ::fn/variadic?] ctx)]
-     `(s/tuple ~@arg* ~@variadic?))))
+   (let [argv   (->form ::fn/argv ctx)
+         index  (or (get ctx ::signature-index) 0)
+         args   (get-in ctx [::metadata :fm/args index])
+         zipped (lib/zipv vector? argv args) ; NOTE: `zipv`; maintains shape
+         form   (->form [::fn/args-spec ::fn/zipped-args] zipped)]
+     form)))
 
-(defmethod ->forms [::fn/args-spec ::fn/arg*]
-  [_ ctx]
-  (let [index  (or (get ctx ::signature-index) 0)
-        args   (get-in ctx [::metadata :fm/args index])
-        ->form (partial ->form [::fn/args-spec ::fn/arg])
-        arg?   (complement #{'&})
-        xf     (comp (take-while arg?) (map ->form))
-        forms  (into (vector) xf args)]
-    forms))
+(defmethod ->form [::fn/args-spec ::fn/zipped-args]
+  [_ zipped-args]
+  (let [parts (partition-by (hash-set '(& &)) zipped-args)
+        zargs (when (= (count parts) 1) (first parts))
+        zvar  (when (> (count parts) 1) (last parts))
+        args  (when zargs (->forms [::fn/args-spec ::fn/zipped-args ::fn/args] zargs))
+        var   (when zvar  (->forms [::fn/args-spec ::fn/zipped-args ::fn/variadic] zvar))]
+    `(s/cat ~@args ~@var))) ; NOTE: at least one
+
+(defmethod ->forms [::fn/args-spec ::fn/zipped-args ::fn/args]
+  [_ zipped-args]
+  (mapcat
+   (partial ->form [::fn/args-spec ::fn/zipped-args ::fn/arg])
+   zipped-args))
+
+(defmethod ->forms [::fn/args-spec ::fn/zipped-args ::fn/arg]
+  [_ zipped-arg]
+  (let [tag  (keyword
+              (if (vector? zipped-arg)
+                (gensym 'positional-argument)
+                (or
+                 (fn/arg->symbol (first zipped-arg))
+                 (gensym 'positional-argument))))
+        form (if (vector? zipped-arg)
+               (let [form (->form [::fn/args-spec ::fn/zipped-args] zipped-arg)]
+                 `(s/spec ~form))
+               (->form [::fn/args-spec ::fn/arg] (second zipped-arg)))]
+    (list tag form)))
+
+(defmethod ->form [::fn/args-spec ::fn/arg]
+  [_ arg]
+  (let [[tag _] (lib/conform-throw ::fn/arg arg)]
+    (case tag
+      ::fn/args (->form [::fn/args-spec ::fn/args] arg)
+      arg)))
+
+(defmethod ->forms [::fn/args-spec ::fn/zipped-args ::fn/variadic]
+  [_ zipped-arg]
+  )
+
+#_(((a int?) (b int?))
+   ((& &))
+   (((c int?) (d int?) (& &) ((e int?) (f int?) (& &) (gs int?)))))
+
+#_(((a int?) ([b1 b2 b3 :as bs] (s/spec (s/* int?))))
+   ((& &))
+   (((c int?) (d int?) (& &) ((e int?) (f int?) (& &) (gs int?)))))
+
+#_(((a int?) (bs [int? int? int?]))
+   ((& &))
+   (((c int?) (d int?) (& &) ((e int?) (f int?) (& &) (gs int?)))))
+
+#_(((a int?) ((b1 int?) (b2 int?) (b3 int?)))
+   ((& &))
+   (((c int?) (d int?) (& &) ((e int?) (f int?) (& &) (gs int?)))))
+
+#_(((a int?) ((b1 int?) (b2 int?) (b3 int?)))
+   ((& &))
+   ((cs int?)))
+
+(s/form (s/cat
+  :a int?
+  :fm.form/positional-argument8953
+  (s/spec
+   (s/cat
+    :b1 int?
+    :b2 int?
+    :b3 int?
+    )
+   )
+  ))
+
+(defmethod ->forms [::fn/args-spec ::fn/args]
+  [_ zipped-args]
+  (cond
+    (tagged? zipped-arg)
+    ((fn [[arg form]]
+       [(keyword (or (arg->symbol arg) (gensym 'positional-argument)))
+        (->form [,,,] form)])
+     zipped-arg)
+    (sequential? zipped-arg)
+    `(s/spec
+      ~(if )
+      )
+    (mapcat
+     (partial ->forms [::fn/args-spec ::fn/arg])
+     zipped-arg))
+  )
 
 (defmethod ->form [::fn/args-spec ::fn/arg]
   [tag arg]
@@ -682,17 +778,17 @@
       `(s/tuple ~@forms))
     arg))
 
-(defmethod ->forms [::fn/args-spec ::fn/variadic?]
-  [tag ctx]
+(defmethod ->forms [::fn/args-spec ::fn/variadic]
+  [_ ctx]
   (let [index (or (get ctx ::signature-index) 0)
         args  (get-in ctx [::metadata :fm/args index])]
     (when-let [arg (and (some #{'&} args) (last args))]
-      (let [[t _] (lib/conform-throw ::fn/variadic-arg arg)
-            form  (case t
-                    ::fn/arg                 (->form [::fn/args-spec ::fn/variadic? ::fn/arg] ctx) ; ALT: (conj tag t)
-                    ::fn/keyword-args-map    (->form [::fn/args-spec ::fn/variadic? ::fn/keyword-args-map] arg) ; ALT (conj tag t)
-                    ::lib/sequence-spec-form arg)
-            forms (vector form)] ; NOTE: `->forms` :: seq | nil
+      (let [[tag _] (lib/conform-throw ::fn/variadic-arg arg)
+            form    (case tag
+                      ::fn/arg                 (->form [::fn/args-spec ::fn/variadic? ::fn/arg] ctx)              ; ALT: (conj tag t)
+                      ::fn/keyword-args-map    (->form [::fn/args-spec ::fn/variadic? ::fn/keyword-args-map] arg) ; ALT (conj tag t)
+                      ::lib/sequence-spec-form arg)
+            forms   (list :var-tag form)] ; NOTE: `->forms` :: seq | nil
         forms))))
 
 (defmethod ->form [::fn/args-spec ::fn/variadic? ::fn/arg]
@@ -707,13 +803,11 @@
 
 (defmethod ->form [::fn/args-spec ::fn/variadic? ::fn/arg ::fn/arg+]
   [_ ctx]
-  (let [index   (or (get ctx ::signature-index) 0)
-        args    (get-in ctx [::metadata :fm/args index])
-        arg     (last args)
-        [tag _] (lib/conform-throw ::fn/arg arg)]
-    (case tag
-      ::fn/arg+ (->form [::fn/args-spec ::fn/variadic? ::fn/arg+] ctx)
-      `(s/* ~arg))))
+  [::fn/args-spec ::fn/variadic? ::fn/arg ::fn/arg+])
+
+#_'((a aform) (b bform))
+#_`(s/? (s/cat ~arg-sym ~arg ::rest (s/? (s/cat ,,,))))
+#_`(s/? (s/cat ~arg-sym ~arg ::rest ~@form))
 
 (defmethod ->form [::fn/args-spec ::fn/variadic? ::fn/keyword-args-map]
   [_ arg]

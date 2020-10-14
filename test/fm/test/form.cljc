@@ -225,6 +225,182 @@
     <<metadata)
    :fm/args)
 
+  (lib/zipv
+   vector?
+   '[a b & [c d & [e f & gs]]]
+   '[int? int? & [int? int? & [int? int? & int?]]])
+
+  (lib/zipv
+   vector?
+   '[a [b1 b2 b3 :as bs] & [c d & [e f & gs]]]
+   '[int? (s/spec (s/* int?)) & [int? int? & [int? int? & int?]]])
+
+  (lib/zipv
+   vector?
+   '[a bs & [c d & [e f & gs]]]
+   '[int? [int? int? int?] & [int? int? & [int? int? & int?]]])
+
+  (lib/zipv
+   vector?
+   '[a [b1 b2 b3] & [c d & [e f & gs]]]
+   '[int? [int? int? int?] & [int? int? & [int? int? & int?]]])
+
+  (lib/zipv
+   vector?
+   '[a [b1 b2 b3 & bs] & [c d & [e f & gs]]]
+   '[int? [int? int? int? & int?] & [int? int? & [int? int? & int?]]])
+
+  (lib/zipv
+   vector?
+   '[a [b1 b2 b3] & cs]
+   '[int? [int? int? int?] & int?])
+
+  (lib/zipv
+   vector?
+   '[a [b1 b2 b3] & cs]
+   '[int? [int? int? int?] & int?])
+
+  (lib/zipv
+   vector?
+   '[a b & [c d e & [f g & hs]]]
+   '[int? [int? int? int?] & [::s1 (fn [a] (pos? a)) [int? int? int? & int?] & [(s/and pos? even?) int? & int?]]])
+
+  (partition-by (hash-set '(& &)) *1)
+
+  (partition-by
+   #{'(& &)}
+   '[(a a?)])
+
+  (partition-by
+   #{'(& &)}
+   '[(& &) (a a?)])
+
+  '[a b (c d e f gs)]
+
+  (let [[a [b & cs :as cs2] & ds :as ds2] '[a [b c d] e f g]]
+    [a b cs ds cs2 ds2])
+
+  ((fn [a [b & cs :as cs2] & ds]
+     [a b cs ds cs2])
+   'a '[b c d] 'e 'f 'g)
+
+  ((fn [a b & [c d & [e f & gs]]]
+     [a b c d e f gs])
+   'a '[b1 b2 b3] 'c 'd 'e)
+
+  ((fn [a b & [c d & [e f & gs :as es] :as cs]]
+     [a b c d e f gs es cs])
+   'a 'b '[c1 c2 c3] 'd 'e 'f)
+
+  ((fn [a b & [& [c d & es :as cs] :as rest]]
+     [a b c d es cs rest])
+   'a 'b '[c1 c2 c3] 'd 'e 'f)
+
+  ((fn [a [b & bs] & [& [c d & es :as cs] :as rest]]
+     [a b bs c d es cs rest])
+   'a '[b1 b2 b3] '[c1 c2 c3] 'd 'e 'f)
+
+  ((fn [a [& bs :as bs2] & [& [c d & es :as cs] :as rest]]
+     [a bs bs2 c d es cs rest])
+   'a '[b1 b2 b3] '[c1 c2 c3] 'd 'e 'f)
+
+  (fn [a [& bs :as bs2] & [& [c d & es :as cs] :as rest] & f g]
+    [a bs bs2 c d es cs rest])
+
+  (lib/conform-explain
+   ::fn/args
+   '[a [& bs :as bs2] & [& [c d & es :as cs] :as rest]])
+  '[int? [& int?] & [& [int? int? & int?]]]
+
+   '[int? [& int?] & [int? [& int?] & int?]]
+   '[a [b1 b2 b3] c [d1 d2 d3 d4] e f g]
+
+   (lib/zipv
+    sequential?
+    '[a [& bs] & [c [& ds] & es]]
+    '[a? [& b?] & [c? [& d?] & e?]])
+   '[a (b1 b2 b3) c (d1 d2 d3 d4) e1 e2 e3]
+   (s/cat
+    :a a?
+    ::pos-arg_1
+    (s/spec
+     (s/cat
+      ::var-args
+      (s/? (s/* b?))))
+    ::var-arg
+    )
+
+   (lib/zipv
+    sequential?
+    '[a [& bs :as bs2] & [c [& ds :as ds2] & es :as cs2]]
+    '[a? [& b?] & [c? [& d?] & e?]]
+    )
+
+   (lib/conform-explain
+    ::args
+    '[a? [& b?] & [c? [& d?] & e?]])
+
+   (lib/zipv
+    sequential?
+    '[a [& bs :as bs2] & [c [& ds :as ds2] & es :as cs2]]
+    '[a? [& b?] & [c? [& d?] & e?]])
+
+   '[a bs2 cs2]
+
+   (lib/conform-explain
+    ::arg
+    :ns/kw)
+
+  (lib/conform-explain
+   ::arg
+   [:ns/kw])
+
+  (lib/conform-explain
+   ::arg
+   '[int? [& int?] & [& [int? int? & int?]]])
+
+  (lib/conform-explain
+   ::args
+   '[int? [& int?] & [& [int? int? & int?]]])
+
+  (lib/conform-explain
+   ::args
+   '[& int?])
+
+  (lib/conform-explain
+   ::args
+   '[int? & int?])
+
+  ((fn [& {:syms [a b c]}]
+     [a b c])
+   'a 'a 'b 'b 'c 'c)
+
+  ((fn [& {:strs [a b c]}]
+     [a b c])
+   "a" 'a "b" 'b "c" 'c)
+
+  '[a? [& b?] & [c? [& d?] & e?]]
+  (s/spec
+   (s/cat
+    :p1 a?
+    :p2
+    (s/spec
+     (s/cat
+      :variadic
+      (s/* b?)
+      #_
+      (s/?
+       (s/* b?))))
+    :variadic
+    (s/?
+       ;; NOTE: no `s/spec`
+     (s/cat
+      )
+     )
+
+    )
+   )
+
   (->metadata-form
    (->>
     {::ident      ::fn
@@ -704,40 +880,47 @@
           (s/? any?))))))))
    '[1 2 (3 4 5 a)])
 
-  (lib/conform-explain
-   (s/tuple int? int? (s/cat :c (s/? int?) :d (s/? int?) :e (s/? int?)))
-   '[1 2 [3 4 5 6]])
-
-  (lib/conform-explain
-   (s/tuple int? int? (s/cat :c (s/? int?) :d (s/? int?) :e (s/? int?)))
-   '[1 2 nil])
-
-  (lib/conform-explain
-   (s/tuple int? int? (s/cat :c (s/? even?) :d (s/? int?) :e (s/? int?)))
-   '[1 2 []])
-
-  (lib/conform-explain
-   (s/tuple int? int? (s/cat :c (s/cat :c (s/? even?)) :d (s/? int?) :e (s/? int?)))
-   '[1 2 [2]])
-
-  (lib/conform-explain
-   (s/tuple int? int? (s/cat :c (s/? even?) :d (s/? int?) :e (s/? int?)))
-   '[1 2 [3]])
-
-  (lib/conform-explain
-   (s/tuple int? int? (s/cat :c (s/? even?) :d (s/? int?) :e (s/? int?)))
-   '[1 2 [3 4 5]])
-
-  (lib/conform-explain
-   (s/tuple int? int? (s/cat :c (s/? even?) :d (s/? int?) :e (s/? int?)))
-   '[1 2 [3 4 5]])
-
-  (lib/conform-explain
-   (s/cat :a int? :b int? (s/spec (s/cat :c (s/? even?) :d (s/? int?) :e (s/? int?))))
-
   (sequential?)
   (::fn/arg+ ,,,) #_=> `(s/? (s/cat ,,,))
   (::fn/arg ,,,) #_=> `(s/* ,,,)
+
+  (->form
+   ::fn
+   (->context
+    {::ident ::fn
+     ::ns    *ns*
+     ::definition
+     '(^{:fm/doc             "fn1"
+         :fm/args            [int? int? & [int? int? int?]]
+         :fm/ret             int?
+         :fm/rel             (fn [{args :args ret :ret}]
+                               (>= ret (apply + args)))
+         :fm/trace           #{:fm/args :fm/ret}
+         :fm/conform         #{:fm/args}
+         :fm.anomaly/handler (fn [a] a)}
+       [a b & [c d e :as cs]]
+       (apply + a b cs))}))
+
+  (let [[a b & [c d e & [f g]]] '[a b c d e f g]]
+    [a b c d e f g])
+
+  ((fn [a b & [c d e & [f g :as fs] :as cs]]
+     [a b c cs d e f g fs])
+   'a 'b 'c 'd 'e 'f 'g)
+
+  ((fn [a b & [c d {:keys [e]} & [f g :as fs] :as cs]]
+     [a b c cs d e f g fs])
+   'a 'b 'c 'd '{:e e} 'f 'g)
+
+  ((fn [a b & [c d {:keys [e]} & [f g :as fs] :as cs]]
+     [a b c cs d e f g fs])
+   'a)
+
+  ((fn [a b & [c d {:keys [e]} & [f g :as fs] :as cs]]
+     [a b c cs d e f g fs])
+   'a nil)
+
+  '[int? int? & [int? int? ::m1 & int?]]
 
   (def trace-idents #{:fm/args :fm/ret})
   (def conform-idents #{:fm/args})

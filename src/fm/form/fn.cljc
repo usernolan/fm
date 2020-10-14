@@ -18,8 +18,8 @@
 
 (s/def ::definition
   (s/cat
-   ::simple-symbol? (s/? simple-symbol?)
-   ::rest
+   :simple-symbol? (s/? simple-symbol?)
+   :rest ; ALT: `:fm.definition/rest`
    (s/alt
     ::signature  ::signature
     ::signatures ::signatures)))
@@ -30,15 +30,12 @@
    ::lib/arg-symbol ::lib/arg-symbol
    ::lib/spec-form ::lib/spec-form
    ::lib/fn-form ::lib/fn-form
-   ::arg+ (s/+ ::arg))) ; NOTE: disallow [,,, [] ,,,]
+   ::args ::args))
 
   ;; NOTE: keyword arguments are poorly named in Clojure's case
-(s/def ::-keyword
-  (some-fn keyword? symbol? string?))
-
 (s/def ::keyword-args-map
   (s/and
-   (s/map-of ::-keyword ::arg)
+   (s/map-of (some-fn keyword? symbol? string?) ::arg)
    seq)) ; NOTE: disallow [,,, & {}]
 
 (s/def ::variadic-arg
@@ -50,13 +47,9 @@
 (s/def ::args
   (s/&
    (s/cat
-    ::arg* (s/* ::arg)
-    ::variadic?
-    (s/?
-     (s/cat
-      :& #{'&}
-      ::variadic-arg ::variadic-arg)))
-   seq)) ; NOTE: disallow ^{:fm/args []}
+    ::args (s/* ::arg)
+    ::variadic (s/? (s/cat :& #{'&} ::variadic-arg ::variadic-arg)))
+   seq)) ; NOTE: disallow {:fm/args []}
 
 (s/def ::doc string?)
 (s/def ::ret any?)     ; fn, spec
@@ -74,5 +67,5 @@
     :else         arg))
 
 (defn zipv-args
-  ([argv]      (lib/zipvf vector? (fn [a] (if (= a '&) '& `any?)) argv))
-  ([argv args] (lib/zipvf vector? (fn [_ a] a) argv args)))
+  [argv args]
+  (lib/zipvf vector? (fn [_ a] a) argv args))
