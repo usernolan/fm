@@ -6,29 +6,21 @@
    [fm.form.fn :as fn]
    [fm.form.lib :as lib]))
 
-  ;; TODO: refactor into `context`?
-(def ^:dynamic *positional-argument-prefix-symbol*
-  `positional-argument)
+  ;; TODO: runtime `*ignore*`, `s/*compile-asserts*`, etc.; config
+  ;; TODO: "cut elimination"
 
-(def ^:dynamic *variadic-argument-prefix-symbol*
-  `variadic-argument)
+(def ^:dynamic *trace*
+  false)
 
-(def ^:dynamic *signature-prefix-symbol*
-  `signature)
+(def ^:dynamic *conform*
+  false)
 
+  ;; ALT: form?, runtime?
 (def ^:dynamic *default-anomaly-handler-symbol*
   `identity)
 
-(def ^:dynamic *trace?*
-  false)
-
 (def ^:dynamic *default-trace-fn-symbol*
   `prn)
-
-(def ^:dynamic *conform?*
-  false)
-
-  ;; TODO: `s/*compile-asserts*` etc.
 
 (s/def :fm/ident
   qualified-keyword?)
@@ -117,7 +109,6 @@
                  :else                (vec (cons outer inners)))]
     form))
 
-  ;; TODO: refactor `->form`, `->metadata`; [::,,,metadata k]
 (defmulti  ->metadata-form (fn [tag _ctx] tag))
 (defmethod ->metadata-form :default
   [tag ctx]
@@ -276,7 +267,7 @@
   (let [outer    (get-in ctx [::fn/outer-metadata :fm/conform])
         inners   (map :fm/conform (get ctx ::fn/inner-metadatas))
         _        (map
-                  (partial lib/conform-throw ::fn/conform)
+                  (partial lib/conform-throw ::fn/conform) ; TODO: generalize
                   (remove nil? (cons outer inners)))
         conforms (map (fn [inner] (or inner outer)) inners)]
     (vec conforms)))
@@ -477,7 +468,7 @@
            (or
             (get-in ctx [::bindings k 0 ::symbol])
             forms))]))
-   (get ctx ::metadata)))
+   (get ctx ::metadata))) ; TODO: simplify
 
 (defmethod ->form ::fn/body
   [_ ctx]
@@ -517,7 +508,7 @@
 (defn ->trace?
   [ctx]
   (let [index (or (get ctx ::signature-index) 0)
-        form  (or (get-in ctx [::bindings :fm/trace index ::form]) *trace?*)]
+        form  (or (get-in ctx [::bindings :fm/trace index ::form]) *trace*)]
     (cond
       (set? form) form
       (not form)  (constantly false)
@@ -532,7 +523,7 @@
       (let [trace (->form ::fn/trace ctx)
             ident (->form ::fn/ident ctx)
             args  (->form ::fn/args ctx)]
-        [`(~trace {:fm/ident ident :fm.trace/args args})]))))
+        [(list trace {:fm/ident ident :fm.trace/args args})])))) ; NOTE: splice
 
 (defmulti  ->spec? (fn [tag _ctx] tag))
 (defmethod ->spec? :fm/args
@@ -563,7 +554,7 @@
 (defn ->conform?
   [ctx]
   (let [index (or (get ctx ::signature-index) 0)
-        form  (or (get-in ctx [::bindings :fm/conform index ::form]) *conform?*)]
+        form  (or (get-in ctx [::bindings :fm/conform index ::form]) *conform*)]
     (cond
       (set? form) form
       (not form)  (constantly false)
@@ -577,7 +568,7 @@
       (let [trace (->form ::fn/trace ctx)
             ident (->form ::fn/ident ctx)
             args  (->form ::fn/conformed-args ctx)]
-        [`(~trace {:fm/ident ident :fm.trace/conformed-args args})]))))
+        [(list trace {:fm/ident ident :fm.trace/conformed-args args})]))))
 
 (defmethod ->form ::fn/args-anomaly?
   [_ ctx]
@@ -591,7 +582,7 @@
         args      (->form ::fn/args ctx)
         conform?  (->conform? ctx)
         body      (if (conform? :fm/args)
-                    (->form ::fn/conformed-args-binding)
+                    (->form ::fn/conformed-args-binding ctx)
                     (->form ::fn/ret-binding ctx))]
     `(let [~@bindings]
        ~@trace
@@ -614,13 +605,12 @@
 (defmethod ->form ::fn/ret-binding
   [_ ctx]
   ::fn/ret-binding
-  #_
-  (let []
-    `(let [~@bindings]
-       ~@trace
-       (if (anomaly/anomalous? ~ret)
-         (~handler ~ret)
-         ~body))))
+  #_(let []
+      `(let [~@bindings]
+         ~@trace
+         (if (anomaly/anomalous? ~ret)
+           (~handler ~ret)
+           ~body))))
 
 (defmethod ->form ::fn/handler
   [_ ctx]
@@ -639,7 +629,10 @@
   [_ ctx]
   (or
    (get-in ctx [::bindings ::fn/args ::symbol])
-   (mapv fn/arg->symbol (->form ::fn/argv ctx))))
+   (let [argv (->form ::fn/argv ctx)
+         xf   (comp (remove #{'&}) (map fn/arg->symbol))
+         form (into (vector) xf argv)]
+     form)))
 
 (defmethod ->form ::fn/trace
   [_ ctx]
@@ -695,10 +688,10 @@
     (when-let [arg (and (some #{'&} args) (last args))]
       (let [[tag _] (lib/conform-throw ::fn/variadic-arg arg)
             form    (case tag
-                      ::fn/arg                 (->form [::fn/args-spec ::fn/arg] arg)
+                      ::fn/arg                 `(s/* (->form [::fn/args-spec ::fn/arg] arg))
                       ::fn/keyword-args-map    `(s/* (s/alt ~@(mapcat (juxt (comp keyword key) val) arg)))
                       ::lib/sequence-spec-form arg)
-            forms   (list form)] ; NOTE: `->forms` :: seq | nil
+            forms   (vector form)] ; NOTE: `->forms` :: seq | nil
         forms))))
 
 (defmethod ->form ::fn/conformed-args
@@ -709,136 +702,35 @@
          args      (->form ::fn/args ctx)]
      `(s/conform ~args-spec ~args))))
 
-(defmethod ->form ::fn/var-symbol
-  [_ ctx]
-  (with-meta
-    (->form ::fn/symbol ctx)
-    (->form ::fn/var-metadata ctx)))
+#_(defmethod ->form ::fn/var-symbol
+    [_ ctx]
+    (with-meta
+      (->form ::fn/symbol ctx)
+      (->form ::fn/var-metadata ctx)))
 
-(defmulti ->var-metadata-form)
+#_(defmethod ->form ::fn/var-metadata
+    [_ ctx]
+    (into
+     (hash-map)
+     (map (fn [k] [k (->form [::fn/var-metadata k] ctx)]))
+     (hash-set :fm/doc :fm/arglists)))
 
-(defmethod ->form ::fn/var-metadata
-  [_ ctx]
-  (into
-   (hash-map)
-   (map (fn [k] [k (->form [::fn/var-metadata k] ctx)]))
-   (hash-set :fm/doc :fm/arglists)))
+#_(defmethod ->form ::sequent/body [_ ctx])
 
-(defmethod ->form ::sequent/body [_ ctx])
+#_(defn fm
+    [parameters]
+    (let [params (assoc parameters ::ident ::fn)
+          ctx    (->context params)
+          form   (->form ::fn ctx)]
+      form))
 
-(defn fm
-  [parameters]
-  (let [params (assoc parameters ::ident ::fn)
-        ctx    (->context params)
-        form   (->form ::fn ctx)]
-    form))
-
-(defn defm
-  [parameters]
-  (let [params (assoc parameters ::ident ::fn)
-        ctx    (->context params)
-        sym    (->form ::fn/var-symbol ctx)
-        form   (->form ::fn ctx)]
-    `(def ~sym ~form)))
-
-
-(s/def ::metadata
-  (s/keys
-   :req
-   [:fm/ident]
-   :opt
-   [:fm/doc              ; '(",,," nil ",,,") | ""
-    :fm/arglists         ; '([a] [a b] [a b & cs]) | '([a])
-    :fm/args             ; '([int? int? & int?]) | '([int? int? & int?] [pos?] nil nil) | '([int?])
-                         ; '([int?] [int? int?] [int? int? & int?])
-    :fm/ret              ; '(int? neg? even?)
-    :fm/rel              ; '() ??? '(s/,,,)
-    :fm/trace            ; '(true) | '(false true false)
-    :fm/conform          ; '(true) | '(#{}) | '(#{} true false) | ()
-    :fm.anomaly/handler  ; '(h) | '(h f1 f2) | '()
-    :fm.anomaly/handler? ; => binding *ignore* (conj (:fm/ignore ,,,) :fm.anomaly/received?)
-                         ;
-    :fm/sequent          ; ,,, ; ALT: :fm.sequent/ident
-    :fm.sequent/left     ; ,,,
-    :fm.sequent/right    ; ,,,
-    :fm.sequent/nonse    ; ,,,
-    :fm/ignore           ; ,,,
-    ]))
-
-(s/def ::metadata
-  (s/keys
-   :req
-   [:fm/ident]           ; :some.ns1/fm1
-   :opt
-   [:fm/doc              ; '(",,," nil ",,,") | ""
-    :fm/arglists         ; '([a])
-    :fm/args             ; '([int?])
-    :fm/ret              ; '(int?)
-    :fm/rel              ; '(#function[,,,]) '???
-    :fm/trace            ; '(true) | '(#{,,,})
-    :fm/conform          ; '(true) | '(#{,,,})
-    :fm.anomaly/handler  ; '(#function[,,,]) '???
-    :fm.anomaly/handler? ; '(true)
-    ]))
-
-(s/def ::metadata
-  (s/keys
-   :req
-   [:fm/ident]           ; :some.ns1/fm1
-   :opt
-   [:fm/doc              ; '(",,," nil ",,,") | ""
-    :fm/arglists         ; '([a])
-    :fm/args             ; '([int?])
-    :fm/ret              ; '([int?])
-    :fm/rel              ; '(#function[,,,]) '???
-    :fm/trace            ; '(true) | '(#{,,,})
-    :fm/conform          ; '(true) | '(#{,,,})
-    :fm.anomaly/handler  ; '(#function[,,,]) '???
-    :fm.anomaly/handler? ; '(true)
-    ;;
-    :fm.sequent/ident    ; :fm.sequent/merge
-    :fm.sequent/left     ; '([int?])
-    :fm.sequent/right    ; '([int?])
-    ]))
-
-(s/def ::metadata
-  (s/keys
-   :req
-   [:fm/ident]           ; :some.ns1/fm1
-   :opt
-   [:fm/doc              ; '(",,," nil ",,,") | ""
-    :fm/arglists         ; '([a] [a b] [a b & cs])
-    :fm/args             ; '([int?] [int? int?] [int? int? & int?])
-    :fm/ret              ; '([int?] [int?] [int?])
-    :fm/rel              ; '(#function[,,,] #fun ,,,,) '???
-    :fm/trace            ; '(true true true) | '(#{,,,})
-    :fm/conform          ; '(true false true) | '(#{,,,})
-    :fm.anomaly/handler  ; '(#function[,,,]) '???
-    :fm.anomaly/handler? ; '(true)
-    ]))
-
-:fm.anomaly/handler? ; => binding *fm/ignore* (conj (:fm/ignore ,,,) :fm.anomaly/received?)
-
-(s/def ::metadata
-  (s/keys
-   :req
-   [:fm/ident]
-   :opt
-   [:fm/doc              ; '(",,," nil ",,,") | ""
-    :fm/arglists         ; '([a] [a b] [a b & cs]) | '([a])
-    :fm/args             ; '([int? int? & int?]) | '([int? int? & int?] [pos?] nil nil) | '([int?])
-                                        ; '([int?] [int? int?] [int? int? & int?])
-    :fm/ret              ; '(int? neg? even?)
-    :fm/rel              ; '() ??? '(s/,,,)
-    :fm/trace            ; '(true) | '(false true false)
-    :fm/conform          ; '(true) | '(#{}) | '(#{} true false) | ()
-    :fm.anomaly/handler  ; '(h) | '(h f1 f2) | '()
-    :fm.anomaly/handler? ; '(true false true)
-    :fm.sequent/ident    ; :fm.sequent/merge
-    :fm.sequent/context  ; :fm.sequent/associative positional optional? ,,,
-    ]))
-
-  ;; NOTE: cut elimination, runtime `*ignore*`
+#_(defn defm
+    [parameters]
+    (let [params (assoc parameters ::ident ::fn)
+          ctx    (->context params)
+          sym    (->form ::fn/var-symbol ctx)
+          form   (->form ::fn ctx)]
+      `(def ~sym ~form)))
 
 (comment
 
@@ -878,6 +770,27 @@
   ((comp2
     f3
     f4) {:a 1 :b 2 :c 3})
+
+  ;;;
+  )
+
+(comment
+
+  (fm/,,,
+   {:fm/args            [[int?]
+                         [int? & int?]]
+    :fm/ret             [[int?]]
+    :fm/trace           (fn [t] ,,,)
+    :fm.anomaly/handler (fn [a] ,,,)}
+   f1)
+
+  (fm/,,,
+   {:fm/f               f1
+    :fm/args            [[int?]
+                         [int? & int?]]
+    :fm/ret             [[int?]]
+    :fm/trace           (fn [t] ,,,)
+    :fm.anomaly/handler (fn [a] ,,,)})
 
   ;;;
   )

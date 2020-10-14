@@ -435,7 +435,7 @@
          :fm/ret             int?
          :fm/rel             (fn [{args :args ret :ret}]
                                (>= ret (apply + args)))
-         :fm/trace           #{:fm/args :fm/ret :fm/conformed-args}
+         :fm/trace           #{:fm/args :fm/ret}
          :fm/conform         #{:fm/args}
          :fm.anomaly/handler (fn [a] a)}
        ([a] (inc a))
@@ -454,13 +454,256 @@
          :fm/ret             int?
          :fm/rel             (fn [{args :args ret :ret}]
                                (>= ret (apply + args)))
-         :fm/trace           #{:fm/args :fm/ret :fm/conformed-args}
+         :fm/trace           #{:fm/args :fm/ret}
          :fm/conform         #{:fm/args}
          :fm.anomaly/handler (fn [a] a)}
        ([] 1)
        (^{:fm/trace #{}
           :fm/ret   even?}
         [a b] (+ a b)))}))
+
+  (->form
+   ::fn
+   (->context
+    {::ident ::fn
+     ::ns    *ns*
+     ::definition
+     '(^{:fm/doc             "fn1"
+         :fm/args            [int? int? & int?]
+         :fm/ret             int?
+         :fm/rel             (fn [{args :args ret :ret}]
+                               (>= ret (apply + args)))
+         :fm/trace           #{:fm/args :fm/ret}
+         :fm/conform         #{:fm/args}
+         :fm.anomaly/handler (fn [a] a)}
+       (^{:fm/trace #{}
+          :fm/ret   even?}
+        [a b & cs] (apply + a b cs)))}))
+
+  '[int? int? & [int? int? int?]]
+  (let [[a b & [c d e]] '[a b [c d e] [d e] [e]]]
+    [a b c d e])
+
+  (let [[a b & [c d e :as cs]] '[a b]]
+    [a b cs])
+
+  (lib/conform-explain
+   (s/tuple int? int? (s/? (s/cat :c int? :d int? :e int?)))
+   '[1 2 nil])
+
+  (let [[a b & [c d e :as cs]] '[a b nil]]
+    [a b cs])
+
+  (lib/conform-explain
+   (s/tuple int? int? (s/? (s/cat :c int? :d int? :e int?)))
+   '[1 2 [nil]]) ; NOTE: should fail
+
+  (let [[a b & [c d e :as cs]] '[a b c]]
+    [a b cs])
+
+  (lib/conform-explain
+   (s/tuple int? int? (s/? (s/cat :c int? :d int? :e int?)))
+   '[1 2 [3]]) ; NOTE: shouldn't fail?
+
+  (lib/conform-explain
+   (s/tuple int? int? (s/cat :c int? :d int? :e int?))
+   '[1 2 [3 4 5]])
+
+  (lib/conform-explain
+   (s/tuple int? int? (s/? (s/cat :c int? :d int? :e int?)))
+   '[1 2 []])
+
+  (lib/conform-explain
+   (s/tuple int? int? (s/? (s/cat :c int? :d int? :e int?)))
+   '[1 2 [3 4 5]])
+
+  (let [[a b & [c d e :as cs]] '[a b c d]]
+    [a b c d e cs])
+
+  (lib/conform-explain
+   (s/tuple int? int? (s/? (s/cat :c int? :rest (s/? (s/cat :d int? :rest (s/? (s/cat :e int? :rest any?)))))))
+   '[1 2 [3 4 5 6]]) ; NOTE: shouldn't fail?
+
+  (lib/conform-explain
+   (s/tuple
+    int?
+    int?
+    (s/?
+     (s/cat
+      :c int?
+      :rest
+      (s/?
+       (s/cat
+        :d int?
+        :rest
+        (s/?
+         (s/cat
+          :e int?
+          :rest any?)))))))
+   '[1 2 nil])
+
+  (lib/conform-explain
+   (s/tuple
+    int?
+    int?
+    (s/?
+     (s/cat
+      :c int?
+      :rest
+      (s/?
+       (s/cat
+        :d int?
+        :rest
+        (s/?
+         (s/cat
+          :e int?
+          :rest any?)))))))
+   '[1 2 []])
+
+  (lib/conform-explain
+   (s/tuple
+    int?
+    int?
+    (s/?
+     (s/cat
+      :c int?
+      :rest
+      (s/?
+       (s/cat
+        :d int?
+        :rest
+        (s/?
+         (s/cat
+          :e int?
+          :rest any?)))))))
+   '[1 2 ()])
+
+  (lib/conform-explain
+   (s/tuple
+    int?
+    int?
+    (s/?
+     (s/cat
+      :c int?
+      :rest
+      (s/?
+       (s/cat
+        :d int?
+        :rest
+        (s/?
+         (s/cat
+          :e int?
+          :rest any?)))))))
+   '[1 2 (3)])
+
+  (lib/conform-explain
+   (s/tuple
+    int?
+    int?
+    (s/?
+     (s/cat
+      :c int?
+      :rest
+      (s/?
+       (s/cat
+        :d int?
+        :rest
+        (s/?
+         (s/cat
+          :e int?
+          :rest any?)))))))
+   '[1 2 (3 4)])
+
+  (lib/conform-explain
+   (s/tuple
+    int?
+    int?
+    (s/?
+     (s/cat
+      :c int?
+      :rest
+      (s/?
+       (s/cat
+        :d int?
+        :rest
+        (s/?
+         (s/cat
+          :e int?
+          :rest (s/? any?))))))))
+   '[1 2 (3 4 5)])
+
+  (lib/conform-explain
+   (s/tuple
+    int?
+    int?
+    (s/?
+     (s/cat
+      :c int?
+      :rest
+      (s/?
+       (s/cat
+        :d int?
+        :rest
+        (s/?
+         (s/cat
+          :e int?
+          :rest
+          (s/? any?))))))))
+   '[1 2 (3 4 5 6)])
+
+  (lib/conform-explain
+   (s/tuple
+    int?
+    int?
+    (s/?
+     (s/cat
+      :c int?
+      :rest
+      (s/?
+       (s/cat
+        :d int?
+        :rest
+        (s/?
+         (s/cat
+          :e int?
+          :rest
+          (s/? any?))))))))
+   '[1 2 (3 4 5 a)])
+
+  (lib/conform-explain
+   (s/tuple int? int? (s/cat :c (s/? int?) :d (s/? int?) :e (s/? int?)))
+   '[1 2 [3 4 5 6]])
+
+  (lib/conform-explain
+   (s/tuple int? int? (s/cat :c (s/? int?) :d (s/? int?) :e (s/? int?)))
+   '[1 2 nil])
+
+  (lib/conform-explain
+   (s/tuple int? int? (s/cat :c (s/? even?) :d (s/? int?) :e (s/? int?)))
+   '[1 2 []])
+
+  (lib/conform-explain
+   (s/tuple int? int? (s/cat :c (s/cat :c (s/? even?)) :d (s/? int?) :e (s/? int?)))
+   '[1 2 [2]])
+
+  (lib/conform-explain
+   (s/tuple int? int? (s/cat :c (s/? even?) :d (s/? int?) :e (s/? int?)))
+   '[1 2 [3]])
+
+  (lib/conform-explain
+   (s/tuple int? int? (s/cat :c (s/? even?) :d (s/? int?) :e (s/? int?)))
+   '[1 2 [3 4 5]])
+
+  (lib/conform-explain
+   (s/tuple int? int? (s/cat :c (s/? even?) :d (s/? int?) :e (s/? int?)))
+   '[1 2 [3 4 5]])
+
+  (lib/conform-explain
+   (s/cat :a int? :b int? (s/spec (s/cat :c (s/? even?) :d (s/? int?) :e (s/? int?))))
+
+  (sequential?)
+  (::fn/arg+ ,,,) #_=> `(s/? (s/cat ,,,))
+  (::fn/arg ,,,) #_=> `(s/* ,,,)
 
   (def trace-idents #{:fm/args :fm/ret})
   (def conform-idents #{:fm/args})
@@ -525,13 +768,6 @@
   (->form
    ::fn/context-bindings
    {::bindings bindings1})
-
-  (defmulti  multi1 (fn [tag _arg] tag))
-  (defmethod multi1 [::args ::arg]
-    [tag arg]
-    (if (= arg ::a)
-      (recur tag ::b)
-      arg))
 
   ;;;
   )
