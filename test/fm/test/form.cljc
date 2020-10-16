@@ -260,10 +260,82 @@
    '[a [b1 b2 b3] & cs]
    '[int? [int? int? int?] & int?])
 
+  (defn f1
+    [a]
+    (let [[t _] (lib/conform-throw ::fn/arg a)]
+      (case t
+        ::fn/args `(s/spec (s/cat ~@(map f1 a)))
+        a)))
+
+  (partition-by
+   (hash-set '&)
+   '[int?
+     [int? int? int?]
+     & [::s1
+        (fn [a] (pos? a))
+        [int? int? int?
+         & int?]
+        & [(s/and pos? even?)
+           int?
+           & int?]]])
+
+  (lib/conform-explain
+   (s/cat
+    :0 int?
+    :1 int?
+    :&
+    (s/?
+     (s/cat
+      :0 int?
+      :& (s/* int?))))
+   '[1 2 a b])
+
+  (lib/conform-explain
+   (s/cat
+    :0 int?
+    :1 int?
+    :&
+    (s/spec
+     (s/?
+      (s/cat
+       :0 int?
+       :rest
+       (s/?
+        (s/cat
+         :1 int?
+         :rest
+         (s/?
+          (s/cat
+           :2 int?
+           :rest (s/? any?)))))))))
+   '[1 2 (3 4 5 b)])
+
+  (fn [a b & cs]
+    (let [args14137 (into [a b] cs)]))
+
   (lib/zipv
    vector?
    '[a b & [c d e & [f g & hs]]]
    '[int? [int? int? int?] & [::s1 (fn [a] (pos? a)) [int? int? int? & int?] & [(s/and pos? even?) int? & int?]]])
+
+  (crit/bench
+   (count
+    (into
+     (vector)
+     (comp
+      (map identity)
+      (map-indexed (fn [i a] [i a]))
+      (mapcat identity))
+     '[int? [int? int? int?] & [::s1 (fn [a] (pos? a)) [int? int? int? & int?] & [(s/and pos? even?) int? & int?]]])))
+
+  (crit/bench
+   (count
+    (sequence
+     (comp
+      (map identity)
+      (map-indexed (fn [i a] [i a]))
+      (mapcat identity))
+     '[int? [int? int? int?] & [::s1 (fn [a] (pos? a)) [int? int? int? & int?] & [(s/and pos? even?) int? & int?]]])))
 
   (partition-by (hash-set '(& &)) *1)
 
@@ -753,6 +825,25 @@
    '[1 2 nil])
 
   (lib/conform-explain
+   (s/cat
+    :0 int?
+    :1 int?
+    :&
+    (s/?
+     (s/cat
+      :0 int?
+      :rest
+      (s/?
+       (s/cat
+        :1 int?
+        :rest
+        (s/?
+         (s/cat
+          :2 int?
+          :rest any?)))))))
+   '[1 2 3])
+
+  (lib/conform-explain
    (s/tuple
     int?
     int?
@@ -848,15 +939,15 @@
     int?
     (s/?
      (s/cat
-      :c int?
+      :0 int?
       :rest
       (s/?
        (s/cat
-        :d int?
+        :1 int?
         :rest
         (s/?
          (s/cat
-          :e int?
+          :2 int?
           :rest
           (s/? any?))))))))
    '[1 2 (3 4 5 6)])

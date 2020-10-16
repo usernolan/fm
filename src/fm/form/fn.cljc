@@ -69,3 +69,5 @@
 (defn zipv-args
   [argv args]
   (lib/zipvf vector? (fn [_ a] a) argv args))
+
+(lib/zipvf vector? (fn [a] (vector a )) argv)

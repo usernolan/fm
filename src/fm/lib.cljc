@@ -22,6 +22,16 @@
        (apply f ys)))
    xs))
 
+(defn zipf-indexed
+  [recur? f & xs]
+  (apply
+   map
+   (fn [& ys]
+     (if (every? recur? ys)
+       (apply zipf recur? f ys)
+       (apply f ys)))
+   xs))
+
 (defn zipv
   [recur? & xs]
   (apply
