@@ -8,7 +8,7 @@
 
 (comment
 
-  (def last-tag-atom (atom nil))
+  (def trace-atom (atom []))
 
   ;;;
   )
@@ -39,8 +39,13 @@
 
 #_(s/def :fm/doc
     (s/or
-     ::fm/signature  string?
-     ::fm/signatures (s/coll-of string?)))
+     :fm/definition string?
+     :fm/context (s/coll-of string?)))
+
+#_(s/def :fm/args
+    (s/or
+     :fm/definition ::fn/args
+     :fm/context (s/coll-of ::fn/args)))
 
 (s/def ::metadata
   (s/keys
@@ -60,8 +65,9 @@
     :fm.sequent/context]))
 
 (s/def ::bindings any?
-  #_{:fm/k1 [{::symbol ::form}]
-     :fm/k2 [{::symbol ::form}]})
+  #_{:fm/tag1 [{::symbol ,,, ::form ,,,} ,,,]
+     :fm/tag2 [{::symbol ,,, ::form ,,,} ,,,]
+     ::tag1   {::symbol ,,, ::form ,,,}})
 
 (s/def ::signature-index int?)
 
@@ -119,7 +125,7 @@
                  :else                (vec (cons outer inners)))]
     form))
 
-(defmulti  ->metadata-form (fn [tag _ctx] (reset! last-tag-atom tag) tag))
+(defmulti  ->metadata-form (fn [tag ctx] (swap! trace-atom conj tag) tag))
 (defmethod ->metadata-form :default
   [tag ctx]
   (->default-metadata-form tag ctx)) ; NOTE: keep all metadata
@@ -370,7 +376,7 @@
 (defmulti  ->metadata-bindings ::ident)
 (defmethod ->metadata-bindings ::fn
   [ctx]
-  (reset! last-tag-atom "->metadata-bindings")
+  (swap! trace-atom conj "->metadata-bindings")
   (let [metadata (get ctx ::metadata)
         xf       (map (fn [[k form]]
                         [k (if (sequential? form)
@@ -410,8 +416,8 @@
    <<metadata
    <<bindings))
 
-(defmulti  ->forms (fn [tag _ctx] (reset! last-tag-atom tag) tag))
-(defmulti  ->form  (fn [tag _ctx] (reset! last-tag-atom tag) tag))
+(defmulti  ->forms (fn [tag _ctx] (swap! trace-atom conj tag) tag))
+(defmulti  ->form  (fn [tag _ctx] (swap! trace-atom conj tag) tag))
 (defmethod ->form ::fn
   [_ ctx]
   (let [bindings   (->forms ::fn/bindings ctx)
@@ -511,7 +517,7 @@
 
 (defn bind
   [ctx tags]
-  (reset! last-tag-atom ["bind" tags])
+  (swap! trace-atom conj ["bind" tags])
   (reduce
    (fn [ctx tag]
      (let [binding {::symbol (gensym (name tag)) ::form (->form tag ctx)}]
@@ -522,7 +528,7 @@
   ;; TODO: refactor `->form`?
 (defn ->bindings
   [ctx tags]
-  (reset! last-tag-atom ["->bindings" tags])
+  (swap! trace-atom conj ["->bindings" tags])
   (mapcat
    (fn [tag]
      [(get-in ctx [::bindings tag ::symbol])
@@ -531,7 +537,7 @@
 
 (defn ->trace?
   [ctx]
-  (reset! last-tag-atom "->trace?")
+  (swap! trace-atom conj "->trace?")
   (let [index (or (get ctx ::signature-index) 0)
         form  (or (get-in ctx [::bindings :fm/trace index ::form]) *trace*)]
     (cond
@@ -540,7 +546,7 @@
       :else       (constantly true))))
 
   ;; TODO: refactor `->form`?
-(defmulti  ->trace (fn [tag _ctx] (reset! last-tag-atom ["->trace" tag]) tag))
+(defmulti  ->trace (fn [tag _ctx] (swap! trace-atom conj ["->trace" tag]) tag))
 (defmethod ->trace :fm.trace/args
   [_ ctx]
   (let [trace? (->trace? ctx)]
@@ -550,7 +556,14 @@
             args  (->form ::fn/args ctx)]
         [(list trace {:fm/ident ident :fm.trace/args args})])))) ; NOTE: splice
 
-(defmulti  ->spec? (fn [tag _ctx] (reset! last-tag-atom ["->spec?" tag]) tag))
+(defmulti  ->handler? (fn [ctx] (swap! trace-atom conj "->handler?") :default))
+(defmethod ->handler? :default
+  [ctx]
+  (let [index    (get ctx ::signature-index)
+        handler? (get-in ctx [::metadata :fm/handler? index])]
+    handler?))
+
+(defmulti  ->spec? (fn [tag _ctx] (swap! trace-atom conj ["->spec?" tag]) tag))
 (defmethod ->spec? :fm/args
   [_ ctx]
   (let [index (or (get ctx ::signature-index) 0)]
@@ -561,24 +574,32 @@
   (let [ctx      (bind ctx [::fn/args])
         bindings (->bindings ctx [::fn/args])
         trace    (->trace :fm.trace/args ctx)
-        args     (->form ::fn/args ctx)
-        handler  (->form ::fn/handler ctx)
-        ident    (->form ::fn/ident ctx)
-        body     (if (->spec? :fm/args ctx)
-                   (->form ::fn/args-anomaly? ctx)
-                   (->form ::fn/ret-binding ctx))]
+        body     (cond
+                   (->handler? ctx)       (->form ::fn/received-anomaly? ctx)
+                   (->spec? :fm/args ctx) (->form ::fn/args-anomaly? ctx)
+                   :else                  (->form ::fn/ret-binding ctx))]
     `(let [~@bindings]
        ~@trace
-       (if (anomaly/anomalous? ~args)
-         (~handler
-          {:fm/ident         ~ident
-           :fm.anomaly/ident :fm.anomaly/received
-           :fm.anomaly/args  ~args})
-         ~body))))
+       ~body)))
+
+(defmethod ->form ::fn/received-anomaly?
+  [_ ctx]
+  (let [args    (->form ::fn/args ctx)
+        handler (->form ::fn/handler ctx)
+        ident   (->form ::fn/ident ctx)
+        body    (if (->spec? :fm/args ctx)
+                  (->form ::fn/args-anomaly? ctx)
+                  (->form ::fn/ret-binding ctx))]
+    `(if (anomaly/anomalous? ~args)
+       (~handler
+        {:fm/ident         ~ident
+         :fm.anomaly/ident :fm.anomaly/received
+         :fm.anomaly/args  ~args})
+       ~body)))
 
 (defn ->conform?
   [ctx]
-  (reset! last-tag-atom "->conform?")
+  (swap! trace-atom conj "->conform?")
   (let [index (or (get ctx ::signature-index) 0)
         form  (or (get-in ctx [::bindings :fm/conform index ::form]) *conform*)]
     (cond
@@ -685,29 +706,29 @@
   (let [index (or (get ctx ::signature-index) 0)]
     (get-in ctx [::fn/conformed-definition ::fn/rest 1 index ::fn/argv])))
 
+  ;; TODO: zip `::fn/normalized-argv` tags, respect `:as`
   ;; TODO: detect regex-op, insert `s/spec`
-  ;; TODO: delegate to meta->spec-obj fn, `s/form`; (s/form (fn/meta->args-spec-obj {:fm/args args :fm/arglist argv}))
-  ;; TODO: respect `:as`
-  ;; TODO: `loop`?
 (defmethod ->form ::fn/args-spec
   [_ ctx]
-  (let [index (or (get ctx ::signature-index) 0)
-        args  (get-in ctx [::metadata :fm/args index])
-        form  (->form [::fn/args-spec ::fn/args] args)]
-    form))
+  (or
+   (get-in ctx [::bindings ::fn/args-spec ::symbol])
+   (let [index (or (get ctx ::signature-index) 0)
+         args  (get-in ctx [::metadata :fm/args index])
+         form  (->form [::fn/args-spec ::fn/args] args)]
+     form)))
 
 (defmethod ->form [::fn/args-spec ::fn/args]
   [_ args]
   (let [parts (partition-by (hash-set '&) args)
         args  (when (not= (count parts) 2) (->forms [::fn/args-spec ::fn/args]         (first parts))) ; NOTE: count `2` implies [& ,,,]
-        var   (when (>    (count parts) 1) (->forms [::fn/args-spec ::fn/variadic-arg] (last parts)))]
+        var   (when (>    (count parts) 1) (->forms [::fn/args-spec ::fn/variadic-arg] (first (last parts))))]
     `(s/cat ~@args ~@var)))
 
 (defmethod ->forms [::fn/args-spec ::fn/args]
   [_ args]
   (let [->form   (partial ->form [::fn/args-spec ::fn/arg])
         ->tagged (fn [i form]
-                   (let [tag (keyword (str i))] ; TODO: zip argv
+                   (let [tag (keyword (str i))] ; TODO: zip `::fn/normalized-argv`
                      [tag form]))
         ->forms  (comp
                   (map ->form)
@@ -727,10 +748,10 @@
   [_ arg]
   (let [[tag _] (lib/conform-throw ::fn/variadic-arg arg)
         form    (case tag
-                  ::fn/arg                 (->form [::fn/args-spec ::fn/variadic-arg ::fn/arg]              arg) ; ALT: [,,, tag], (conj t tag)
+                  ::fn/arg                 (->form [::fn/args-spec ::fn/variadic-arg ::fn/arg]              arg) ; ALT: [,,, tag], (conj ,,, tag)
                   ::fn/keyword-args-map    (->form [::fn/args-spec ::fn/variadic-arg ::fn/keyword-args-map] arg)
                   ::lib/sequence-spec-form arg)
-        forms   (list :& form)] ; ALT: `::fn/variadic`
+        forms   (list :& form)]
     forms))
 
 (defmethod ->form [::fn/args-spec ::fn/variadic-arg ::fn/arg]
@@ -749,18 +770,18 @@
   [tag ctx]
   (let [i    (get ctx ::index)
         args (get ctx ::args)
-        arg  (get args i)]
+        arg  (nth args i)] ; NOTE: seq
     (if (= arg '&)
       (->form tag (update ctx ::index inc))
       (let [index-tag (keyword (str i))
             arg       (->form [::fn/args-spec ::fn/arg] arg)
-            rest?     (< i (dec (count args)))
+            last?     (or (= i (dec (count args))) (= (nth args (inc i)) '&))
             variadic? (some #{'&} args)
-            rest      (if rest?
-                        (list :rest (->form tag (update ctx ::index inc)))
+            rest      (if last?
                         (if variadic?
-                          (list :& (->form [::fn/args-spec ::fn/variadic-arg] arg))
-                          (list :rest `(s/* any?))))]
+                          (->forms [::fn/args-spec ::fn/variadic-arg] (last args))
+                          (list :rest `(s/* any?)))
+                        (list :rest (->form tag (update ctx ::index inc))))]
         `(s/? (s/cat ~index-tag ~arg ~@rest))))))
 
 (defmethod ->form [::fn/args-spec ::fn/variadic-arg ::fn/keyword-args-map]
