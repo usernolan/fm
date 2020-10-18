@@ -13,6 +13,7 @@
   ;;;
   )
 
+  ;; TODO: revisit tags
   ;; TODO: runtime `*ignore*`, `s/*compile-asserts*`, etc.; config
   ;; TODO: clarify contextual dependencies?
   ;; TODO: "cut elimination"
@@ -72,10 +73,11 @@
     ::metadata
     ::bindings
     ::signature-index
-    ::fn/conformed-definition
+    ::fn/conformed-definition ; ALT: `::conformed-definition`
     ::fn/metadata
     ::fn/outer-metadata
-    ::fn/inner-metadatas]))
+    ::fn/inner-metadatas
+    ::fn/normalized-argv]))
 
 (defmulti  <<conformed-definition ::ident)
 (defmethod <<conformed-definition ::fn
@@ -441,8 +443,9 @@
 
 (defmethod ->forms [::fn/definition ::fn/signature]
   [_ ctx]
-  (let [argv (get-in ctx [::fn/conformed-definition ::fn/rest 1 ::fn/argv]) ; ALT: `->form`
-        ctx  (assoc ctx ::signature-index 0)
+  (let [argv (get-in ctx [::fn/conformed-definition ::fn/rest 1 ::fn/argv])
+        argv (->form ::fn/normalized-argv argv)
+        ctx  (assoc ctx ::fn/normalized-argv argv ::signature-index 0)
         body (->form ::fn/body ctx)]
     (list argv body)))
 
@@ -451,8 +454,9 @@
   (let [signatures (get-in ctx [::fn/conformed-definition ::fn/rest 1])
         forms      (map-indexed
                     (fn [i signature]
-                      (let [argv (get signature ::fn/argv) ; ALT: `->form`
-                            ctx  (assoc ctx ::signature-index i)
+                      (let [argv (get signature ::fn/argv)
+                            argv (->form ::fn/normalized-argv argv)
+                            ctx  (assoc ctx ::fn/normalized-argv argv ::signature-index i)
                             body (->form ::fn/body ctx)]
                         (list argv body)))
                     signatures)]
@@ -477,6 +481,16 @@
             (get-in ctx [::bindings k 0 ::symbol])
             forms))])) ; TODO: simplify
    (get ctx ::metadata)))
+
+(defmethod ->form ::fn/normalized-argv
+  [_ argv]
+  (mapv
+   (fn [arg]
+     (cond
+       (vector? arg) (if (some #{:as} arg) arg (conj arg :as (gensym 'arg)))
+       (map? arg)    (update arg :as (fnil identity (gensym 'arg)))
+       :else         arg))
+   argv))
 
 (defmethod ->form ::fn/body
   [_ ctx]
@@ -608,7 +622,7 @@
 
 (defmethod ->form ::fn/conformed-args-binding
   [_ ctx]
-  (let [argv      (->form ::fn/argv ctx)
+  (let [argv      (get ctx ::fn/normalized-argv) ; ALT: `::fn/argv`
         conformed (->form ::fn/conformed-args ctx)
         body      (->form ::fn/ret-binding ctx)]
     `(let [~argv ~conformed]
@@ -620,7 +634,7 @@
   #_(let []
       `(let [~@bindings]
          ~@trace
-         (if (anomaly/anomalous? ~ret)
+         (if (anomaly/anomalous? ~ret) ; TODO: `:fm/deep-detect?`, `:fm/ignore`
            (~handler ~ret)
            ~body))))
 
@@ -641,18 +655,14 @@
   [_ ctx]
   (or
    (get-in ctx [::bindings ::fn/args ::symbol])
-   (let [argv (->form ::fn/argv ctx)
+   (let [argv (get ctx ::fn/normalized-argv)
          form (if (some #{'&} argv)
-                (->form [::fn/args ::fn/variadic] argv)
-                argv)]
+                (let [xf   (comp (take-while (complement #{'&})) (map fn/arg->symbol))
+                      args (into (vector) xf argv)
+                      var  (fn/arg->symbol (last argv))]
+                  `(into ~args ~var))
+                (into (vector) (map fn/arg->symbol) argv))]
      form)))
-
-(defmethod ->form [::fn/args ::fn/variadic]
-  [_ argv]
-  (let [xf   (comp (take-while (complement #{'&})) (map fn/arg->symbol))
-        args (into (vector) xf argv)
-        var  (fn/arg->symbol (last argv))] ; TODO: `normalize` argv
-    `(into ~args ~var)))
 
 (defmethod ->form ::fn/trace
   [_ ctx]

@@ -18,8 +18,8 @@
 
 (s/def ::definition
   (s/cat
-   :simple-symbol? (s/? simple-symbol?)
-   :rest ; ALT: `:fm.definition/rest`
+   ::simple-symbol? (s/? simple-symbol?)
+   ::rest
    (s/alt
     ::signature  ::signature
     ::signatures ::signatures)))
@@ -69,5 +69,3 @@
 (defn zipv-args
   [argv args]
   (lib/zipvf vector? (fn [_ a] a) argv args))
-
-(lib/zipvf vector? (fn [a] (vector a )) argv)
