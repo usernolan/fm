@@ -39,12 +39,13 @@
   (partial s/valid? :fm/anomalous))
 
 #_(def idents
-    #{::args
+    #{::received
+      ::args
+      ::nested
       ::ret
       ::rel
       ::nonse
-      ::thrown
-      ::received})
+      ::thrown})
 
 #_(s/def ::ident
     idents)

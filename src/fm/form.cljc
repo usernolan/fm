@@ -125,6 +125,7 @@
                  :else                (vec (cons outer inners)))]
     form))
 
+  ;; TODO: refactor `->metadata`?
 (defmulti  ->metadata-form (fn [tag ctx] (swap! trace-atom conj tag) tag))
 (defmethod ->metadata-form :default
   [tag ctx]
@@ -463,7 +464,7 @@
                       (let [argv (get signature ::fn/argv)
                             argv (->form ::fn/normalized-argv argv)
                             ctx  (assoc ctx ::fn/normalized-argv argv ::signature-index i)
-                            body (->form ::fn/body ctx)]
+                            body (->form ::fn/body ctx)] ; TODO: when `::fn/body`
                         (list argv body)))
                     signatures)]
     forms))
@@ -545,7 +546,7 @@
       (not form)  (constantly false)
       :else       (constantly true))))
 
-  ;; TODO: refactor `->form`?
+  ;; TODO: refactor `->forms`
 (defmulti  ->trace (fn [tag _ctx] (swap! trace-atom conj ["->trace" tag]) tag))
 (defmethod ->trace :fm.trace/args
   [_ ctx]
@@ -559,8 +560,8 @@
 (defmulti  ->handler? (fn [ctx] (swap! trace-atom conj "->handler?") :default))
 (defmethod ->handler? :default
   [ctx]
-  (let [index    (get ctx ::signature-index)
-        handler? (get-in ctx [::metadata :fm/handler? index])]
+  (let [index    (or (get ctx ::signature-index) 0)
+        handler? (get-in ctx [::metadata :fm.anomaly/handler? index])]
     handler?))
 
 (defmulti  ->spec? (fn [tag _ctx] (swap! trace-atom conj ["->spec?" tag]) tag))
@@ -574,8 +575,9 @@
   (let [ctx      (bind ctx [::fn/args])
         bindings (->bindings ctx [::fn/args])
         trace    (->trace :fm.trace/args ctx)
+        handler? (->handler? ctx)
         body     (cond
-                   (->handler? ctx)       (->form ::fn/received-anomaly? ctx)
+                   (not handler?)         (->form ::fn/received-anomaly? ctx)
                    (->spec? :fm/args ctx) (->form ::fn/args-anomaly? ctx)
                    :else                  (->form ::fn/ret-binding ctx))]
     `(let [~@bindings]
@@ -594,7 +596,7 @@
        (~handler
         {:fm/ident         ~ident
          :fm.anomaly/ident :fm.anomaly/received
-         :fm.anomaly/args  ~args})
+         :fm.anomaly/args  ~args}) ; NOTE: basically a worse stack trace
        ~body)))
 
 (defn ->conform?
@@ -643,21 +645,75 @@
 
 (defmethod ->form ::fn/conformed-args-binding
   [_ ctx]
-  (let [argv      (get ctx ::fn/normalized-argv) ; ALT: `::fn/argv`
+  (let [argv      (get ctx ::fn/normalized-argv)
         conformed (->form ::fn/conformed-args ctx)
         body      (->form ::fn/ret-binding ctx)]
     `(let [~argv ~conformed]
        ~body)))
 
+(defmethod ->trace :fm.trace/ret
+  [_ ctx]
+  (let [trace? (->trace? ctx)]
+    (when (trace? :fm/ret)
+      (let [trace (->form ::fn/trace ctx)
+            ident (->form ::fn/ident ctx)
+            args  (->form ::fn/ret ctx)]
+        [(list trace {:fm/ident ident :fm.trace/ret args})]))))
+
+(defmethod ->spec? :fm/ret
+  [_ ctx]
+  (let [index (or (get ctx ::signature-index) 0)]
+    (some? (get-in ctx [::metadata :fm/ret index]))))
+
+(defmethod ->spec? :fm/rel
+  [_ ctx]
+  (let [index (or (get ctx ::signature-index) 0)]
+    (some? (get-in ctx [::metadata :fm/rel index]))))
+
 (defmethod ->form ::fn/ret-binding
   [_ ctx]
-  ::fn/ret-binding
-  #_(let []
-      `(let [~@bindings]
-         ~@trace
-         (if (anomaly/anomalous? ~ret) ; TODO: `:fm/deep-detect?`, `:fm/ignore`
-           (~handler ~ret)
-           ~body))))
+  (let [ctx      (bind ctx [::fn/ret])
+        bindings (->bindings ctx [::fn/ret])
+        trace    (->trace :fm.trace/ret ctx)
+        ret      (->form ::fn/ret ctx)
+        handler  (->form ::fn/handler ctx)
+        ident    (->form ::fn/ident ctx)
+        args     (->form ::fn/args ctx)
+        conform? (->conform? ctx) ; TODO: (->conform? tag ctx)
+        body     (cond
+                   (conform? :fm/ret)    (->form ::fn/conformed-ret-binding ctx)
+                   (->spec? :fm/ret ctx) (->form ::fn/ret-anomaly? ctx)
+                   (->spec? :fm/rel ctx) (->form ::fn/rel-anomaly? ctx)
+                   :else                 ret)]
+    `(let [~@bindings]
+       ~@trace
+       (if (anomaly/anomalous? ~ret) ; TODO: `:fm.anomaly/deep-detect?`, `:fm/ignore`
+         (~handler
+          {:fm/ident         ~ident
+           :fm.anomaly/ident :fm.anomaly/nested ; ALT: `fm.anomaly/propagated`
+           :fm.anomaly/args  ~args
+           :fm.anomaly/data  ~ret})
+         ~body))))
+
+(defmethod ->form ::fn/ret
+  [_ ctx]
+  (or
+   (get-in ctx [::bindings ::fn/ret ::symbol])
+   (let [index (or (get ctx ::signature-index) 0)
+         body  (get-in ctx [::fn/conformed-definition ::fn/rest 1 index ::fn/body])]
+     `(do ~@body)))) ; TODO: additional static analysis?
+
+(defmethod ->form ::fn/conformed-ret-binding
+  [_ ctx]
+  ::fn/conformed-ret-binding)
+
+(defmethod ->form ::fn/ret-anomaly?
+  [_ ctx]
+  ::fn/ret-anomaly?)
+
+(defmethod ->form ::fn/rel-anomaly?
+  [_ ctx]
+  ::fn/rel-anomaly?)
 
 (defmethod ->form ::fn/handler
   [_ ctx]

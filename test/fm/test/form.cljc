@@ -1009,7 +1009,7 @@
          :fm/args            [int? [int? & [int?]] & [int? & even?]]
          :fm/ret             int?
          :fm/rel             (fn [{args :args ret :ret}]
-                               (>= ret (apply + args)))
+                                (>= ret (apply + args)))
          :fm/trace           #{:fm/args :fm/ret}
          :fm/conform         #{:fm/args}
          :fm.anomaly/handler (fn [a] a)}
@@ -1105,7 +1105,7 @@
          :fm/rel             (fn [{args :args ret :ret}]
                                (>= ret (apply + args)))
          :fm/trace           #{:fm/args :fm/ret}
-         :fm/conform         #{:fm/args}
+         :fm/conform         #{:fm/args :fm/ret}
          :fm.anomaly/handler (fn [a] a)}
        ([] 1)
        (^{:fm/trace #{}
