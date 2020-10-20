@@ -657,8 +657,8 @@
     (when (trace? :fm/ret)
       (let [trace (->form ::fn/trace ctx)
             ident (->form ::fn/ident ctx)
-            args  (->form ::fn/ret ctx)]
-        [(list trace {:fm/ident ident :fm.trace/ret args})]))))
+            ret   (->form ::fn/ret ctx)]
+        [(list trace {:fm/ident ident :fm.trace/ret ret})]))))
 
 (defmethod ->spec? :fm/ret
   [_ ctx]
@@ -679,9 +679,7 @@
         handler  (->form ::fn/handler ctx)
         ident    (->form ::fn/ident ctx)
         args     (->form ::fn/args ctx)
-        conform? (->conform? ctx) ; TODO: (->conform? tag ctx)
         body     (cond
-                   (conform? :fm/ret)    (->form ::fn/conformed-ret-binding ctx)
                    (->spec? :fm/ret ctx) (->form ::fn/ret-anomaly? ctx)
                    (->spec? :fm/rel ctx) (->form ::fn/rel-anomaly? ctx)
                    :else                 ret)]
@@ -703,13 +701,70 @@
          body  (get-in ctx [::fn/conformed-definition ::fn/rest 1 index ::fn/body])]
      `(do ~@body)))) ; TODO: additional static analysis?
 
-(defmethod ->form ::fn/conformed-ret-binding
+(defmethod ->trace :fm.trace/conformed-ret
   [_ ctx]
-  ::fn/conformed-ret-binding)
+  (let [trace?   (->trace? ctx)
+        conform? (->conform? ctx)]
+    (when (and (trace? :fm/ret) (conform? :fm/ret))
+      (let [trace (->form ::fn/trace ctx)
+            ident (->form ::fn/ident ctx)
+            ret   (->form ::fn/conformed-ret ctx)]
+        [(list trace {:fm/ident ident :fm.trace/conformed-ret ret})]))))
 
 (defmethod ->form ::fn/ret-anomaly?
   [_ ctx]
-  ::fn/ret-anomaly?)
+  (let [ctx       (bind ctx [::fn/ret-spec ::fn/conformed-ret])
+        bindings  (->bindings ctx [::fn/ret-spec ::fn/conformed-ret])
+        trace     (->trace :fm.trace/conformed-ret ctx)
+        conformed (->form ::fn/conformed-ret ctx)
+        handler   (->form ::fn/handler ctx)
+        ident     (->form ::fn/ident ctx)
+        args      (->form ::fn/args ctx)
+        ret-spec  (->form ::fn/ret-spec ctx)
+        ret       (->form ::fn/ret ctx)
+        conform?  (->conform? ctx)
+        body      (cond
+                    (conform? :fm/ret)    (->form ::fn/conformed-ret-binding ctx)
+                    (->spec? :fm/rel ctx) (->form ::fn/rel-anomaly? ctx)
+                    :else                 ret)]
+    `(let [~@bindings]
+       ~@trace
+       (if (s/invalid? ~conformed)
+         (~handler
+          {:fm/ident         ~ident
+           :fm.anomaly/ident :fm.anomaly/ret
+           :fm.anomaly/args  ~args
+           :fm.anomaly/data  (s/explain-data ~ret-spec ~ret)})
+         ~body))))
+
+(defmethod ->form ::fn/ret-spec
+  [_ ctx]
+  (or
+   (get-in ctx [::bindings ::fn/ret-spec ::symbol])
+   (let [index   (or (get ctx ::signature-index) 0)
+         ret     (get-in ctx [::metadata :fm/ret index])
+         [tag _] (lib/conform-throw ::fn/arg ret)]
+     (case tag
+       ::fn/args (->form [::fn/args-spec ::fn/args] ret)
+       ret))))
+
+(defmethod ->form ::fn/conformed-ret
+  [_ ctx]
+  (or
+   (get-in ctx [::bindings ::fn/conformed-ret ::symbol])
+   (let [ret-spec (->form ::fn/ret-spec ctx)
+         ret      (->form ::fn/ret ctx)]
+     `(s/conform ~ret-spec ~ret))))
+
+(defmethod ->form ::fn/conformed-ret-binding
+  [_ ctx]
+  (let [ret       (->form ::fn/ret ctx)
+        conformed (->form ::fn/conformed-ret ctx)
+        body      (if (->spec? :fm/rel ctx)
+                    (->form ::fn/rel-anomaly? ctx)
+                    ret)]
+    `(let [~ret ~conformed]
+       ~body)))
 
 (defmethod ->form ::fn/rel-anomaly?
   [_ ctx]

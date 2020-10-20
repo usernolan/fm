@@ -1009,7 +1009,7 @@
          :fm/args            [int? [int? & [int?]] & [int? & even?]]
          :fm/ret             int?
          :fm/rel             (fn [{args :args ret :ret}]
-                                (>= ret (apply + args)))
+                               (>= ret (apply + args)))
          :fm/trace           #{:fm/args :fm/ret}
          :fm/conform         #{:fm/args}
          :fm.anomaly/handler (fn [a] a)}
@@ -1108,8 +1108,29 @@
          :fm/conform         #{:fm/args :fm/ret}
          :fm.anomaly/handler (fn [a] a)}
        ([] 1)
-       (^{:fm/trace #{}
-          :fm/ret   even?}
+       (^{:fm/trace            #{}
+          :fm/ret              even?
+          :fm.anomaly/handler? true}
+        [a b] (+ a b)))}))
+
+  (->form
+   ::fn
+   (->context
+    {::ident ::fn
+     ::ns    *ns*
+     ::definition
+     '(^{:fm/doc             "fn1"
+         :fm/args            [int? int?]
+         :fm/ret             int?
+         :fm/rel             (fn [{args :args ret :ret}]
+                               (>= ret (apply + args)))
+         :fm/trace           #{:fm/args :fm/ret}
+         :fm/conform         #{:fm/args :fm/ret}
+         :fm.anomaly/handler (fn [a] a)}
+       ([] 1)
+       (^{:fm/trace            #{}
+          :fm/ret              [even? & [even? int?]]
+          :fm.anomaly/handler? true}
         [a b] (+ a b)))}))
 
   (->form
