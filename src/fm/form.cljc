@@ -526,7 +526,6 @@
    ctx
    tags))
 
-  ;; TODO: refactor `->form`?
 (defn ->bindings
   [ctx tags]
   (swap! trace-atom conj ["->bindings" tags])
@@ -537,25 +536,18 @@
    tags))
 
 (defn ->trace?
-  [ctx]
-  (swap! trace-atom conj "->trace?")
-  (let [index (or (get ctx ::signature-index) 0)
-        form  (or (get-in ctx [::bindings :fm/trace index ::form]) *trace*)]
-    (cond
-      (set? form) form
-      (not form)  (constantly false)
-      :else       (constantly true))))
-
-  ;; TODO: refactor `->forms`
-(defmulti  ->trace (fn [tag _ctx] (swap! trace-atom conj ["->trace" tag]) tag))
-(defmethod ->trace :fm.trace/args
-  [_ ctx]
-  (let [trace? (->trace? ctx)]
-    (when (trace? :fm/args)
-      (let [trace (->form ::fn/trace ctx)
-            ident (->form ::fn/ident ctx)
-            args  (->form ::fn/args ctx)]
-        [(list trace {:fm/ident ident :fm.trace/args args})])))) ; NOTE: splice
+  ([ctx]
+   (swap! trace-atom conj "->trace?")
+   (let [index (or (get ctx ::signature-index) 0)
+         form  (or (get-in ctx [::bindings :fm/trace index ::form]) *trace*)]
+     (cond
+       (set? form) form
+       (not form)  (constantly false)
+       :else       (constantly true))))
+  ([tag ctx]
+   (swap! trace-atom conj ["->trace?" tag])
+   (let [trace? (->trace? ctx)]
+     (trace? tag))))
 
 (defmulti  ->handler? (fn [ctx] (swap! trace-atom conj "->handler?") :default))
 (defmethod ->handler? :default
@@ -574,7 +566,7 @@
   [_ ctx]
   (let [ctx      (bind ctx [::fn/args])
         bindings (->bindings ctx [::fn/args])
-        trace    (->trace :fm.trace/args ctx)
+        trace    (->forms :fm.trace/args ctx)
         handler? (->handler? ctx)
         body     (cond
                    (not handler?)         (->form ::fn/received-anomaly? ctx)
@@ -583,6 +575,14 @@
     `(let [~@bindings]
        ~@trace
        ~body)))
+
+(defmethod ->forms :fm.trace/args
+  [_ ctx]
+  (when (->trace? :fm/args ctx)
+    (let [trace (->form ::fn/trace ctx)
+          ident (->form ::fn/ident ctx)
+          args  (->form ::fn/args ctx)]
+      [(list trace {:fm/ident ident :fm.trace/args args})]))) ; NOTE: `->forms`
 
 (defmethod ->form ::fn/received-anomaly?
   [_ ctx]
@@ -600,37 +600,30 @@
        ~body)))
 
 (defn ->conform?
-  [ctx]
-  (swap! trace-atom conj "->conform?")
-  (let [index (or (get ctx ::signature-index) 0)
-        form  (or (get-in ctx [::bindings :fm/conform index ::form]) *conform*)]
-    (cond
-      (set? form) form
-      (not form)  (constantly false)
-      :else       (constantly true))))
-
-(defmethod ->trace :fm.trace/conformed-args
-  [_ ctx]
-  (let [trace?   (->trace? ctx)
-        conform? (->conform? ctx)]
-    (when (and (trace? :fm/args) (conform? :fm/args))
-      (let [trace (->form ::fn/trace ctx)
-            ident (->form ::fn/ident ctx)
-            args  (->form ::fn/conformed-args ctx)]
-        [(list trace {:fm/ident ident :fm.trace/conformed-args args})]))))
+  ([ctx]
+   (swap! trace-atom conj "->conform?")
+   (let [index (or (get ctx ::signature-index) 0)
+         form  (or (get-in ctx [::bindings :fm/conform index ::form]) *conform*)]
+     (cond
+       (set? form) form
+       (not form)  (constantly false)
+       :else       (constantly true))))
+  ([tag ctx]
+   (swap! trace-atom conj ["->conform?" tag])
+   (let [conform? (->conform? ctx)]
+     (conform? tag))))
 
 (defmethod ->form ::fn/args-anomaly?
   [_ ctx]
   (let [ctx       (bind ctx [::fn/args-spec ::fn/conformed-args])
         bindings  (->bindings ctx [::fn/args-spec ::fn/conformed-args])
-        trace     (->trace :fm.trace/conformed-args ctx)
+        trace     (->forms :fm.trace/conformed-args ctx)
         conformed (->form ::fn/conformed-args ctx)
         handler   (->form ::fn/handler ctx)
         ident     (->form ::fn/ident ctx)
         args-spec (->form ::fn/args-spec ctx)
         args      (->form ::fn/args ctx)
-        conform?  (->conform? ctx)
-        body      (if (conform? :fm/args)
+        body      (if (->conform? :fm/args ctx)
                     (->form ::fn/conformed-args-binding ctx)
                     (->form ::fn/ret-binding ctx))]
     `(let [~@bindings]
@@ -643,6 +636,14 @@
            :fm.anomaly/data  (s/explain-data ~args-spec ~args)})
          ~body))))
 
+(defmethod ->forms :fm.trace/conformed-args
+  [_ ctx]
+  (when (and (->trace? :fm/args ctx) (->conform? :fm/args ctx))
+    (let [trace (->form ::fn/trace ctx)
+          ident (->form ::fn/ident ctx)
+          args  (->form ::fn/conformed-args ctx)]
+      [(list trace {:fm/ident ident :fm.trace/conformed-args args})])))
+
 (defmethod ->form ::fn/conformed-args-binding
   [_ ctx]
   (let [argv      (get ctx ::fn/normalized-argv)
@@ -650,15 +651,6 @@
         body      (->form ::fn/ret-binding ctx)]
     `(let [~argv ~conformed]
        ~body)))
-
-(defmethod ->trace :fm.trace/ret
-  [_ ctx]
-  (let [trace? (->trace? ctx)]
-    (when (trace? :fm/ret)
-      (let [trace (->form ::fn/trace ctx)
-            ident (->form ::fn/ident ctx)
-            ret   (->form ::fn/ret ctx)]
-        [(list trace {:fm/ident ident :fm.trace/ret ret})]))))
 
 (defmethod ->spec? :fm/ret
   [_ ctx]
@@ -674,7 +666,7 @@
   [_ ctx]
   (let [ctx      (bind ctx [::fn/ret])
         bindings (->bindings ctx [::fn/ret])
-        trace    (->trace :fm.trace/ret ctx)
+        trace    (->forms :fm.trace/ret ctx)
         ret      (->form ::fn/ret ctx)
         handler  (->form ::fn/handler ctx)
         ident    (->form ::fn/ident ctx)
@@ -693,6 +685,14 @@
            :fm.anomaly/data  ~ret})
          ~body))))
 
+(defmethod ->forms :fm.trace/ret
+  [_ ctx]
+  (when (->trace? :fm/ret ctx)
+    (let [trace (->form ::fn/trace ctx)
+          ident (->form ::fn/ident ctx)
+          ret   (->form ::fn/ret ctx)]
+      [(list trace {:fm/ident ident :fm.trace/ret ret})])))
+
 (defmethod ->form ::fn/ret
   [_ ctx]
   (or
@@ -701,32 +701,21 @@
          body  (get-in ctx [::fn/conformed-definition ::fn/rest 1 index ::fn/body])]
      `(do ~@body)))) ; TODO: additional static analysis?
 
-(defmethod ->trace :fm.trace/conformed-ret
-  [_ ctx]
-  (let [trace?   (->trace? ctx)
-        conform? (->conform? ctx)]
-    (when (and (trace? :fm/ret) (conform? :fm/ret))
-      (let [trace (->form ::fn/trace ctx)
-            ident (->form ::fn/ident ctx)
-            ret   (->form ::fn/conformed-ret ctx)]
-        [(list trace {:fm/ident ident :fm.trace/conformed-ret ret})]))))
-
 (defmethod ->form ::fn/ret-anomaly?
   [_ ctx]
   (let [ctx       (bind ctx [::fn/ret-spec ::fn/conformed-ret])
         bindings  (->bindings ctx [::fn/ret-spec ::fn/conformed-ret])
-        trace     (->trace :fm.trace/conformed-ret ctx)
+        trace     (->forms :fm.trace/conformed-ret ctx)
         conformed (->form ::fn/conformed-ret ctx)
         handler   (->form ::fn/handler ctx)
         ident     (->form ::fn/ident ctx)
         args      (->form ::fn/args ctx)
         ret-spec  (->form ::fn/ret-spec ctx)
         ret       (->form ::fn/ret ctx)
-        conform?  (->conform? ctx)
         body      (cond
-                    (conform? :fm/ret)    (->form ::fn/conformed-ret-binding ctx)
-                    (->spec? :fm/rel ctx) (->form ::fn/rel-anomaly? ctx)
-                    :else                 ret)]
+                    (->conform? :fm/ret ctx) (->form ::fn/conformed-ret-binding ctx)
+                    (->spec? :fm/rel ctx)    (->form ::fn/rel-anomaly? ctx)
+                    :else                    ret)]
     `(let [~@bindings]
        ~@trace
        (if (s/invalid? ~conformed)
@@ -736,6 +725,14 @@
            :fm.anomaly/args  ~args
            :fm.anomaly/data  (s/explain-data ~ret-spec ~ret)})
          ~body))))
+
+(defmethod ->forms :fm.trace/conformed-ret
+  [_ ctx]
+  (when (and (->trace? :fm/ret ctx) (->conform? :fm/ret ctx))
+    (let [trace (->form ::fn/trace ctx)
+          ident (->form ::fn/ident ctx)
+          ret   (->form ::fn/conformed-ret ctx)]
+      [(list trace {:fm/ident ident :fm.trace/conformed-ret ret})])))
 
 (defmethod ->form ::fn/ret-spec
   [_ ctx]
@@ -899,7 +896,7 @@
   [_ arg]
   (let [->form   (fn [[k arg]]
                    (let [form (->form [::fn/args-spec ::fn/arg] arg)]
-                     `(s/cat :k #{~k} ::fn/arg ~form)))
+                     `(s/cat :k #{~k} :form ~form))) ; TODO: revisit tags
         ->tag    (comp keyword key)
         ->tagged (juxt ->tag ->form)
         forms    (mapcat ->tagged arg)]
