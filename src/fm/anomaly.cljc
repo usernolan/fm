@@ -7,13 +7,18 @@
   "Set of keys whose presence indicates anomality"
   #{::ident})
 
+(defn contains-indicator?
+  [x]
+  (and
+   (or (set? x) (map? x))
+   (some
+    (partial contains? x)
+    *indicator-keyset*)))
+
 (s/def :fm/anomaly
   (s/and
    map?
-   (fn [m]
-     (some
-      (partial contains? m)
-      *indicator-keyset*))))
+   contains-indicator?))
 
 (def anomaly?
   (partial s/valid? :fm/anomaly))

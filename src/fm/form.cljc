@@ -31,6 +31,7 @@
 (def ^:dynamic *default-trace-fn-symbol*
   `prn)
 
+
 (s/def :fm/ident
   qualified-keyword?)
 
@@ -680,7 +681,7 @@
          (~handler
           {:fm/ident         ~ident
            :fm.anomaly/ident :fm.anomaly/nested ; ALT: `:fm.anomaly/propagated`
-           :fm.anomaly/args  ~args              ; ALT: `:fm.anomaly/data`
+           :fm.anomaly/args  ~args
            :fm.anomaly/ret   ~ret}) ; TODO: (if (map? ret) ret ,,,)
          ~body))))
 
@@ -764,12 +765,20 @@
 
 (defmethod ->form ::fn/rel-anomaly?
   [_ ctx]
-  (let []
+  (let [rel   (->form ::fn/rel ctx)
+        args  (->form ::fn/args ctx)
+        ret   (->form ::fn/ret ctx)
+        ident (->form ::fn/ident ctx)]
     `(if (~rel {:args ~args :ret ~ret})
-       ~body
+       ~ret
        {:fm/ident         ~ident
         :fm.anomaly/ident :fm.anomaly/rel
         ::s/explain-data  (s/explain-data ~rel {:args ~args :ret ~ret})})))
+
+(defmethod ->form ::fn/rel
+  [_ ctx]
+  (let [index (or (get ctx ::signature-index) 0)]
+    (get-in ctx [::bindings :fm/rel index ::symbol])))
 
 (defmethod ->form ::fn/handler
   [_ ctx]
