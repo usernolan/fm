@@ -511,10 +511,10 @@
        ~body
        (catch Throwable thrown#
          (~handler
-          {:fm/ident         ~ident
-           :fm.anomaly/ident :fm.anomaly/thrown
-           :fm.anomaly/args  ~args
-           :fm.anomaly/data  thrown#})))))
+          {:fm/ident          ~ident
+           :fm.anomaly/ident  :fm.anomaly/thrown
+           :fm.anomaly/args   ~args
+           :fm.anomaly/thrown thrown#})))))
 
 (defn bind
   [ctx tags]
@@ -632,8 +632,7 @@
          (~handler
           {:fm/ident         ~ident
            :fm.anomaly/ident :fm.anomaly/args
-           :fm.anomaly/args  ~args
-           :fm.anomaly/data  (s/explain-data ~args-spec ~args)})
+           ::s/explain-data  (s/explain-data ~args-spec ~args)})
          ~body))))
 
 (defmethod ->forms :fm.trace/conformed-args
@@ -680,9 +679,9 @@
        (if (anomaly/anomalous? ~ret) ; TODO: `:fm.anomaly/deep-detect?`, `:fm/ignore`
          (~handler
           {:fm/ident         ~ident
-           :fm.anomaly/ident :fm.anomaly/nested ; ALT: `fm.anomaly/propagated`
-           :fm.anomaly/args  ~args
-           :fm.anomaly/data  ~ret})
+           :fm.anomaly/ident :fm.anomaly/nested ; ALT: `:fm.anomaly/propagated`
+           :fm.anomaly/args  ~args              ; ALT: `:fm.anomaly/data`
+           :fm.anomaly/ret   ~ret}) ; TODO: (if (map? ret) ret ,,,)
          ~body))))
 
 (defmethod ->forms :fm.trace/ret
@@ -723,7 +722,7 @@
           {:fm/ident         ~ident
            :fm.anomaly/ident :fm.anomaly/ret
            :fm.anomaly/args  ~args
-           :fm.anomaly/data  (s/explain-data ~ret-spec ~ret)})
+           ::s/explain-data  (s/explain-data ~ret-spec ~ret)})
          ~body))))
 
 (defmethod ->forms :fm.trace/conformed-ret
@@ -765,7 +764,12 @@
 
 (defmethod ->form ::fn/rel-anomaly?
   [_ ctx]
-  ::fn/rel-anomaly?)
+  (let []
+    `(if (~rel {:args ~args :ret ~ret})
+       ~body
+       {:fm/ident         ~ident
+        :fm.anomaly/ident :fm.anomaly/rel
+        ::s/explain-data  (s/explain-data ~rel {:args ~args :ret ~ret})})))
 
 (defmethod ->form ::fn/handler
   [_ ctx]
