@@ -96,3 +96,49 @@
   ;; NOTE: `spec` respects TBD specs by their qualified keywords
 (s/def ::spec-keyword
   qualified-keyword?)
+
+(s/def :fm/arg
+  (s/or
+   ::spec-keyword ::spec-keyword
+   ::arg-symbol ::arg-symbol
+   ::spec-form ::spec-form
+   ::fn-form ::fn-form
+   :fm/args :fm/args))
+
+  ;; NOTE: keyword arguments are poorly named in Clojure's case
+(s/def :fm/keyword-args-map
+  (s/and
+   (s/map-of (some-fn keyword? symbol? string?) :fm/arg)
+   seq)) ; NOTE: disallow [,,, & {}]
+
+(s/def :fm/variadic-arg
+  (s/or
+   :fm/arg :fm/arg
+   :fm/keyword-args-map :fm/keyword-args-map
+   ::sequence-spec-form ::sequence-spec-form))
+
+(s/def :fm/args
+  (s/&
+   (s/cat
+    :fm/args (s/* :fm/arg)
+    :fm/variadic (s/? (s/cat :& #{'&} :fm/variadic-arg :fm/variadic-arg)))
+   seq)) ; NOTE: disallow {:fm/args []}
+
+(s/def :fm/doc string?)
+(s/def :fm/ret any?)     ; fn, spec
+(s/def :fm/rel any?)     ; fn, spec?
+(s/def :fm/trace any?)   ; bool, set, fn
+(s/def :fm/conform any?) ; bool, set, fn?
+(s/def :fm/handler any?) ; fn
+(s/def :fm/handler? boolean?)
+
+(defn arg->symbol
+  [arg]
+  (cond
+    (vector? arg) (when (some #{:as} arg) (last arg))
+    (map? arg)    (:as arg)
+    :else         arg))
+
+(defn zipv-args
+  [argv args]
+  (lib/zipvf vector? (fn [_ a] a) argv args))

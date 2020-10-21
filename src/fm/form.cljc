@@ -418,6 +418,14 @@
    <<metadata
    <<bindings))
 
+(defmethod ->context ::nonsequent
+  [parameters]
+  (->>
+   parameters
+   <<conformed-definition
+   <<metadata
+   <<bindings))
+
 (defmulti  ->forms (fn [tag _ctx] (swap! trace-atom conj tag) tag))
 (defmulti  ->form  (fn [tag _ctx] (swap! trace-atom conj tag) tag))
 (defmethod ->form ::fn
