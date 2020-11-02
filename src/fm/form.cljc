@@ -115,22 +115,79 @@
 (def ->simple-symbol
   (comp symbol name ->ident))
 
-(defmulti  ->default-metadata-form (fn [_tag _ctx] :default))
-(defmethod ->default-metadata-form :default
+(defmulti  ->default-metadata-form (fn [tag ctx] (swap! trace-atom conj ["->default-metadata-form" tag]) (->definition-tag ctx)))
+(defmethod ->default-metadata-form ::fn/signature
   [tag ctx]
-  (let [outer  (get-in ctx [::fn/outer-metadata tag])
+  (let [metadata (get-in ctx [::fn/metadata tag])
+        _        (when (s/get-spec tag)
+                   (lib/conform-throw tag metadata))]
+    metadata))
+
+(defmethod ->default-metadata-form ::fn/signatures
+  [tag ctx]
+  (let [outer  (get-in ctx [::fn/outer-metadata tag]) ; TODO: `::fn/...`
         inners (map tag (get ctx ::fn/inner-metadatas))
+        _      (when (s/get-spec tag)
+                 (map
+                  (partial lib/conform-throw tag)
+                  (remove nil? (cons outer inners))))
         form   (cond
                  (every? nil? inners) outer
                  (nil? outer)         (vec inners) ; NOTE: at least one
                  :else                (vec (cons outer inners)))]
     form))
 
-  ;; TODO: refactor `->metadata`?
-(defmulti  ->metadata-form (fn [tag ctx] (swap! trace-atom conj tag) tag))
-(defmethod ->metadata-form :default
+(def ->metadata-form-hierarchy
+  "Specifies an ontology to help concisely handle special cases of combining
+  metadata forms.
+
+  `:default` — keeps all metadata. delegates to `->default-metadata-form` which
+  keeps unrecognized keys exactly as-typed.
+
+  `:fm.metadata/default` — keeps all metadata. when the key is recognized, the
+  resulting metadata form will be either the same size as `:fm/arglists` or one
+  element larger to include outer metadata.
+
+  `:fm.metadata/fallback` — when a signature has no inner metadata, the outer
+  metadata for that key will be used as a fallback. the resulting metadata form
+  will always be the same size as `:fm/arglists`."
+  (->
+   (make-hierarchy)
+   (derive :fm/args              :fm.metadata/fallback)
+   (derive :fm/ret               :fm.metadata/fallback)
+   (derive :fm/rel               :fm.metadata/fallback)
+   (derive :fm/trace             :fm.metadata/fallback)
+   (derive :fm/conform           :fm.metadata/fallback)
+   (derive :fm.anomaly/handler   :fm.metadata/fallback)
+   (derive :fm.anomaly/handler?  :fm.metadata/fallback)
+   (derive :fm.metadata/fallback :fm.metadata/default)))
+
+(defmulti  ->metadata-form (fn [tag _ctx] (swap! trace-atom conj ["->metadata-form" tag]) tag) :hierarchy #'->metadata-form-hierarchy)
+(defmethod ->metadata-form :default ; NOTE: default for keys we don't recognize and `:fm/doc`
   [tag ctx]
-  (->default-metadata-form tag ctx)) ; NOTE: keep all metadata
+  (->default-metadata-form tag ctx))
+
+(defmethod ->metadata-form :fm.metadata/default ; NOTE: default for keys in the ontology
+  [tag ctx]
+  (let [tag [tag (->definition-tag ctx)]]
+    (->metadata-form tag ctx)))
+
+(defmethod ->metadata-form [:fm.metadata/default ::fn/signature]
+  [[tag _] ctx]
+  (let [metadata (get-in ctx [::fn/metadata tag])
+        _        (when (s/get-spec tag)
+                   (lib/conform-throw tag metadata))]
+    (vector metadata))) ; NOTE: vector for signature indexing
+
+(defmethod ->metadata-form [:fm.metadata/fallback ::fn/signatures]
+  [[tag _] ctx]
+  (let [outer  (get-in ctx [::fn/outer-metadata tag])
+        inners (map tag (get ctx ::fn/inner-metadatas))
+        _      (map
+                (partial lib/conform-throw tag)
+                (remove nil? (cons outer inners)))
+        xs     (map (fn [inner] (or inner outer)) inners)]
+    (vec xs)))
 
 (defmethod ->metadata-form :fm/ident
   [_ ctx]
@@ -145,55 +202,20 @@
   [_ ctx]
   (let [signature (get-in ctx [::fn/conformed-definition ::fn/rest 1])
         argv      (get signature ::fn/argv)]
-    (vector `(quote ~argv))))
+    (vector argv)))
 
 (defmethod ->metadata-form [:fm/arglists ::fn/signatures]
   [_ ctx]
   (let [signatures (get-in ctx [::fn/conformed-definition ::fn/rest 1])
-        argvs      (map (comp (fn [argv] `(quote ~argv)) ::fn/argv) signatures)]
+        argvs      (map ::fn/argv signatures)]
     (vec argvs)))
-
-(defmethod ->metadata-form :fm/doc
-  [tag ctx]
-  (let [tag [tag (->definition-tag ctx)]]
-    (->metadata-form tag ctx)))
-
-(defmethod ->metadata-form [:fm/doc ::fn/signature]
-  [_ ctx]
-  (let [doc (get-in ctx [::fn/metadata :fm/doc])
-        _   (lib/conform-throw ::fn/doc doc)]
-    doc))
-
-(defmethod ->metadata-form [:fm/doc ::fn/signatures]
-  [_ ctx]
-  (let [outer  (get-in ctx [::fn/outer-metadata :fm/doc])
-        inners (map :fm/doc (get ctx ::fn/inner-metadatas))
-        _      (map
-                (partial lib/conform-throw ::fn/doc)
-                (remove nil? (cons outer inners)))
-        form   (cond
-                 (every? nil? inners) outer
-                 (nil? outer)         (vec inners) ; NOTE: at least one
-                 :else                (vec (cons outer inners)))]
-    form))
-
-(defmethod ->metadata-form :fm/args
-  [tag ctx]
-  (let [tag [tag (->definition-tag ctx)]]
-    (->metadata-form tag ctx)))
-
-(defmethod ->metadata-form [:fm/args ::fn/signature]
-  [_ ctx]
-  (let [args (get-in ctx [::fn/metadata :fm/args])
-        _    (lib/conform-throw ::fn/args args)]
-    (vector args)))
 
 (defmethod ->metadata-form [:fm/args ::fn/signatures]
   [_ ctx]
   (let [outer      (get-in ctx [::fn/outer-metadata :fm/args])
         inners     (map :fm/args (get ctx ::fn/inner-metadatas))
         _          (map
-                    (partial lib/conform-throw ::fn/args)
+                    (partial lib/conform-throw :fm/args)
                     (remove nil? (cons outer inners)))
         signatures (get-in ctx [::fn/conformed-definition ::fn/rest 1])
         argvs      (map ::fn/argv signatures)
@@ -204,132 +226,6 @@
                           (fn/zipv-args argv args))))
                     inners)]
     (vec args)))
-
-(defmethod ->metadata-form :fm/ret
-  [tag ctx]
-  (let [tag [tag (->definition-tag ctx)]]
-    (->metadata-form tag ctx)))
-
-(defmethod ->metadata-form [:fm/ret ::fn/signature]
-  [_ ctx]
-  (let [ret (get-in ctx [::fn/metadata :fm/ret])
-        _   (lib/conform-throw ::fn/ret ret)]
-    (vector ret)))
-
-(defmethod ->metadata-form [:fm/ret ::fn/signatures]
-  [_ ctx]
-  (let [outer  (get-in ctx [::fn/outer-metadata :fm/ret])
-        inners (map :fm/ret (get ctx ::fn/inner-metadatas))
-        _      (map
-                (partial lib/conform-throw ::fn/ret)
-                (remove nil? (cons outer inners)))
-        rets   (map (fn [inner] (or inner outer)) inners)]
-    (vec rets)))
-
-(defmethod ->metadata-form :fm/rel
-  [tag ctx]
-  (let [tag [tag (->definition-tag ctx)]]
-    (->metadata-form tag ctx)))
-
-(defmethod ->metadata-form [:fm/rel ::fn/signature]
-  [_ ctx]
-  (let [rel (get-in ctx [::fn/metadata :fm/rel])
-        _   (lib/conform-throw ::fn/rel rel)]
-    (vector rel)))
-
-(defmethod ->metadata-form [:fm/rel ::fn/signatures]
-  [_ ctx]
-  (let [outer  (get-in ctx [::fn/outer-metadata :fm/rel])
-        inners (map :fm/rel (get ctx ::fn/inner-metadatas))
-        _      (map
-                (partial lib/conform-throw ::fn/rel)
-                (remove nil? (cons outer inners)))
-        rels   (map (fn [inner] (or inner outer)) inners)]
-    (vec rels)))
-
-(defmethod ->metadata-form :fm/trace
-  [tag ctx]
-  (let [tag [tag (->definition-tag ctx)]]
-    (->metadata-form tag ctx)))
-
-(defmethod ->metadata-form [:fm/trace ::fn/signature]
-  [_ ctx]
-  (let [trace (get-in ctx [::fn/metadata :fm/trace])
-        _     (lib/conform-throw ::fn/trace trace)]
-    (vector trace)))
-
-(defmethod ->metadata-form [:fm/trace ::fn/signatures]
-  [_ ctx]
-  (let [outer  (get-in ctx [::fn/outer-metadata :fm/trace])
-        inners (map :fm/trace (get ctx ::fn/inner-metadatas))
-        _      (map
-                (partial lib/conform-throw ::fn/trace)
-                (remove nil? (cons outer inners)))
-        traces (map (fn [inner] (or inner outer)) inners)]
-    (vec traces)))
-
-(defmethod ->metadata-form :fm/conform
-  [tag ctx]
-  (let [tag [tag (->definition-tag ctx)]]
-    (->metadata-form tag ctx)))
-
-(defmethod ->metadata-form [:fm/conform ::fn/signature]
-  [_ ctx]
-  (let [conform (get-in ctx [::fn/metadata :fm/conform])
-        _       (lib/conform-throw ::fn/conform conform)]
-    (vector conform)))
-
-(defmethod ->metadata-form [:fm/conform ::fn/signatures]
-  [_ ctx]
-  (let [outer    (get-in ctx [::fn/outer-metadata :fm/conform])
-        inners   (map :fm/conform (get ctx ::fn/inner-metadatas))
-        _        (map
-                  (partial lib/conform-throw ::fn/conform) ; TODO: generalize
-                  (remove nil? (cons outer inners)))
-        conforms (map (fn [inner] (or inner outer)) inners)]
-    (vec conforms)))
-
-(defmethod ->metadata-form :fm.anomaly/handler
-  [tag ctx]
-  (let [tag [tag (->definition-tag ctx)]]
-    (->metadata-form tag ctx)))
-
-(defmethod ->metadata-form [:fm.anomaly/handler ::fn/signature]
-  [_ ctx]
-  (let [handler (get-in ctx [::fn/metadata :fm.anomaly/handler])
-        _       (lib/conform-throw ::fn/handler handler)]
-    (vector handler)))
-
-(defmethod ->metadata-form [:fm.anomaly/handler ::fn/signatures]
-  [_ ctx]
-  (let [outer    (get-in ctx [::fn/outer-metadata :fm.anomaly/handler])
-        inners   (map :fm.anomaly/handler (get ctx ::fn/inner-metadatas))
-        _        (map
-                  (partial lib/conform-throw ::fn/handler)
-                  (remove nil? (cons outer inners)))
-        handlers (map (fn [inner] (or inner outer)) inners)]
-    (vec handlers)))
-
-(defmethod ->metadata-form :fm.anomaly/handler?
-  [tag ctx]
-  (let [tag [tag (->definition-tag ctx)]]
-    (->metadata-form tag ctx)))
-
-(defmethod ->metadata-form [:fm.anomaly/handler? ::fn/signature]
-  [_ ctx]
-  (let [handler? (get-in ctx [::fn/metadata :fm.anomaly/handler?])
-        _        (lib/conform-throw ::fn/handler? handler?)]
-    (vector handler?)))
-
-(defmethod ->metadata-form [:fm.anomaly/handler? ::fn/signatures]
-  [_ ctx]
-  (let [outer     (get-in ctx [::fn/outer-metadata :fm.anomaly/handler?])
-        inners    (map :fm.anomaly/handler? (get ctx ::fn/inner-metadatas))
-        _         (map
-                   (partial lib/conform-throw ::fn/handler?)
-                   (remove nil? (cons outer inners)))
-        handler?s (map (fn [inner] (or inner outer)) inners)]
-    (vec handler?s)))
 
 (defmulti  ->metadata ->definition-tag)
 (defmethod ->metadata ::fn/signature
@@ -375,33 +271,6 @@
   [ctx]
   (assoc ctx ::metadata (->metadata ctx)))
 
-(defmulti  ->metadata-bindings ::ident)
-(defmethod ->metadata-bindings ::fn
-  [ctx]
-  (swap! trace-atom conj "->metadata-bindings")
-  (let [metadata (get ctx ::metadata)
-        xf       (map (fn [[k form]]
-                        [k (if (sequential? form)
-                             (::bindings
-                              (reduce
-                               (fn [acc form]
-                                 (let [f       (fnil identity (gensym (name k)))
-                                       acc     (update-in acc [::form=>symbol form] f)
-                                       sym     (get-in acc [::form=>symbol form])
-                                       binding {::symbol sym ::form form}
-                                       acc     (update acc ::bindings conj binding)]
-                                   acc))
-                               {::form=>symbol {} ::bindings []}
-                               form))
-                             (vector {::symbol (gensym (name k)) ::form form}))]))
-        bindings (into {} xf metadata)]
-    bindings))
-
-(defmulti  <<bindings ::ident)
-(defmethod <<bindings ::fn
-  [ctx]
-  (assoc ctx ::bindings (->metadata-bindings ctx)))
-
 (s/def ::parameters
   (s/keys
    :req
@@ -415,22 +284,119 @@
   (->>
    parameters
    <<conformed-definition
-   <<metadata
-   <<bindings))
+   <<metadata))
 
-(defmethod ->context ::nonsequent
-  [parameters]
-  (->>
-   parameters
-   <<conformed-definition
-   <<metadata
-   <<bindings))
+(def ->binding-hierarchy
+  "Specifies an ontology for concisely handling special cases in binding, such
+  as binding `::metadata` forms"
+  (->
+   (make-hierarchy)
+   (derive :fm/args            ::metadata)
+   (derive :fm/ret             ::metadata)
+   (derive :fm/rel             ::metadata)
+   (derive :fm/trace           ::metadata)
+   (derive :fm.anomaly/handler ::metadata)))
 
-(defmulti  ->forms (fn [tag _ctx] (swap! trace-atom conj tag) tag))
-(defmulti  ->form  (fn [tag _ctx] (swap! trace-atom conj tag) tag))
+(defmulti  ->form    (fn [tag _ctx] (swap! trace-atom conj ["->form" tag]) tag))
+(defmulti  ->forms   (fn [tag _ctx] (swap! trace-atom conj ["->forms" tag]) tag))
+(defmulti  ->binding (fn [tag _ctx] (swap! trace-atom conj ["->binding" tag]) tag) :hierarchy #'->binding-hierarchy)
+(defmethod ->binding :default
+  [tag ctx]
+  {::symbol (gensym (name tag))
+   ::form   (->form tag ctx)})
+
+(defmethod ->binding ::metadata
+  [tag ctx]
+  (let [forms   (get-in ctx [::metadata tag])
+        binding (::bindings
+                 (reduce
+                  (fn -deduplicate [acc form] ; NOTE: maintain signature index; trivialize binding deduplication
+                    (let [f       (fnil identity (gensym (name tag)))
+                          acc     (update-in acc [::form=>symbol form] f)
+                          sym     (get-in acc [::form=>symbol form])
+                          ctx     (into ctx acc)
+                          form    (->form [::bindings tag] ctx)
+                          binding {::symbol sym ::form form}
+                          acc     (->
+                                   acc
+                                   (update ::bindings conj binding)
+                                   (update ::signature-index inc))]
+                      acc))
+                  {::bindings [] ::form=>symbol {} ::signature-index 0}
+                  forms))]
+    binding))
+
+  ;; TODO: zip `::fn/normalized-argv` tags, respect `:as`
+  ;; TODO: detect regex-op, insert `s/spec`
+(defmethod ->form [::bindings :fm/args]
+  [_ ctx]
+  (->form ::fn/args-spec ctx)) ; TODO: generalize
+
+(defmethod ->form [::bindings :fm/ret]
+  [_ ctx]
+  (->form ::fn/ret-spec ctx))
+
+(defmethod ->form [::bindings :fm/rel]
+  [_ ctx]
+  (let [index (or (get ctx ::signature-index) 0)
+        form  (get-in ctx [::metadata :fm/rel index])
+        spec? (some-fn lib/spec-form? lib/spec-keyword?)
+        fn?   (some-fn lib/fn-form? lib/bound-fn?)]
+    (cond
+      (spec? form) `(fn [rel#] (s/valid? ~form rel#))
+      (fn? form)   form
+      (nil? form)  form)))
+
+(defmethod ->form [::bindings :fm/trace]
+  [_ ctx]
+  (let [index (or (get-in ctx ::signature-index) 0)
+        form  (get-in ctx [::metadata :fm/trace index])
+        pred? (some-fn true? set?)
+        fn?   (some-fn lib/fn-form? lib/bound-fn?)]
+    (cond
+      (pred? form) *default-trace-fn-symbol*
+      (fn? form)   form
+      (nil? form)  form
+      :else        `(partial *default-trace-fn-symbol* ~form))))
+
+(defmethod ->form [::bindings :fm.anomaly/handler]
+  [_ ctx]
+  (let [fn? (some-fn lib/fn-form? lib/bound-fn?)]
+    (cond
+      (fn? form) form
+      :else      *default-anomaly-handler-symbol*)))
+
+(defn bind
+  [ctx tags]
+  (swap! trace-atom conj ["bind" tags])
+  (reduce
+   (fn [ctx tag]
+     (let [binding (->binding tag ctx)]
+       (update ctx ::bindings assoc tag binding)))
+   ctx
+   tags))
+
+(defn binding->tuple
+  [binding]
+  (when (some? (::form binding))
+    ((juxt ::symbol ::form) binding)))
+
+(defn bindings
+  [ctx tags]
+  (swap! trace-atom conj ["->bindings" tags])
+  (mapcat
+   (fn [tag]
+     (when-let [binding (get-in ctx [::bindings tag])]
+       (if (sequential? binding)
+         (mapcat binding->tuple (distinct binding))
+         (binding->tuple binding))))
+   tags))
+
 (defmethod ->form ::fn
   [_ ctx]
-  (let [bindings   (->forms ::fn/bindings ctx)
+  (let [tags       [:fm/args :fm/ret :fm/rel :fm/trace :fm.anomaly/handler]
+        ctx        (bind ctx tags)
+        bindings   (bindings ctx tags)
         sym        (->form ::fn/symbol ctx)
         definition (->forms ::fn/definition ctx)
         metadata   (->form ::fn/metadata ctx)]
@@ -438,15 +404,6 @@
        (with-meta
          (fn ~sym ~@definition)
          ~metadata))))
-
-(defmethod ->forms ::fn/bindings
-  [_ ctx]
-  (->>
-   (get ctx ::bindings) ; TODO: warn on conflict
-   (vals)
-   (flatten)
-   (distinct) ; TODO: distinct forms
-   (mapcat (juxt ::symbol ::form))))
 
 (defmethod ->form ::fn/symbol
   [_ ctx]
@@ -480,23 +437,8 @@
 
 (defmethod ->form ::fn/metadata
   [_ ctx]
-  (into
-   (hash-map)
-   (map
-    (fn [[k forms]]
-      [k (if (sequential? forms) ; NOTE: keep all metadata
-           (into
-            (vector)
-            (map-indexed
-             (fn [i form]
-               (or
-                (get-in ctx [::bindings k i ::symbol])
-                form)))
-            forms)
-           (or
-            (get-in ctx [::bindings k 0 ::symbol])
-            forms))])) ; TODO: simplify
-   (get ctx ::metadata)))
+  (let [metadata (get ctx ::metadata)]
+    `(quote ~metadata)))
 
 (defmethod ->form ::fn/normalized-argv
   [_ argv]
@@ -525,30 +467,11 @@
            :fm.anomaly/args   ~args
            :fm.anomaly/thrown thrown#})))))
 
-(defn bind
-  [ctx tags]
-  (swap! trace-atom conj ["bind" tags])
-  (reduce
-   (fn [ctx tag]
-     (let [binding {::symbol (gensym (name tag)) ::form (->form tag ctx)}]
-       (update ctx ::bindings assoc tag binding)))
-   ctx
-   tags))
-
-(defn ->bindings
-  [ctx tags]
-  (swap! trace-atom conj ["->bindings" tags])
-  (mapcat
-   (fn [tag]
-     [(get-in ctx [::bindings tag ::symbol])
-      (get-in ctx [::bindings tag ::form])])
-   tags))
-
 (defn ->trace?
   ([ctx]
    (swap! trace-atom conj "->trace?")
    (let [index (or (get ctx ::signature-index) 0)
-         form  (or (get-in ctx [::bindings :fm/trace index ::form]) *trace*)]
+         form  (->form :fm/trace ctx)]
      (cond
        (set? form) form
        (not form)  (constantly false)
@@ -574,7 +497,7 @@
 (defmethod ->form ::fn/args-binding
   [_ ctx]
   (let [ctx      (bind ctx [::fn/args])
-        bindings (->bindings ctx [::fn/args])
+        bindings (bindings ctx [::fn/args])
         trace    (->forms :fm.trace/args ctx)
         handler? (->handler? ctx)
         body     (cond
@@ -612,7 +535,7 @@
   ([ctx]
    (swap! trace-atom conj "->conform?")
    (let [index (or (get ctx ::signature-index) 0)
-         form  (or (get-in ctx [::bindings :fm/conform index ::form]) *conform*)]
+         form  (or (get-in ctx [::metadata :fm/conform index]) *conform*)]
      (cond
        (set? form) form
        (not form)  (constantly false)
@@ -624,8 +547,8 @@
 
 (defmethod ->form ::fn/args-anomaly?
   [_ ctx]
-  (let [ctx       (bind ctx [::fn/args-spec ::fn/conformed-args])
-        bindings  (->bindings ctx [::fn/args-spec ::fn/conformed-args])
+  (let [ctx       (bind ctx [::fn/conformed-args])
+        bindings  (bindings ctx [::fn/conformed-args])
         trace     (->forms :fm.trace/conformed-args ctx)
         conformed (->form ::fn/conformed-args ctx)
         handler   (->form ::fn/handler ctx)
@@ -673,7 +596,7 @@
 (defmethod ->form ::fn/ret-binding
   [_ ctx]
   (let [ctx      (bind ctx [::fn/ret])
-        bindings (->bindings ctx [::fn/ret])
+        bindings (bindings ctx [::fn/ret])
         trace    (->forms :fm.trace/ret ctx)
         ret      (->form ::fn/ret ctx)
         handler  (->form ::fn/handler ctx)
@@ -711,8 +634,8 @@
 
 (defmethod ->form ::fn/ret-anomaly?
   [_ ctx]
-  (let [ctx       (bind ctx [::fn/ret-spec ::fn/conformed-ret])
-        bindings  (->bindings ctx [::fn/ret-spec ::fn/conformed-ret])
+  (let [ctx       (bind ctx [::fn/conformed-ret])
+        bindings  (bindings ctx [::fn/conformed-ret])
         trace     (->forms :fm.trace/conformed-ret ctx)
         conformed (->form ::fn/conformed-ret ctx)
         handler   (->form ::fn/handler ctx)
@@ -744,14 +667,14 @@
 
 (defmethod ->form ::fn/ret-spec
   [_ ctx]
-  (or
-   (get-in ctx [::bindings ::fn/ret-spec ::symbol])
-   (let [index   (or (get ctx ::signature-index) 0)
-         ret     (get-in ctx [::metadata :fm/ret index])
-         [tag _] (lib/conform-throw ::fn/arg ret)]
-     (case tag
-       ::fn/args (->form [::fn/args-spec ::fn/args] ret)
-       ret))))
+  (let [index (or (get ctx ::signature-index) 0)]
+    (or
+     (get-in ctx [::bindings :fm/ret index ::symbol])
+     (let [ret     (get-in ctx [::metadata :fm/ret index])
+           [tag _] (lib/conform-throw ::fn/arg ret)]
+       (case tag
+         ::fn/args (->form [::fn/args-spec ::fn/args] ret)
+         ret)))))
 
 (defmethod ->form ::fn/conformed-ret
   [_ ctx]
@@ -839,12 +762,12 @@
   ;; TODO: detect regex-op, insert `s/spec`
 (defmethod ->form ::fn/args-spec
   [_ ctx]
-  (or
-   (get-in ctx [::bindings ::fn/args-spec ::symbol])
-   (let [index (or (get ctx ::signature-index) 0)
-         args  (get-in ctx [::metadata :fm/args index])
-         form  (->form [::fn/args-spec ::fn/args] args)]
-     form)))
+  (let [index (or (get ctx ::signature-index) 0)]
+    (or
+     (get-in ctx [::bindings :fm/args index ::symbol])
+     (let [args (get-in ctx [::metadata :fm/args index])
+           form (->form [::fn/args-spec ::fn/args] args)]
+       form))))
 
 (defmethod ->form [::fn/args-spec ::fn/args]
   [_ args]

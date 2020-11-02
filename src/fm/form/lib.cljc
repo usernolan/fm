@@ -51,6 +51,14 @@
 (def fn??
   (some-fn fn? multi?))
 
+(s/def ::bound-fn
+  (s/and
+   symbol?
+   (comp fn?? resolve)))
+
+(def bound-fn?
+  (partial s/valid? ::bound-fn))
+
 (def -spec-form?
   (comp
    (hash-set
@@ -92,10 +100,13 @@
 (def sequence-spec-form?
   (partial s/valid? ::sequence-spec-form))
 
-  ;; NOTE: alt `s/get-spec`
+  ;; ALT: `s/get-spec`
   ;; NOTE: `spec` respects TBD specs by their qualified keywords
 (s/def ::spec-keyword
   qualified-keyword?)
+
+(def spec-keyword?
+  (partial s/valid? ::spec-keyword))
 
 (s/def :fm/arg
   (s/or
@@ -117,20 +128,21 @@
    :fm/keyword-args-map :fm/keyword-args-map
    ::sequence-spec-form ::sequence-spec-form))
 
+(s/def :fm/ident any?)
+(s/def :fm/arglists any?)
+(s/def :fm/doc string?)
 (s/def :fm/args
   (s/&
    (s/cat
     :fm/args (s/* :fm/arg)
     :fm/variadic (s/? (s/cat :& #{'&} :fm/variadic-arg :fm/variadic-arg)))
    seq)) ; NOTE: disallow {:fm/args []}
-
-(s/def :fm/doc string?)
 (s/def :fm/ret any?)     ; fn, spec
 (s/def :fm/rel any?)     ; fn, spec?
 (s/def :fm/trace any?)   ; bool, set, fn
-(s/def :fm/conform any?) ; bool, set, fn?
-(s/def :fm/handler any?) ; fn
-(s/def :fm/handler? boolean?)
+(s/def :fm/conform any?) ; bool, set
+(s/def :fm.anomaly/handler any?) ; fn
+(s/def :fm.anomaly/handler? boolean?)
 
 (defn arg->symbol
   [arg]

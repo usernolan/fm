@@ -492,10 +492,19 @@
   (->context
    {::ident      ::fn
     ::ns         *ns*
-    ::definition (list
-                  (with-meta 'fn1 {:fm/doc "fn1"})
-                  (with-meta '[a] {:fm/args '[int?]})
-                  'a)})
+    ::definition '(^{:fm/doc "fn1"} fn1
+                   ^{:fm/args [int?]}
+                   [a]
+                   (inc a))})
+
+  (->context
+   {::ident      ::fn
+    ::ns         *ns*
+    ::definition '(^{:fm/doc "fn1"} fn1
+                   ^{:fm/args [int? int?]}
+                   (^{:fm/doc "sig1"}
+                    [a] (inc a))
+                   ([a b] (+ a b)))})
 
   (->context
    {::ident      ::fn
@@ -593,7 +602,7 @@
                       (= (apply + args) ret))
         :fm/trace   #{:fm/args :fm/ret}
         :fm/conform #{:fm/args}
-        :fm/handler (fn [a] a)}
+        :fm.anomaly/handler (fn [a] a)}
       fn1
       [a]
       (inc a))})
@@ -609,7 +618,7 @@
                       (>= ret (apply + args)))
         :fm/trace   #{:fm/args :fm/ret}
         :fm/conform #{:fm/args}
-        :fm/handler (fn [a] a)}
+        :fm.anomaly/handler (fn [a] a)}
       fn1
       ([a] (inc a))
       ([a b] (+ a b)))})
@@ -625,7 +634,7 @@
                       (>= ret (apply + args)))
         :fm/trace   #{:fm/args :fm/ret}
         :fm/conform #{:fm/args}
-        :fm/handler (fn [a] a)}
+        :fm.anomaly/handler (fn [a] a)}
       fn1
       (^{:fm/doc "sig1"}
        [a] (inc a))
@@ -644,7 +653,7 @@
                       (>= ret (apply + args)))
         :fm/trace   #{:fm/args :fm/ret}
         :fm/conform #{:fm/args}
-        :fm/handler (fn [a] a)}
+        :fm.anomaly/handler (fn [a] a)}
       (^{:fm/doc "sig1"}
        [a] (inc a))
       (^{:fm/trace #{:fm/args}
@@ -662,14 +671,199 @@
          :fm/ret             int?
          :fm/rel             (fn [{args :args ret :ret}]
                                (>= ret (apply + args)))
-         :fm/trace           #{:fm/args :fm/ret}
-         :fm/conform         #{:fm/args}
-         :fm.anomaly/handler (fn [a] a)}
-       (^{:fm/doc "sig1"}
-        [a] (inc a))
-       (^{:fm/trace #{:fm/args}
-          :fm/ret   int?}
-        [a b] (+ a b)))}))
+         :fm/trace           true
+         :fm/conform         true
+         :fm.anomaly/handler (fn [a] (prn "anomaly!" a) a)}
+       ([a] (inc a))
+       ([a b] (+ a b)))}))
+
+  (def fn1
+    (clojure.core/let
+     [trace11666
+      true
+      arglists11668
+      '[a]
+      arglists11669
+      '[a b]
+      doc11670
+      "fn1"
+      rel11671
+      (fn [{args :args, ret :ret}] (>= ret (apply + args)))
+      column11673
+      15
+      conform11674
+      true
+      line11676
+      2989
+      args11677
+      [int?]
+      args11678
+      [int? int?]
+      handler11679
+      (fn [a] (prn "anomaly!" a) a)
+      ident11681
+      :fm.form/fm11665
+      ret11682
+      int?]
+      (clojure.core/with-meta
+        (clojure.core/fn
+          fm11665
+          ([a]
+           (try
+             (clojure.core/let
+              [args11684 [a]]
+               (trace11666 {:fm/ident :fm.form/fm11665, :fm.trace/args args11684})
+               (if
+                (fm.anomaly/anomalous? args11684)
+                 (handler11679
+                  {:fm.anomaly/ident :fm.anomaly/received,
+                   :fm.anomaly/args  args11684,
+                   :fm/ident         :fm.form/fm11665})
+                 (clojure.core/let
+                  [conformed-args11686
+                   (clojure.spec.alpha/conform args-spec11685 args11684)]
+                   (trace11666
+                    {:fm/ident                :fm.form/fm11665,
+                     :fm.trace/conformed-args conformed-args11686})
+                   (if
+                    (clojure.spec.alpha/invalid? conformed-args11686)
+                     (handler11679
+                      {:fm.anomaly/ident :fm.anomaly/args,
+                       :clojure.spec.alpha/explain-data
+                       (clojure.spec.alpha/explain-data args-spec11685 args11684),
+                       :fm/ident         :fm.form/fm11665})
+                     (clojure.core/let
+                      [[a] conformed-args11686]
+                       (clojure.core/let
+                        [ret11687 (do (inc a))]
+                         (trace11666 {:fm/ident :fm.form/fm11665, :fm.trace/ret ret11687})
+                         (if
+                          (fm.anomaly/anomalous? ret11687)
+                           (handler11679
+                            {:fm.anomaly/ret   ret11687,
+                             :fm.anomaly/ident :fm.anomaly/nested,
+                             :fm.anomaly/args  args11684,
+                             :fm/ident         :fm.form/fm11665})
+                           (clojure.core/let
+                            [conformed-ret11689
+                             (clojure.spec.alpha/conform ret-spec11688 ret11687)]
+                             (trace11666
+                              {:fm/ident               :fm.form/fm11665,
+                               :fm.trace/conformed-ret conformed-ret11689})
+                             (if
+                              (clojure.spec.alpha/invalid? conformed-ret11689)
+                               (handler11679
+                                {:fm.anomaly/ident :fm.anomaly/ret,
+                                 :clojure.spec.alpha/explain-data
+                                 (clojure.spec.alpha/explain-data ret-spec11688 ret11687),
+                                 :fm.anomaly/args  args11684,
+                                 :fm/ident         :fm.form/fm11665})
+                               (clojure.core/let
+                                [ret11687 conformed-ret11689]
+                                 (if
+                                     (rel11671 {:args args11684, :ret ret11687})
+                                   ret11687
+                                   {:fm.anomaly/ident :fm.anomaly/rel,
+                                    :clojure.spec.alpha/explain-data
+                                    (clojure.spec.alpha/explain-data
+                                     rel11671
+                                     {:args args11684, :ret ret11687}),
+                                    :fm/ident         :fm.form/fm11665 })))))))))))
+             (catch
+              java.lang.Throwable
+              thrown__6700__auto__
+               (handler11679
+                {:fm.anomaly/ident  :fm.anomaly/thrown,
+                 :fm.anomaly/thrown thrown__6700__auto__,
+                 :fm.anomaly/args   [a],
+                 :fm/ident          :fm.form/fm11665}))))
+          ([a b]
+           (try
+             (clojure.core/let
+              [args11690 [a b]]
+               (trace11666 {:fm/ident :fm.form/fm11665, :fm.trace/args args11690})
+               (if
+                (fm.anomaly/anomalous? args11690)
+                 (handler11679
+                  {:fm.anomaly/ident :fm.anomaly/received,
+                   :fm.anomaly/args  args11690,
+                   :fm/ident         :fm.form/fm11665})
+                 (clojure.core/let
+                  [args-spec11691
+                   (clojure.spec.alpha/cat :0 int? :1 int?)
+                   conformed-args11692
+                   (clojure.spec.alpha/conform args-spec11691 args11690)]
+                   (trace11666
+                    {:fm/ident                :fm.form/fm11665,
+                     :fm.trace/conformed-args conformed-args11692})
+                   (if
+                    (clojure.spec.alpha/invalid? conformed-args11692)
+                     (handler11679
+                      {:fm.anomaly/ident :fm.anomaly/args,
+                       :clojure.spec.alpha/explain-data
+                       (clojure.spec.alpha/explain-data args-spec11691 args11690),
+                       :fm/ident         :fm.form/fm11665})
+                     (clojure.core/let
+                      [[a b] conformed-args11692]
+                       (clojure.core/let
+                        [ret11693 (do (+ a b))]
+                         (trace11666 {:fm/ident :fm.form/fm11665, :fm.trace/ret ret11693})
+                         (if
+                          (fm.anomaly/anomalous? ret11693)
+                           (handler11679
+                            {:fm.anomaly/ret   ret11693,
+                             :fm.anomaly/ident :fm.anomaly/nested,
+                             :fm.anomaly/args  args11690,
+                             :fm/ident         :fm.form/fm11665})
+                           (clojure.core/let
+                            [ret-spec11694
+                             int?
+                             conformed-ret11695
+                             (clojure.spec.alpha/conform ret-spec11694 ret11693)]
+                             (trace11666
+                              {:fm/ident               :fm.form/fm11665,
+                               :fm.trace/conformed-ret conformed-ret11695})
+                             (if
+                              (clojure.spec.alpha/invalid? conformed-ret11695)
+                               (handler11679
+                                {:fm.anomaly/ident :fm.anomaly/ret,
+                                 :clojure.spec.alpha/explain-data
+                                 (clojure.spec.alpha/explain-data ret-spec11694 ret11693),
+                                 :fm.anomaly/args  args11690,
+                                 :fm/ident         :fm.form/fm11665})
+                               (clojure.core/let
+                                [ret11693 conformed-ret11695]
+                                 (if
+                                     (rel11671 {:args args11690, :ret ret11693})
+                                   ret11693
+                                   {:fm.anomaly/ident :fm.anomaly/rel,
+                                    :clojure.spec.alpha/explain-data
+                                    (clojure.spec.alpha/explain-data
+                                     rel11671
+                                     {:args args11690, :ret ret11693}),
+                                    :fm/ident         :fm.form/fm11665})))))))))))
+             (catch
+              java.lang.Throwable
+              thrown__6700__auto__
+               (handler11679
+                {:fm.anomaly/ident  :fm.anomaly/thrown,
+                 :fm.anomaly/thrown thrown__6700__auto__,
+                 :fm.anomaly/args   [a b],
+                 :fm/ident          :fm.form/fm11665})))))
+        '{:fm/trace    [true true],
+          :fm/arglists ['[a] '[a b]],
+          :fm/doc      "fn1",
+          :fm/rel
+          [(fn [{args :args, ret :ret}] (>= ret (apply + args)))
+           (fn [{args :args, ret :ret}] (>= ret (apply + args)))],
+          :column      15,
+          :fm/conform  [true true],
+          :line        2989,
+          :fm/args     [[int?] [int? int?]],
+          :fm.anomaly/handler
+          [(fn [a] (prn "anomaly!" a) a) (fn [a] (prn "anomaly!" a) a)],
+          :fm/ident    :fm.form/fm11665,
+          :fm/ret      [int? int?]})))
 
   (->form
    ::fn
@@ -686,6 +880,7 @@
          :fm/conform         #{:fm/args}
          :fm.anomaly/handler (fn [a] a)}
        [a b & cs] (apply + a b cs))}))
+
 
   (lib/conform-explain
    (clojure.spec.alpha/cat
