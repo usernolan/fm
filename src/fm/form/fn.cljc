@@ -9,8 +9,8 @@
 
 (s/def ::signature
   (s/cat
-   ::argv vector?
-   ::body (s/* any?)))
+   :fm.form/argv vector?
+   :fm.form/body (s/* any?)))
 
 (s/def ::signatures
   (s/+
@@ -18,11 +18,24 @@
 
 (s/def ::definition
   (s/cat
-   ::simple-symbol? (s/? simple-symbol?)
-   ::rest
+   :fm.definition/simple-symbol? (s/? simple-symbol?)
+   :fm.definition/rest
    (s/alt
-    ::signature  ::signature
+    ::signature ::signature
     ::signatures ::signatures)))
+
+#_
+(s/def ::nonse/definition
+  (s/cat
+   :fm.definition/simple-symbol? (s/? simple-symbol?)
+   :fm.definition/rest
+   (s/alt
+    ::nonse/signature ::nonse/signature
+    ::nonse/signatures ::nonse/signatures
+    )
+   )
+  )
+
 
 (s/def ::arg
   (s/or

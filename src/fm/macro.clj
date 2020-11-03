@@ -1,13 +1,13 @@
 (ns fm.macro
-  (:require [fm.form :as form]))
+  (:require
+   [fm.form :as form]
+   [fm.form.fn :as fn]))
 
   ;; TODO: multiple definitions
   ;; TODO: variable arity
-(defmacro fm
+(defmacro fn
   [& definition]
-  (form/fm
-   {::form/ns         *ns*
-    ::form/definition definition}))
+  (form/fn {::form/ns *ns* ::fn/definition definition}))
 
 (comment
 
