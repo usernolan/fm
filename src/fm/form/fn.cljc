@@ -18,24 +18,11 @@
 
 (s/def ::definition
   (s/cat
-   :fm.definition/simple-symbol? (s/? simple-symbol?)
+   :fm.definition/simple-symbol (s/? simple-symbol?)
    :fm.definition/rest
    (s/alt
     ::signature ::signature
     ::signatures ::signatures)))
-
-#_
-(s/def ::nonse/definition
-  (s/cat
-   :fm.definition/simple-symbol? (s/? simple-symbol?)
-   :fm.definition/rest
-   (s/alt
-    ::nonse/signature ::nonse/signature
-    ::nonse/signatures ::nonse/signatures
-    )
-   )
-  )
-
 
 (s/def ::arg
   (s/or
