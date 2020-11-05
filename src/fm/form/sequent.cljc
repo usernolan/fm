@@ -5,9 +5,9 @@
 
 (s/def ::signature
   (s/cat
-   ::left vector?
-   ::right vector?
-   ::body (s/* any?)))
+   ::left vector? #_:fm.form/seqv
+   ::right vector? #_:fm.form/seqv
+   :fm.form/body (s/* any?)))
 
 (s/def ::signatures
   (s/+
@@ -15,9 +15,8 @@
 
 (s/def ::definition
   (s/cat
-   ::simple-symbol? (s/? simple-symbol?)
-   ::rest
+   :fm.definition/simple-symbol (s/? simple-symbol?)
+   :fm.definition/rest
    (s/alt
     ::signature  ::signature
     ::signatures ::signatures)))
-

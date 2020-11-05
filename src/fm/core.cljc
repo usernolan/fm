@@ -7,60 +7,60 @@
 
 (defmacro fn [& definition]
   (form/->form
-   {::form/ident      ::form/fn
-    ::form/definition definition
-    ::form/ns         *ns*}))
+   {::form/definition definition
+    ::form/ns         *ns*}
+   ::form/fn))
 
 (defmacro conse [& definition]
   (form/->form
-   {::form/ident      ::form/conse
-    ::form/definition definition
-    ::form/ns         *ns*}))
+   {::form/definition definition
+    ::form/ns         *ns*}
+   ::form/conse))
 
 (defmacro nonse [& definition]
   (form/->form
-   {::form/ident      ::form/nonse
-    ::form/definition definition
-    ::form/ns         *ns*}))
+   {::form/definition definition
+    ::form/ns         *ns*}
+   ::form/nonse))
 
 (defmacro merge [& definition]
   (form/->form
-   {::form/ident      ::form/merge
-    ::form/definition definition
-    ::form/ns         *ns*}))
+   {::form/definition definition
+    ::form/ns         *ns*}
+   ::form/merge))
 
 (defmacro iso [& definition]
   (form/->form
-   {::form/ident      ::form/iso
-    ::form/definition definition
-    ::form/ns         *ns*}))
+   {::form/definition definition
+    ::form/ns         *ns*}
+   ::form/iso))
 
 (defmacro defn [& definition]
   (form/->def
-   {::form/ident      ::form/fn
-    ::form/definition definition
-    ::form/ns         *ns*}))
+   {::form/definition definition
+    ::form/ns         *ns*}
+   ::form/fn))
 
 (defmacro defconse [& definition]
   (form/->def
-   {::form/ident      ::form/conse
-    ::form/definition definition
-    ::form/ns         *ns*}))
+   {::form/definition definition
+    ::form/ns         *ns*}
+   ::form/conse))
 
 (defmacro defnonse [& definition]
   (form/->def
-   {::form/ident      ::form/nonse
-    ::form/definition definition
-    ::form/ns         *ns*}))
+   {::form/definition definition
+    ::form/ns         *ns*}
+   ::form/nonse))
 
 (defmacro defmerge [& definition]
   (form/->def
-   {::form/ident      ::form/merge
-    ::form/definition definition
-    ::form/ns         *ns*}))
+   {::form/definition definition
+    ::form/ns         *ns*}
+   ::form/merge))
 
 (defmacro defiso [& definition]
   (form/->def
-   {::form/ident      ::form/iso
-    ::form/definition definition
-    ::form/ns         *ns*}))
+   {::form/definition definition
+    ::form/ns         *ns*}
+   ::form/iso))

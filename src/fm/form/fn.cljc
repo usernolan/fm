@@ -33,6 +33,7 @@
    ::args ::args))
 
   ;; NOTE: keyword arguments are poorly named in Clojure's case
+  ;; NOTE: `s/keys*` doesn't support `strs` and `syms`, `destructure` does
 (s/def ::keyword-args-map
   (s/and
    (s/map-of (some-fn keyword? symbol? string?) ::arg)
@@ -48,7 +49,7 @@
   (s/&
    (s/cat
     ::args (s/* ::arg)
-    ::variadic (s/? (s/cat :& #{'&} ::variadic-arg ::variadic-arg)))
+    ::variadic-arg (s/? (s/cat :& #{'&} ::variadic-arg ::variadic-arg)))
    seq)) ; NOTE: disallow {:fm/args []}
 
 (s/def ::doc string?)

@@ -1,230 +1,5 @@
 (comment
 
-  ((fn [a [b :as c]] [a b c]) 1 [2])
-  ((fn [a []] a) 1 2) ; NOTE: currently unspecified
-  ((fn [a [:as b]] [a b]) 1 2)
-  ((fn [a [:as]] [a]) 1 2)
-
-  (lib/conform-explain
-   ::fn/definition
-   (list
-    (with-meta 'fm1 {:fm/doc "fm1"})
-    (with-meta '[a] {:fm/args '[int?]})
-    'a))
-
-  (lib/conform-explain
-   ::fn/definition
-   (list
-    (with-meta 'fm1 {:fm/doc "fm1"})
-    (list
-     (with-meta '[a [b [c]]] {:fm/args '[int? [int? [int?]]]})
-     '[a b c])
-    (list
-     (with-meta '[a [b [c]] & ds] {:fm/args '[int? [int? [int?]] & int?]})
-     '[a b c ds])))
-
-  (def params1
-    {::ident      ::fn
-     ::ns         *ns*
-     ::definition (list
-                   (with-meta 'fn1 {:fm/doc "fn1"})
-                   (with-meta '[a] {:fm/args '[int?]})
-                   'a)})
-
-  (def params2
-    {::ident      ::fn
-     ::ns         *ns*
-     ::definition (list
-                   (with-meta 'fn1 {:fm/doc "fn1"})
-                   (with-meta '[a [b [c]] & ds] {:fm/args '[int? [int? [int?]] & int?]})
-                   '[a b c ds])})
-
-  (def params3
-    {::ident      ::fn
-     ::ns         *ns*
-     ::definition (list
-                   (with-meta 'fn1 {:fm/doc "fm1"})
-                   (list
-                    (with-meta '[a] {:fm/args '[int?]})
-                    'a)
-                   (list
-                    (with-meta '[a b] {:fm/args '[int? int?]})
-                    '[a b]))})
-
-  (def params4
-    {::ident      ::fn
-     ::ns         *ns*
-     ::definition (list
-                   (with-meta 'fn1 {:fm/doc "fn1"})
-                   (list
-                    (with-meta '[a [b [c]]] {:fm/args '[int? [int? [int?]]]})
-                    '[a b c])
-                   (list
-                    (with-meta '[a [b [c]] & ds] {:fm/args '[int? [int? [int?]] & int?]})
-                    '[a b c ds]))})
-
-  (def params5
-    {::ident      ::fn
-     ::ns         *ns*
-     ::definition (list
-                   (with-meta 'fn1 {:fm/doc "fn1" :fm/args '[int? int?]})
-                   (list '[a] 'a)
-                   (list '[a b] '[a b]))})
-
-  (def params6
-    {::ident      ::fn
-     ::ns         *ns*
-     ::definition (list
-                   (with-meta 'fn1 {:fm/doc "fn1" :fm/args '[int? & int?]})
-                   (list '[a] 'a)
-                   (list '[a & bs] '[a bs]))})
-
-  (->metadata-form
-   :fm/ident
-   {::ident      ::fn
-    ::ns         *ns*
-    ::definition (list
-                  (with-meta 'fn1 {:fm/doc "fn1"})
-                  (with-meta '[a] {:fm/args '[int?]})
-                  'a)})
-
-  (->metadata-form
-   :fm/ident
-   (->>
-    {::ident      ::fn
-     ::ns         *ns*
-     ::definition (list
-                   (with-meta 'fn1 {:fm/doc "fn1"})
-                   (with-meta '[a] {:fm/args '[int?]})
-                   'a)}
-    <<conformed-definition))
-
-  (->metadata-form
-   :fm/arglists
-   (->>
-    {::ident      ::fn
-     ::ns         *ns*
-     ::definition (list
-                   (with-meta 'fn1 {:fm/doc "fn1"})
-                   (with-meta '[a] {:fm/args '[int?]})
-                   'a)}
-    <<conformed-definition))
-
-  (->metadata-form
-   :fm/arglists
-   (->>
-    {::ident      ::fn
-     ::ns         *ns*
-     ::definition (list
-                   (with-meta 'fn1 {:fm/doc "fn1"})
-                   (with-meta '[a [b [c]] & ds] {:fm/args '[int? [int? [int?]] & int?]})
-                   '[a b c ds])}
-    <<conformed-definition))
-
-  (->metadata-form
-   :fm/arglists
-   (->>
-    {::ident      ::fn
-     ::ns         *ns*
-     ::definition (list
-                   (with-meta 'fn1 {:fm/doc "fn1" :fm/args '[int? & int?]})
-                   (list '[a] 'a)
-                   (list '[a & bs] '[a bs]))}
-    <<conformed-definition))
-
-  (type *1)
-
-  (->metadata-form
-   :fm/args
-   (->>
-    {::ident       ::fn
-     ::ns          *ns*
-     ::definition  (list
-                    (with-meta 'fn1 {:fm/doc "fn1"})
-                    (with-meta '[a [b [c]] & ds] {:fm/args '[int? [int? [int?]] & int?]})
-                    '[a b c ds])
-     ::fn/metadata {:fm/doc "fn1" :fm/args '[int? [int? [int?]] & int?]}}
-    <<conformed-definition))
-
-  (->metadata-form
-   :fm/args
-   (->>
-    {::ident              ::fn
-     ::ns                 *ns*
-     ::definition         (list
-                           (with-meta 'fn1 {:fm/doc "fn1" :fm/args '[int? & int?]})
-                           (list '[a] 'a)
-                           (list '[a & bs] '[a bs])
-                           (list
-                            (with-meta '[a [b [c]] & ds] {:fm/args '[int? [int? [int?]] & int?]})
-                            '[a b c ds]))
-     ::fn/outer-metadata  {:fm/doc "fn1" :fm/args '[int? & int?]}
-     ::fn/inner-metadatas (list nil nil {:fm/args '[int? [int? [int?]] & int?]})}
-    <<conformed-definition))
-
-  (->metadata-form
-   :fm/doc
-   (->>
-    {::ident              ::fn
-     ::ns                 *ns*
-     #_#_
-     ::definition         (list
-                           (with-meta 'fn1 {:fm/doc "fn1" :fm/args '[int? & int?]})
-                           (list
-                            (with-meta '[a] {:fm/doc "sig1" :fm/args '[even?]})
-                            'a)
-                           (list '[a & bs] '[a bs])
-                           (list
-                            (with-meta '[a [b [c]] & ds] {:fm/args '[int? [int? [int?]] & int?]})
-                            '[a b c ds]))
-     ::definition         '(^{:fm/doc "fn1" :fm/args [int? & int?]} fn1
-                            (^{:fm/doc "sig1" :fm/args [even?]}
-                             [a] a)
-                            ([a & bs] [a bs])
-                            (^{:fm/args [int? [int? [int?]] & int?]}
-                             [a [b [c]] & ds]
-                             [a b c ds]))
-     ::fn/outer-metadata  {:fm/doc "fn1" :fm/args '[int? & int?]}
-     ::fn/inner-metadatas (list
-                           {:fm/doc "sig1" :fm/args '[even?]}
-                           nil
-                           {:fm/args '[int? [int? [int?]] & int?]})}
-    <<conformed-definition))
-
-  (->metadata-form
-   (->>
-    {::ident      ::fn
-     ::ns         *ns*
-     ::definition (list
-                   (with-meta 'fn1 {:fm/doc "fn1" :fm/args '[int? & int?]})
-                   (list
-                    (with-meta '[a [b [c]] & ds] {:fm/args '[int? [int? [int?]] & int?]})
-                    '[a b c ds])
-                   (list
-                    (with-meta '[a] {:fm/doc "sig1" :fm/args '[even?]})
-                    'a)
-                   (list '[a & bs] '[a bs]))}
-    <<conformed-definition
-    <<metadata)
-   :fm/args)
-
-  (->metadata-form
-   (->>
-    {::ident      ::fn
-     ::ns         *ns*
-     ::definition (list
-                   (with-meta 'fn1 {:fm/doc "fn1"})
-                   (list
-                    (with-meta '[a] {:fm/doc "sig1" :fm/args '[even?]})
-                    'a)
-                   (list '[a & bs] '[a bs])
-                   (list
-                    (with-meta '[a [b [c]] & ds] {:fm/args '[int? [int? [int?]] & int?]})
-                    '[a b c ds]))}
-    <<conformed-definition
-    <<metadata)
-   :fm/args)
-
   (lib/zipv
    vector?
    '[a b & [c d & [e f & gs]]]
@@ -260,25 +35,6 @@
    '[a [b1 b2 b3] & cs]
    '[int? [int? int? int?] & int?])
 
-  (defn f1
-    [a]
-    (let [[t _] (lib/conform-throw ::fn/arg a)]
-      (case t
-        ::fn/args `(s/spec (s/cat ~@(map f1 a)))
-        a)))
-
-  (partition-by
-   (hash-set '&)
-   '[int?
-     [int? int? int?]
-     & [::s1
-        (fn [a] (pos? a))
-        [int? int? int?
-         & int?]
-        & [(s/and pos? even?)
-           int?
-           & int?]]])
-
   (lib/conform-explain
    (s/cat
     :0 int?
@@ -310,44 +66,10 @@
            :rest (s/? any?)))))))))
    '[1 2 (3 4 5 b)])
 
-  (fn [a b & cs]
-    (let [args14137 (into [a b] cs)]))
-
   (lib/zipv
    vector?
    '[a b & [c d e & [f g & hs]]]
    '[int? [int? int? int?] & [::s1 (fn [a] (pos? a)) [int? int? int? & int?] & [(s/and pos? even?) int? & int?]]])
-
-  (crit/bench
-   (count
-    (into
-     (vector)
-     (comp
-      (map identity)
-      (map-indexed (fn [i a] [i a]))
-      (mapcat identity))
-     '[int? [int? int? int?] & [::s1 (fn [a] (pos? a)) [int? int? int? & int?] & [(s/and pos? even?) int? & int?]]])))
-
-  (crit/bench
-   (count
-    (sequence
-     (comp
-      (map identity)
-      (map-indexed (fn [i a] [i a]))
-      (mapcat identity))
-     '[int? [int? int? int?] & [::s1 (fn [a] (pos? a)) [int? int? int? & int?] & [(s/and pos? even?) int? & int?]]])))
-
-  (partition-by (hash-set '(& &)) *1)
-
-  (partition-by
-   #{'(& &)}
-   '[(a a?)])
-
-  (partition-by
-   #{'(& &)}
-   '[(& &) (a a?)])
-
-  '[a b (c d e f gs)]
 
   (let [[a [b & cs :as cs2] & ds :as ds2] '[a [b c d] e f g]]
     [a b cs ds cs2 ds2])
@@ -382,31 +104,22 @@
   (lib/conform-explain
    ::fn/args
    '[a [& bs :as bs2] & [& [c d & es :as cs] :as rest]])
-  '[int? [& int?] & [& [int? int? & int?]]]
 
-   '[int? [& int?] & [int? [& int?] & int?]]
-   '[a [b1 b2 b3] c [d1 d2 d3 d4] e f g]
+  '[int? [& int?] & [& [int? int? & int?]]]
+  '[int? [& int?] & [int? [& int?] & int?]]
+  '[a [b1 b2 b3] c [d1 d2 d3 d4] e f g]
 
    (lib/zipv
     sequential?
     '[a [& bs] & [c [& ds] & es]]
     '[a? [& b?] & [c? [& d?] & e?]])
+
    '[a (b1 b2 b3) c (d1 d2 d3 d4) e1 e2 e3]
-   (s/cat
-    :a a?
-    ::pos-arg_1
-    (s/spec
-     (s/cat
-      ::var-args
-      (s/? (s/* b?))))
-    ::var-arg
-    )
 
    (lib/zipv
     sequential?
     '[a [& bs :as bs2] & [c [& ds :as ds2] & es :as cs2]]
-    '[a? [& b?] & [c? [& d?] & e?]]
-    )
+    '[a? [& b?] & [c? [& d?] & e?]])
 
    (lib/conform-explain
     ::args
@@ -417,11 +130,11 @@
     '[a [& bs :as bs2] & [c [& ds :as ds2] & es :as cs2]]
     '[a? [& b?] & [c? [& d?] & e?]])
 
-   '[a bs2 cs2]
+  '[a bs2 cs2]
 
-   (lib/conform-explain
-    ::arg
-    :ns/kw)
+  (lib/conform-explain
+   ::arg
+   :ns/kw)
 
   (lib/conform-explain
    ::arg
@@ -471,6 +184,24 @@
      )
     )
    )
+
+  (reset! trace-atom [])
+
+  (->form
+   {::ns *ns*
+    ::definition
+    '(^{:fm/doc "fn1"}
+      fn1
+      ^{:fm/args [int?]}
+      [a]
+      (inc a))}
+   ::fn)
+
+  (clojure.core/let
+      [args8064 [:fm.form/bindings :fm/args]]
+    (clojure.core/with-meta
+      (clojure.core/fn fn1 [])
+      '#:fm{:arglists [[a]], :doc "fn1", :args [[int?]], :ident :fm.form/fn1}))
 
   (->metadata-form
    (->>
@@ -595,13 +326,13 @@
    {::ident ::fn
     ::ns    *ns*
     ::definition
-    '(^{:fm/doc     "fn1"
-        :fm/args    [int?]
-        :fm/ret     int?
-        :fm/rel     (fn [{args :args ret :ret}]
-                      (= (apply + args) ret))
-        :fm/trace   #{:fm/args :fm/ret}
-        :fm/conform #{:fm/args}
+    '(^{:fm/doc             "fn1"
+        :fm/args            [int?]
+        :fm/ret             int?
+        :fm/rel             (fn [{args :args ret :ret}]
+                              (= (apply + args) ret))
+        :fm/trace           #{:fm/args :fm/ret}
+        :fm/conform         #{:fm/args}
         :fm.anomaly/handler (fn [a] a)}
       fn1
       [a]
@@ -611,13 +342,13 @@
    {::ident ::fn
     ::ns    *ns*
     ::definition
-    '(^{:fm/doc     "fn1"
-        :fm/args    [int? int?]
-        :fm/ret     int?
-        :fm/rel     (fn [{args :args ret :ret}]
-                      (>= ret (apply + args)))
-        :fm/trace   #{:fm/args :fm/ret}
-        :fm/conform #{:fm/args}
+    '(^{:fm/doc             "fn1"
+        :fm/args            [int? int?]
+        :fm/ret             int?
+        :fm/rel             (fn [{args :args ret :ret}]
+                              (>= ret (apply + args)))
+        :fm/trace           #{:fm/args :fm/ret}
+        :fm/conform         #{:fm/args}
         :fm.anomaly/handler (fn [a] a)}
       fn1
       ([a] (inc a))
@@ -627,13 +358,13 @@
    {::ident ::fn
     ::ns    *ns*
     ::definition
-    '(^{:fm/doc     "fn1"
-        :fm/args    [int? int?]
-        :fm/ret     int?
-        :fm/rel     (fn [{args :args ret :ret}]
-                      (>= ret (apply + args)))
-        :fm/trace   #{:fm/args :fm/ret}
-        :fm/conform #{:fm/args}
+    '(^{:fm/doc             "fn1"
+        :fm/args            [int? int?]
+        :fm/ret             int?
+        :fm/rel             (fn [{args :args ret :ret}]
+                              (>= ret (apply + args)))
+        :fm/trace           #{:fm/args :fm/ret}
+        :fm/conform         #{:fm/args}
         :fm.anomaly/handler (fn [a] a)}
       fn1
       (^{:fm/doc "sig1"}
@@ -646,13 +377,13 @@
    {::ident ::fn
     ::ns    *ns*
     ::definition
-    '(^{:fm/doc     "fn1"
-        :fm/args    [int? int?]
-        :fm/ret     int?
-        :fm/rel     (fn [{args :args ret :ret}]
-                      (>= ret (apply + args)))
-        :fm/trace   #{:fm/args :fm/ret}
-        :fm/conform #{:fm/args}
+    '(^{:fm/doc             "fn1"
+        :fm/args            [int? int?]
+        :fm/ret             int?
+        :fm/rel             (fn [{args :args ret :ret}]
+                              (>= ret (apply + args)))
+        :fm/trace           #{:fm/args :fm/ret}
+        :fm/conform         #{:fm/args}
         :fm.anomaly/handler (fn [a] a)}
       (^{:fm/doc "sig1"}
        [a] (inc a))
