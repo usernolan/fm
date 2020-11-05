@@ -84,13 +84,20 @@
 (s/def ::outer-metadata  (s/or :fm/metadata :fm/metadata :nil nil?))
 (s/def ::inner-metadatas (s/* ::outer-metadata))
 
+(defmulti ->conformed-definition ::ident)
+
 (defmulti ->form
   (fn
     ([ctx] (->form ctx (get ctx ::ident)))
     ([_ctx tag] tag)))
 
+(defmulti ->def
+  (fn
+    ([ctx] (->def ctx (get ctx ::ident)))
+    ([_ctx tag] tag)))
 
 (defn ->signature-tag
+  "Produces a tag that describes the signature of the form"
   [ctx]
   (get-in ctx [::conformed-definition :fm.definition/rest 0]))
 
@@ -118,39 +125,28 @@
    (derive ::fn/signature        ::signature)
    (derive ::fn/signatures       ::signatures))) ; TODO: atom, `..metadata/hierarchy`
 
-(def binding-hierarchy
-  "Specifies an ontology to concisely handle special cases in binding, such as
-  binding `::metadata` forms"
-  (->
-   (make-hierarchy)
-   (derive :fm/args            ::metadata)
-   (derive :fm/ret             ::metadata)
-   (derive :fm/rel             ::metadata)
-   (derive :fm/trace           ::metadata)
-   (derive :fm.anomaly/handler ::metadata))) ; TODO: atom, `..binding/hierarchy`
-
-(defmulti ->forms
-  (fn
-    ([_ctx tag] tag)))
-
 (defmulti ->metadata
+  "Formats and combines metadata forms"
   (fn
     ([ctx] (->metadata ctx (->signature-tag ctx)))
     ([_ctx tag] tag))
   :hierarchy #'metadata-hierarchy)
 
-(defn ->fn [ctx]
-  (let [definition (get ctx ::definition)
-        conformed  (lib/conform-throw ::fn/definition definition)
-        ctx        (into ctx {::ident ::fn ::conformed-definition conformed})
-        ctx        (assoc ctx ::metadata (->metadata ctx))
-        form       (->form ctx)]
-    form))
+(defmulti ->forms
+  "Produces a sequence of forms to be spliced as if by `~@`"
+  (fn
+    ([_ctx tag] tag)))
 
-#_(defn ->conse [ctx])
-#_(defn ->nonse [ctx])
-#_(defn ->merge [ctx])
-#_(defn ->iso [ctx])
+(def binding-hierarchy
+  "Specifies an ontology to concisely handle special cases in binding, such as
+  binding certain `::metadata` forms"
+  (->
+   (make-hierarchy)
+   (derive :fm/args            :fm.binding/metadata)
+   (derive :fm/ret             :fm.binding/metadata)
+   (derive :fm/rel             :fm.binding/metadata)
+   (derive :fm/trace           :fm.binding/metadata)
+   (derive :fm.anomaly/handler :fm.binding/metadata))) ; TODO: atom, `..binding/hierarchy`
 
 (defmulti ->binding
   (fn
@@ -160,7 +156,7 @@
 (defn bind [ctx tags] ; ALT: `<<bind`
   (reduce
    (fn [ctx tag]
-     (let [binding (->binding tag ctx)]
+     (let [binding (->binding ctx tag)]
        (update ctx ::bindings assoc tag binding)))
    ctx
    tags))
@@ -180,8 +176,10 @@
    tags))
 
 (defmethod ->form ::fn
-  [ctx _]
-  (let [tags       [:fm/args :fm/ret :fm/rel :fm/trace :fm.anomaly/handler]
+  [ctx & _]
+  (let [ctx        (assoc ctx ::conformed-definition (->conformed-definition ctx))
+        ctx        (assoc ctx ::metadata (->metadata ctx))
+        tags       [:fm/args :fm/ret :fm/rel :fm/trace :fm.anomaly/handler]
         ctx        (bind ctx tags)
         bindings   (bindings ctx tags)
         sym        (->form ctx :fm/simple-symbol)
@@ -192,6 +190,10 @@
          (fn ~sym ~@definition)
          ~metadata))))
 
+(defmethod ->conformed-definition ::fn
+  [ctx]
+  (lib/conform-throw ::fn/definition (get ctx ::definition)))
+
 #_(defmethod ->form ::conse [ctx _])
 #_(defmethod ->form ::nonse [ctx _])
 #_(defmethod ->form ::merge [ctx _])
@@ -199,8 +201,10 @@
 
 (defmethod ->form ::metadata
   [ctx _]
-  (let [metadata (get ctx ::metadata)]
-    `(quote ~metadata))) ; NOTE: see `->metadata`
+  (or
+   (get-in ctx [::bindings ::metadata ::symbol])
+   (let [metadata (get ctx ::metadata)]
+     `(quote ~metadata)))) ; NOTE: see `->metadata`
 
 (defn -signature-metadata
   [ctx tag]
@@ -399,26 +403,16 @@
   (let [metadata (get ctx ::metadata)]
     `(quote ~metadata)))
 
-(defn ->ident
-  [ctx]
-  (->form ctx :fm/ident))
-
-(def ->symbol
-  (comp symbol ->ident))
-
-(def ->simple-symbol
-  (comp symbol name ->ident))
-
 (def ->binding-hierarchy
   "Specifies an ontology to concisely handle special cases in binding, such as
-  binding `::metadata` forms"
+  binding certain `::metadata` forms"
   (->
    (make-hierarchy)
-   (derive :fm/args            ::metadata)
-   (derive :fm/ret             ::metadata)
-   (derive :fm/rel             ::metadata)
-   (derive :fm/trace           ::metadata)
-   (derive :fm.anomaly/handler ::metadata)))
+   (derive :fm/args            :fm.binding/metadata)
+   (derive :fm/ret             :fm.binding/metadata)
+   (derive :fm/rel             :fm.binding/metadata)
+   (derive :fm/trace           :fm.binding/metadata)
+   (derive :fm.anomaly/handler :fm.binding/metadata)))
 
 (defmulti  ->binding (fn [tag _ctx] (swap! trace-atom conj ["->binding" tag]) tag) :hierarchy #'->binding-hierarchy)
 (defmethod ->binding :default
@@ -426,7 +420,7 @@
   {::symbol (gensym (name tag))
    ::form   (->form tag ctx)})
 
-(defmethod ->binding ::metadata
+(defmethod ->binding :fm.binding/metadata
   [tag ctx]
   (let [forms   (get-in ctx [::metadata tag])
         binding (::bindings
@@ -861,7 +855,7 @@
   (let [index (or (get ctx ::signature-index) 0)]
     (or
      (get-in ctx [::bindings :fm/args index ::symbol])
-     (let [args (get-in ctx [::metadata :fm/args index])
+     (let [args (get-in ctx [::metadata :fm/args index ])
            form (->form [::fn/args-spec ::fn/args] args)]
        form))))
 
