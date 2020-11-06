@@ -40,7 +40,7 @@
   (s/and
    seq?
    not-empty
-   (comp fn-symbol? first))) ; ALT: (comp fn?? eval)
+   (comp fn-symbol? first))) ; ALT: (comp fn?? eval), (comp #{fn ,,,} deref resolve)
 
 (def fn-form?
   (partial s/valid? ::fn-form))
@@ -54,7 +54,7 @@
 (s/def ::bound-fn
   (s/and
    symbol?
-   (comp fn?? resolve)))
+   (comp fn?? deref resolve)))
 
 (def bound-fn?
   (partial s/valid? ::bound-fn))

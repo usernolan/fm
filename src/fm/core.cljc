@@ -5,62 +5,30 @@
    [fm.api :as api]
    [fm.form :as form]))
 
+
+   ;;;
+   ;;; NOTE: global dynamic variables; configuration
+   ;;;
+
+(def ^:dynamic *trace*
+  nil)
+
+(def ^:dynamic *trace-fn*
+  `prn)
+
+(def ^:dynamic *anomaly-handler*
+  `identity)
+
+
+   ;;;
+   ;;; NOTE: macros
+   ;;;
+
 (defmacro fn [& definition]
   (form/->form
    {::form/definition definition
-    ::form/ns         *ns*}
+    ::form/ns         *ns*
+    ::form/defaults   {:fm/trace    *trace*
+                       :fm/trace-fn *trace-fn*
+                       :fm/handler  *anomaly-handler*}}
    ::form/fn))
-
-(defmacro conse [& definition]
-  (form/->form
-   {::form/definition definition
-    ::form/ns         *ns*}
-   ::form/conse))
-
-(defmacro nonse [& definition]
-  (form/->form
-   {::form/definition definition
-    ::form/ns         *ns*}
-   ::form/nonse))
-
-(defmacro merge [& definition]
-  (form/->form
-   {::form/definition definition
-    ::form/ns         *ns*}
-   ::form/merge))
-
-(defmacro iso [& definition]
-  (form/->form
-   {::form/definition definition
-    ::form/ns         *ns*}
-   ::form/iso))
-
-(defmacro defn [& definition]
-  (form/->def
-   {::form/definition definition
-    ::form/ns         *ns*}
-   ::form/fn))
-
-(defmacro defconse [& definition]
-  (form/->def
-   {::form/definition definition
-    ::form/ns         *ns*}
-   ::form/conse))
-
-(defmacro defnonse [& definition]
-  (form/->def
-   {::form/definition definition
-    ::form/ns         *ns*}
-   ::form/nonse))
-
-(defmacro defmerge [& definition]
-  (form/->def
-   {::form/definition definition
-    ::form/ns         *ns*}
-   ::form/merge))
-
-(defmacro defiso [& definition]
-  (form/->def
-   {::form/definition definition
-    ::form/ns         *ns*}
-   ::form/iso))

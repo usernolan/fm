@@ -188,14 +188,164 @@
   (reset! trace-atom [])
 
   (->form
-   {::ns *ns*
-    ::definition
-    '(^{:fm/doc "fn1"}
-      fn1
-      ^{:fm/args [int?]}
-      [a]
-      (inc a))}
+   {::ns         *ns*
+    ::definition '(^{:fm/doc "fn1"}
+                   fn1
+                   ^{:fm/args    [int?]
+                     :fm/ret     :fm/anomaly
+                     #_#_:fm/rel     (fn [{args :args ret :ret}]
+                                   (>= ret (apply + args)))
+                     :fm/trace   true
+                     :fm/conform true
+                     :fm/handler (partial into {:a :b})}
+                   [a]
+                   (inc a))
+    ::defaults   {:fm/trace    nil
+                  :fm/trace-fn `prn
+                  :fm/handler  `identity}}
    ::fn)
+
+  (def f2
+    (clojure.core/let
+     [args11101
+      (clojure.spec.alpha/cat :0 int?)
+      ret11102
+      :fm/anomaly
+      rel11103
+      (fn [{args :args, ret :ret}] (>= ret (apply + args)))
+      trace11104
+      clojure.core/prn
+      handler11105
+      (partial into {:a :b})]
+      (clojure.core/with-meta
+        (clojure.core/fn
+          fn1
+          [a]
+          (try
+            (clojure.core/let
+             [args11106 [a]]
+              (trace11104 {:fm/ident :fm.form/fn1, :fm.trace/args args11106})
+              (if
+               (fm.anomaly/anomalous? args11106)
+                (handler11105
+                 {:fm.anomaly/ident :fm.anomaly/received,
+                  :fm.anomaly/args args11106,
+                  :fm/ident :fm.form/fn1})
+                (clojure.core/let
+                 [conformed-args11107 (clojure.spec.alpha/conform args11101 args11106)]
+                  (trace11104
+                   {:fm/ident :fm.form/fn1, :fm.trace/conformed-args conformed-args11107})
+                  (if
+                   (clojure.spec.alpha/invalid? conformed-args11107)
+                    (handler11105
+                     {:fm.anomaly/ident :fm.anomaly/args,
+                      :clojure.spec.alpha/explain-data
+                      (clojure.spec.alpha/explain-data args11101 args11106),
+                      :fm/ident :fm.form/fn1})
+                    (clojure.core/let
+                     [[a] conformed-args11107]
+                      (clojure.core/let
+                       [ret11108 (do (inc a))]
+                        (trace11104 {:fm/ident :fm.form/fn1, :fm.trace/ret ret11108})
+                        (if
+                         (fm.anomaly/anomalous? ret11108)
+                          (handler11105
+                           {:fm.anomaly/ret ret11108,
+                            :fm.anomaly/ident :fm.anomaly/nested,
+                            :fm.anomaly/args args11106,
+                            :fm/ident :fm.form/fn1})
+                          (clojure.core/let
+                           [conformed-ret11109 (clojure.spec.alpha/conform ret11102 ret11108)]
+                            (trace11104
+                             {:fm/ident :fm.form/fn1,
+                              :fm.trace/conformed-ret conformed-ret11109})
+                            (if
+                             (clojure.spec.alpha/invalid? conformed-ret11109)
+                              (handler11105
+                               {:fm.anomaly/ident :fm.anomaly/ret,
+                                :clojure.spec.alpha/explain-data
+                                (clojure.spec.alpha/explain-data ret11102 ret11108),
+                                :fm.anomaly/args args11106,
+                                :fm/ident :fm.form/fn1})
+                              (clojure.core/let
+                               [ret11108 conformed-ret11109]
+                                (if
+                                 (rel11103 {:args args11106, :ret ret11108})
+                                  ret11108
+                                  {:fm.anomaly/ident :fm.anomaly/rel,
+                                   :clojure.spec.alpha/explain-data
+                                   (clojure.spec.alpha/explain-data
+                                    rel11103
+                                    {:args args11106, :ret ret11108}),
+                                   :fm/ident :fm.form/fn1})))))))))))
+            (catch
+             java.lang.Throwable
+             thrown__6505__auto__
+              (handler11105
+               {:fm.anomaly/ident :fm.anomaly/thrown,
+                :fm.anomaly/thrown thrown__6505__auto__,
+                :fm.anomaly/args [a],
+                :fm/ident :fm.form/fn1}))))
+        '#:fm{:args [[int?]],
+              :rel [(fn [{args :args, ret :ret}] (>= ret (apply + args)))],
+              :ret [:fm/anomaly],
+              :trace [true],
+              :conform [true],
+              :ident :fm.form/fn1,
+              :arglists [[a]],
+              :doc "fn1",
+              :handler [(partial into {:a :b})]})))
+
+  (def f1
+    (clojure.core/let
+     [args6616 (clojure.spec.alpha/cat :0 int?) trace6617 clojure.core/prn]
+      (clojure.core/with-meta
+        (clojure.core/fn
+          fn1
+          [a]
+          (try
+            (clojure.core/let
+             [args6618 [a]]
+              (trace6617 {:fm/ident :fm.form/fn1, :fm.trace/args args6618})
+              (if
+               (fm.anomaly/anomalous? args6618)
+                (clojure.core/identity
+                 {:fm.anomaly/ident :fm.anomaly/received,
+                  :fm.anomaly/args  args6618,
+                  :fm/ident         :fm.form/fn1})
+                (clojure.core/let
+                 [conformed-args6619 (clojure.spec.alpha/conform args6616 args6618)]
+                  (if
+                   (clojure.spec.alpha/invalid? conformed-args6619)
+                    (clojure.core/identity
+                     {:fm.anomaly/ident :fm.anomaly/args,
+                      :clojure.spec.alpha/explain-data
+                      (clojure.spec.alpha/explain-data args6616 args6618),
+                      :fm/ident         :fm.form/fn1})
+                    (clojure.core/let
+                     [ret6620 (do (inc a))]
+                      (trace6617 {:fm/ident :fm.form/fn1, :fm.trace/ret ret6620})
+                      (if
+                       (fm.anomaly/anomalous? ret6620)
+                        (clojure.core/identity
+                         {:fm.anomaly/ret   ret6620,
+                          :fm.anomaly/ident :fm.anomaly/nested,
+                          :fm.anomaly/args  args6618,
+                          :fm/ident         :fm.form/fn1})
+                        ret6620))))))
+            (catch
+             java.lang.Throwable
+             thrown__6505__auto__
+              (clojure.core/identity
+               {:fm.anomaly/ident  :fm.anomaly/thrown,
+                :fm.anomaly/thrown thrown__6505__auto__,
+                :fm.anomaly/args   [a],
+                :fm/ident          :fm.form/fn1}))))
+        '#:fm{:trace    [true],
+              :arglists [[a]],
+              :doc      "fn1",
+              :args     [[int?]],
+              :ident    :fm.form/fn1})))
 
   (defn fn1
     ([a] (prn "a") a)
@@ -1429,6 +1579,54 @@
   (->form
    ::fn/context-bindings
    {::bindings bindings1})
+
+  ;;;
+  )
+
+(comment
+
+  (ns ns1.core)
+
+  (defn f1 [d1]
+    (prn d1)
+    (when d1 (prn "tracing"))
+    ::f1)
+
+  (ns ns2.core
+    (:require [ns1.core :as ns1]))
+
+  (def ^:dynamic *trace* false)
+
+  (defmacro f [& definition]
+    `(def ~(gensym 'f) ~*trace*))
+
+  (f sym [] [])
+
+  (binding [*trace* true]
+    (f sym [] [])) ; NOTE: not sure why this doesn't work
+
+  (alter-var-root #'*trace* (constantly true))
+
+  (f sym [] [])
+
+  (alter-var-root #'*trace* (constantly false))
+
+  (ns ns3.core
+    (:require
+     [ns2.core :as ns2]))
+
+  (ns2/f sym [] [])
+
+  (ns ns4.core
+    (:require
+     [ns2.core :as ns2]
+     [ns3.core :as ns3]))
+
+  (ns2/f sym [] [])
+
+  (alter-var-root #'ns2/*trace* (constantly true))
+
+  (ns2/f sym [] [])
 
   ;;;
   )

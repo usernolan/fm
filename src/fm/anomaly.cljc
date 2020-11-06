@@ -33,7 +33,9 @@
    (constantly false)))
 
 (s/def :fm/contains-anomaly
-  contains-anomaly?)
+  (s/and
+   coll?
+   contains-anomaly?))
 
 (s/def :fm/anomalous
   (s/or
