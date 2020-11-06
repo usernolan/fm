@@ -197,6 +197,10 @@
       (inc a))}
    ::fn)
 
+  (defn fn1
+    ([a] (prn "a") a)
+    ([a & as] (prn "as") [a as]))
+
   (clojure.core/let
       [args8064 [:fm.form/bindings :fm/args]]
     (clojure.core/with-meta
