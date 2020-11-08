@@ -16,10 +16,5 @@
     ([a b] (inc (+ a b)))
     ([a b & cs] (inc (apply + a b cs))))
 
-  (fm/defn f2
-    ([a b & cs :as %]
-     )
-    )
-
   ;;;
   )

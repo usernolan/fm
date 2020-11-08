@@ -133,11 +133,12 @@
    ;;;
 
 (defn ->signature-tag ; ALT: ident
-  "Produces a tag that describes the signature of the form"
+  "Produces a tag that describes the signature of the `fm` form"
   [ctx]
   (get-in ctx [::conformed-definition :fm.definition/rest 0]))
 
-(defmulti ->form "Produces a form"
+(defmulti ->form
+  "Produces a form to be evaluated as with `eval` or combined with other forms"
   (fn [_ctx tag]
     (swap! trace-atom conj ["->form" tag])
     tag))
@@ -147,7 +148,7 @@
     (swap! trace-atom conj ["->def" tag])
     tag))
 
-(defmulti ->forms "Produces a sequence of forms to be spliced as if by `~@`"
+(defmulti ->forms "Produces a sequence of forms to be spliced as with `~@`"
   (fn [_ctx tag]
     (swap! trace-atom conj ["->forms" tag])
     tag))
@@ -467,6 +468,11 @@
                   forms))]
     binding))
 
+(defmethod ->binding ::fn/args
+  [ctx tag]
+  {::symbol (last (get ctx ::fn/normalized-argv))
+   ::form   (->form ctx tag)})
+
 
    ;;;
    ;;; NOTE: `->form` implementations
@@ -596,8 +602,6 @@
            (fn? form)   form
            :else        `(partial ~(get-in ctx [::defaults :fm/trace-fn]) ~form)))))))
 
-  ;; TODO: infer `:fm/handler?` (when #{:fm/anomaly} ret)
-  ;; NOTE: introduces dependency ordering
 (defmethod ->form :fm/handler
   [ctx _]
   (let [index (get ctx ::signature-index 0)]
@@ -609,15 +613,20 @@
          (fn? form) form
          :else      (get-in ctx [::defaults :fm/handler]))))))
 
+  ;; TODO: infer `:fm/handler?` (when #{:fm/anomaly} ret)
+  ;; NOTE: introduces dependency ordering
+
 (defmethod ->form ::fn/normalized-argv
   [argv _]
-  (mapv
-   (fn [arg]
-     (cond
-       (vector? arg) (if (some #{:as} arg) arg (conj arg :as (gensym 'arg)))
-       (map? arg)    (update arg :as (fnil identity (gensym 'arg)))
-       :else         arg))
-   argv))
+  (let [argv (if (some #{:as} argv) argv (conj argv :as (gensym 'argv)))
+        argv (mapv
+              (fn [arg]
+                (cond
+                  (vector? arg) (if (some #{:as} arg) arg (conj arg :as (gensym 'arg)))
+                  (map? arg)    (update arg :as (fnil identity (gensym 'arg)))
+                  :else         arg))
+              argv)]
+    argv))
 
 (defmethod ->form ::fn/body
   [ctx _]
@@ -640,7 +649,7 @@
   [ctx _]
   (or
    (get-in ctx [::bindings ::fn/args ::symbol])
-   (let [argv (get ctx ::fn/normalized-argv)
+   (let [argv (drop-last 2 (get ctx ::fn/normalized-argv))
          form (if (some #{'&} argv)
                 (let [xf   (comp (take-while (complement #{'&})) (map fn/arg->symbol))
                       args (into (vector) xf argv)
@@ -709,10 +718,10 @@
 
 (defmethod ->form [::bindings ::fn/conformed-args]
   [ctx _]
-  (let [argv      (get ctx ::fn/normalized-argv)
+  (let [args      (last (get ctx ::fn/normalized-argv))
         conformed (->form ctx ::fn/conformed-args)
         body      (->form ctx [::bindings ::fn/ret])]
-    `(let [~argv ~conformed]
+    `(let [~args ~conformed]
        ~body)))
 
 (defmethod ->form [::bindings ::fn/ret]
@@ -753,7 +762,7 @@
   [ctx _]
   (let [index (get ctx ::signature-index 0)
         body  (get-in ctx [::conformed-definition :fm.definition/rest 1 index ::body])]
-    `(do ~@body))) ; TODO: additional analysis?)
+    `(do ~@body))) ; TODO: additional analysis?
 
 (defmethod ->form [::validate ::fn/ret]
   [ctx _]
@@ -846,8 +855,9 @@
 (defmethod ->forms [::fn/definition ::fn/signature]
   [ctx _]
   (let [argv  (get-in ctx [::conformed-definition :fm.definition/rest 1 ::argv])
-        argv  (->form argv ::fn/normalized-argv)
-        ctx   (assoc ctx ::signature-index 0 ::fn/normalized-argv argv)
+        norm  (->form argv ::fn/normalized-argv)
+        argv  (if (some #{:as} argv) (vec (drop-last 2 argv)) argv)
+        ctx   (assoc ctx ::signature-index 0 ::fn/normalized-argv norm)
         body  (->form ctx ::fn/body)
         forms (list argv body)]
     forms))
@@ -858,8 +868,9 @@
         forms      (map-indexed
                     (fn [i signature]
                       (let [argv (get signature ::argv)
-                            argv (->form argv ::fn/normalized-argv)
-                            ctx  (assoc ctx ::signature-index i ::fn/normalized-argv argv)
+                            norm (->form argv ::fn/normalized-argv)
+                            argv (if (some #{:as} argv) (vec (drop-last 2 argv)) argv)
+                            ctx  (assoc ctx ::signature-index i ::fn/normalized-argv norm)
                             body (->form ctx ::fn/body)] ; TODO: when `::fn/body`
                         (list argv body)))
                     signatures)]
