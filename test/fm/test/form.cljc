@@ -210,103 +210,13 @@
                      :fm/trace   true
                      :fm/conform true
                      :fm/handler identity}
-                   [a]
+                   [a :as argv]
+                   (prn argv)
                    (inc a))
     ::defaults   {:fm/trace    nil
                   :fm/trace-fn `prn
                   :fm/handler  `identity}}
    ::fn)
-
-  (def f1
-    (clojure.core/let
-     [args6702
-      (clojure.spec.alpha/cat :0 int?)
-      ret6703
-      int?
-      rel6704
-      (fn [{args :args, ret :ret}] (>= ret (apply + (vals args))))
-      trace6705
-      clojure.core/prn
-      handler6706
-      identity]
-      (clojure.core/with-meta
-        (clojure.core/fn
-          fn1
-          [a]
-          (try
-            (clojure.core/let
-             [argv6707 [a]]
-              (trace6705 {:fm/ident :fm.form/fn1, :fm.trace/args argv6707})
-              (if
-               (fm.anomaly/anomalous? argv6707)
-                (handler6706
-                 {:fm.anomaly/ident :fm.anomaly/received,
-                  :fm.anomaly/args argv6707,
-                  :fm/ident :fm.form/fn1})
-                (clojure.core/let
-                 [conformed-args6708 (clojure.spec.alpha/conform args6702 argv6707)]
-                  (trace6705
-                   {:fm/ident :fm.form/fn1, :fm.trace/conformed-args conformed-args6708})
-                  (if
-                   (clojure.spec.alpha/invalid? conformed-args6708)
-                    (handler6706
-                     {:fm.anomaly/ident :fm.anomaly/args,
-                      :clojure.spec.alpha/explain-data
-                      (clojure.spec.alpha/explain-data args6702 argv6707),
-                      :fm/ident :fm.form/fn1})
-                    (clojure.core/let
-                     [argv6707 conformed-args6708]
-                      (clojure.core/let
-                       [ret6709 (do (inc a))]
-                        (trace6705 {:fm/ident :fm.form/fn1, :fm.trace/ret ret6709})
-                        (if
-                         (fm.anomaly/anomalous? ret6709)
-                          (handler6706
-                           {:fm.anomaly/ret ret6709,
-                            :fm.anomaly/ident :fm.anomaly/nested,
-                            :fm.anomaly/args argv6707,
-                            :fm/ident :fm.form/fn1})
-                          (clojure.core/let
-                           [conformed-ret6710 (clojure.spec.alpha/conform ret6703 ret6709)]
-                            (trace6705
-                             {:fm/ident :fm.form/fn1,
-                              :fm.trace/conformed-ret conformed-ret6710})
-                            (if
-                             (clojure.spec.alpha/invalid? conformed-ret6710)
-                              (handler6706
-                               {:fm.anomaly/ident :fm.anomaly/ret,
-                                :clojure.spec.alpha/explain-data
-                                (clojure.spec.alpha/explain-data ret6703 ret6709),
-                                :fm.anomaly/args argv6707,
-                                :fm/ident :fm.form/fn1})
-                              (clojure.core/let
-                               [ret6709 conformed-ret6710]
-                                (if
-                                 (rel6704 {:args argv6707, :ret ret6709})
-                                  ret6709
-                                  {:fm.anomaly/ident :fm.anomaly/rel,
-                                   :clojure.spec.alpha/explain-data
-                                   (clojure.spec.alpha/explain-data
-                                    rel6704
-                                    {:args argv6707, :ret ret6709}),
-                                   :fm/ident :fm.form/fn1})))))))))))
-            (catch
-             java.lang.Throwable
-             thrown__6585__auto__
-              (handler6706
-               {:fm.anomaly/ident :fm.anomaly/thrown,
-                :fm.anomaly/thrown thrown__6585__auto__,
-                :fm.anomaly/args [a],
-                :fm/ident :fm.form/fn1}))))
-        '#:fm{:args [[int?]],
-              :rel [(fn [{args :args, ret :ret}] (>= ret (apply + (vals args))))],
-              :ret [int?],
-              :trace [true],
-              :conform [true],
-              :ident :fm.form/fn1,
-              :arglists [[a]],
-              :doc "fn1",
-              :handler [identity]})))
 
   (fm/defconse conse1 [[::a ::b ::c]] [[::d]]
     ::d)
@@ -317,7 +227,7 @@
   (fm/defmerge req<<developer
     [[::db.developer/conn {::session/data {:nu/keys [id]}}]] ; TODO: seqv -> pull-pattern
     [[::portal/developer]]
-    (let [ref    (credential.datalog/nuid->lookup-ref (:nu/id data))
+    (let [ref    (credential.datalog/nuid->lookup-ref id)
           result (d/q q/credential->developer (d/db conn) ref)]
       (datalog.lib/<-ident (ffirst result))))
 

@@ -26,7 +26,8 @@
    ;;; NOTE: `fm.form` helpers
    ;;;
 
- ;; TODO: `spec2` requires symbolic specs; no inline (fn ,,,), `comp`, etc.
+  ;; TODO: `spec2` requires symbolic specs; no inline (fn ,,,), `comp`, etc.
+  ;; TODO: unify with `clojure.core.specs.alpha/...`
 
 (def multi?
   (partial instance? clojure.lang.MultiFn))
@@ -121,7 +122,7 @@
 (def spec-keyword?
   (partial s/valid? ::spec-keyword))
 
-(s/def ::arg-symbol
+(s/def ::arg-symbol ; TODO: `clojure.core.specs.alpha/local-name`
   (s/and
    symbol?
    (complement #{'&})))
@@ -270,7 +271,10 @@
 
   ;; TODO: refine
 (s/def ::argv vector?)
-(s/def ::seqv vector?)
+(s/def ::seqv
+  (s/or
+   ::sequent/positional (s/coll-of ::sequent/arg :kind vector?)
+   ::sequent/nominal (s/tuple (s/coll-of ::sequent/arg :kind vector?))))
 
 
    ;;;
@@ -481,8 +485,8 @@
 (defmethod ->metadata ::metadata      [ctx _] (->metadata ctx (->signature-tag ctx)))
 (defmethod ->metadata ::fn/signature  [ctx _] (-signature-metadata ctx ::argv))
 (defmethod ->metadata ::fn/signatures [ctx _] (-signatures-metadata ctx ::argv))
-#_(defmethod ->metadata :fm.form.sequent/signature [ctx _] (-signature-metadata ctx ::seqv))
-#_(defmethod ->metadata :fm.form.sequent/signatures [ctx _] (-signatures-metadata ctx ::seqv))
+#_(defmethod ->metadata :fm.form.sequent/signature [ctx _] (-signature-metadata ctx ::sequent/left))
+#_(defmethod ->metadata :fm.form.sequent/signatures [ctx _] (-signatures-metadata ctx ::sequent/left))
 
 (defmethod ->metadata :fm/ident
   [ctx _]
@@ -502,7 +506,7 @@
 #_(defmethod ->metadata [:fm/arglists :fm.form.sequent/signature]
     [ctx _]
     (let [signature (get-in ctx [::conformed-definition :fm.definition/rest 1])
-          argv      (get signature ::seqv)]
+          argv      (get signature ::sequent/left)]
       (vector argv)))
 
 (defmethod ->metadata [:fm/arglists ::fn/signatures]

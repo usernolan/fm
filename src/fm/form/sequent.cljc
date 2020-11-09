@@ -20,6 +20,21 @@
     ::signature  ::signature
     ::signatures ::signatures)))
 
+(s/def ::keyword-or-destructure-form
+  (s/or
+   :keyword keyword?
+   ::destructure-form (some-fn simple-symbol? vector? map?)))
+
+(s/def ::destructure-map
+  (s/map-of
+   ::keyword-or-destructure-form
+   ::keyword-or-destructure-form))
+
+(s/def ::arg
+  (s/or
+   :keyword keyword?
+   ::destructure-map ::destructure-map))
+
 #_(s/def ::reversible-signature
     (s/cat
      ::left :fm.form/seqv
