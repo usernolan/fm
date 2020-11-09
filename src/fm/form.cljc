@@ -1,10 +1,12 @@
 (ns fm.form
+  (:refer-clojure :exclude [fn?])
   (:require
    [clojure.spec.alpha :as s]
    [clojure.string :as string]
    [fm.anomaly :as anomaly]
    [fm.form.fn :as fn]
-   [fm.form.lib :as lib]))
+   [fm.form.sequent :as sequent]
+   [fm.lib :as lib]))
 
   ;; TODO: revisit tags
   ;; TODO: runtime `*ignore*`, `s/*compile-asserts*`, etc.; config
@@ -21,24 +23,134 @@
 
 
    ;;;
-   ;;; NOTE: `fm.form` specs
+   ;;; NOTE: `fm.form` helpers
    ;;;
 
-(s/def ::ident
+ ;; TODO: `spec2` requires symbolic specs; no inline (fn ,,,), `comp`, etc.
+
+(def multi?
+  (partial instance? clojure.lang.MultiFn))
+
+(def fn?
+  (some-fn clojure.core/fn? multi?))
+
+  ;; TODO: refactor; (comp #{fn ,,,} resolve)
+(def ^:dynamic *fn-symbol-set*
+  #{'fn 'fn* `fn
+    'constantly `constantly
+    'memfn `memfn
+    'comp `comp
+    'complement `complement
+    'partial `partial
+    'juxt `juxt
+    'memoize `memoize
+    'fnil `fnil
+    'every-pred `every-pred
+    'some-fn `some-fn}) ; TODO: include `fm` forms
+
+(s/def ::fn-symbol
+  (fn [x]
+    (*fn-symbol-set* x))) ; NOTE: `s/def` evaluates set, breaks rebinding
+
+(def fn-symbol?
+  (partial s/valid? ::fn-symbol))
+
+(s/def ::fn-form
+  (s/and
+   seq?
+   not-empty
+   (comp fn-symbol? first))) ; ALT: (comp fn?? eval), (comp #{fn ,,,} deref resolve)
+
+(def fn-form?
+  (partial s/valid? ::fn-form))
+
+(s/def ::bound-fn
+  (s/and
+   symbol?
+   (comp fn? deref resolve)))
+
+(def bound-fn?
+  (partial s/valid? ::bound-fn))
+
+(def -spec-form?
+  (comp
+   (hash-set
+    (namespace
+     `s/*)) ; TODO: revisit
+   namespace
+   symbol
+   resolve
+   first))
+
+(s/def ::spec-form
+  (s/and
+   seq?
+   not-empty
+   -spec-form?))
+
+(def spec-form?
+  (partial s/valid? ::spec-form))
+
+  ;; TODO: rename e.g. `regex-op` ,,,
+(def ^:dynamic
+  *sequence-spec-symbol-set*
+  #{`s/cat
+    `s/alt
+    `s/*
+    `s/+
+    `s/?
+    `s/&})
+
+(s/def ::sequence-spec-form
+  (s/and
+   ::spec-form
+   (fn [x] ; NOTE: `comp` evaluates set, breaks rebinding
+     (*sequence-spec-symbol-set*
+      (symbol
+       (resolve
+        (first x)))))))
+
+(def sequence-spec-form?
+  (partial s/valid? ::sequence-spec-form))
+
+  ;; ALT: `s/get-spec`
+  ;; NOTE: `spec` respects TBD specs by their qualified keywords
+(s/def ::spec-keyword
   qualified-keyword?)
 
-(s/def ::ns
-  (partial instance? clojure.lang.Namespace))
+(def spec-keyword?
+  (partial s/valid? ::spec-keyword))
 
-(s/def ::definition
-  (s/or
-   ::fn/definition ::fn/definition
-   :fm.form.sequent/definition :fm.form.sequent/definition))
+(s/def ::arg-symbol
+  (s/and
+   symbol?
+   (complement #{'&})))
 
-(s/def ::conformed-definition
-  (s/keys
-   :opt [:fm.definition/simple-symbol]
-   :req [:fm.definition/rest]))
+
+   ;;;
+   ;;; NOTE: `fm` specs
+   ;;;
+
+(comment ; NOTE: from deprecated `fm.form.lib`
+
+  (s/def :fm/ident any?)
+  (s/def :fm/arglists any?)
+  (s/def :fm/doc string?)
+  (s/def :fm/args
+    (s/&
+     (s/cat
+      :fm/args (s/* :fm/arg)
+      :fm/variadic (s/? (s/cat :& #{'&} :fm/variadic-arg :fm/variadic-arg)))
+     seq)) ; NOTE: disallow {:fm/args []}
+  (s/def :fm/ret any?)     ; fn, spec
+  (s/def :fm/rel any?)     ; fn, spec?
+  (s/def :fm/trace any?)   ; bool, set, fn
+  (s/def :fm/conform any?) ; bool, set
+  (s/def :fm.anomaly/handler any?) ; fn
+  (s/def :fm.anomaly/handler? boolean?)
+
+  ;;;
+  )
 
 (s/def :fm/ident
   qualified-keyword?)
@@ -63,14 +175,14 @@
 
 (s/def :fm/rel
   (s/or
-   ::spec (some-fn lib/spec-form? lib/spec-keyword?)
-   ::fn (some-fn lib/fn-form? lib/bound-fn?)
+   ::spec (some-fn spec-form? spec-keyword?)
+   ::fn (some-fn fn-form? bound-fn?)
    ::metadata ,,,))
 
 (s/def :fm/trace
   (s/or
    ::pred (some-fn true? set?)
-   ::fn (some-fn lib/fn-form? lib/bound-fn?)
+   ::fn (some-fn fn-form? bound-fn?)
    ::metadata ,,,))
 
 (s/def :fm/conform
@@ -78,11 +190,35 @@
 
 (s/def :fm/handler
   (s/or
-   ::fn (some-fn lib/fn-form? lib/bound-fn?)
+   ::fn (some-fn fn-form? bound-fn?)
    ::metadata ,,,))
 
 (s/def :fm/handler?
   boolean?)
+
+
+   ;;;
+   ;;; NOTE: `fm.form` specs
+   ;;;
+
+(s/def ::ident
+  qualified-keyword?)
+
+(s/def ::ns
+  (partial instance? clojure.lang.Namespace))
+
+(s/def ::defaults
+  any?)
+
+(s/def ::definition
+  (s/or
+   ::fn/definition ::fn/definition
+   ::sequent/definition ::sequent/definition))
+
+(s/def ::conformed-definition
+  (s/keys
+   :opt [:fm.definition/simple-symbol]
+   :req [:fm.definition/rest]))
 
 (s/def ::metadata
   (s/keys
@@ -100,14 +236,8 @@
     :fm/handler?
     :fm/context]))
 
-(s/def ::context
-  (s/keys
-   :req
-   [::ident
-    ::ns
-    ::definition
-    ::conformed-definition
-    ::metadata]))
+(s/def ::outer-metadata (s/or ::metadata ::metadata :nil nil?))
+(s/def ::inner-metadatas (s/* ::outer-metadata))
 
 (s/def ::binding
   (s/or
@@ -124,8 +254,23 @@
 
 (s/def ::signature-index int?)
 
-(s/def ::outer-metadata (s/or ::metadata ::metadata :nil nil?))
-(s/def ::inner-metadatas (s/* ::outer-metadata))
+(s/def ::context
+  (s/keys
+   :opt
+   [::ident
+    ::ns
+    ::defaults
+    ::definition
+    ::conformed-definition
+    ::metadata
+    ::bindings
+    ::outer-metadata
+    ::inner-metadatas
+    ::signature-index]))
+
+  ;; TODO: refine
+(s/def ::argv vector?)
+(s/def ::seqv vector?)
 
 
    ;;;
@@ -156,11 +301,10 @@
 (def metadata-hierarchy
   "Specifies an ontology to concisely handle special cases of combining metadata
   forms.
-  `:default` — keeps all metadata. delegates to `->default-metadata-form` which
-  keeps unrecognized keys exactly as-typed.
-  `:fm.metadata/default` — keeps all metadata. when the key is recognized, the
-  resulting metadata form will be either the same size as `:fm/arglists` or one
-  element larger to include outer metadata.
+  `:default` — keeps all unrecognized metadata keys exactly as-typed.
+  `:fm.metadata/default` — catch-all for recognized keys. the resulting metadata
+  will be either the same size as `:fm/arglists` or one element larger to
+  include outer metadata.
   `:fm.metadata/fallback` — when a signature has no inner metadata, the outer
   metadata for that key will be used as a fallback. the resulting metadata form
   will always be the same size as `:fm/arglists`."
@@ -582,8 +726,8 @@
     (or
      (get-in ctx [::bindings :fm/rel index ::symbol])
      (when-let [form (get-in ctx [::metadata :fm/rel index])]
-       (let [spec? (some-fn lib/spec-form? lib/spec-keyword?)
-             fn?   (some-fn lib/fn-form? lib/bound-fn?)]
+       (let [spec? (some-fn spec-form? spec-keyword?)
+             fn?   (some-fn fn-form? bound-fn?)]
          (cond
            (spec? form) `(fn [rel#] (s/valid? ~form rel#))
            (fn? form)   form))))))
@@ -596,7 +740,7 @@
      (when-let [form (or (get-in ctx [::metadata :fm/trace index])
                          (get-in ctx [::defaults :fm/trace]))]
        (let [pred? (some-fn true? set?)
-             fn?   (some-fn lib/fn-form? lib/bound-fn?)]
+             fn?   (some-fn fn-form? bound-fn?)]
          (cond
            (pred? form) (get-in ctx [::defaults :fm/trace-fn])
            (fn? form)   form
@@ -608,7 +752,7 @@
     (or
      (get-in ctx [::bindings :fm/handler index ::symbol])
      (let [form (get-in ctx [::metadata :fm/handler index])
-           fn?  (some-fn lib/fn-form? lib/bound-fn?)]
+           fn?  (some-fn fn-form? bound-fn?)]
        (cond
          (fn? form) form
          :else      (get-in ctx [::defaults :fm/handler]))))))
@@ -843,7 +987,7 @@
         form    (case tag
                   ::fn/arg                 (->form arg [:fm/args ::fn/variadic-arg ::fn/arg])
                   ::fn/keyword-args-map    (->form arg [:fm/args ::fn/variadic-arg ::fn/keyword-args-map])
-                  ::lib/sequence-spec-form arg)
+                  ::sequence-spec-form arg)
         forms   (list :& form)]
     forms))
 
@@ -915,6 +1059,7 @@
 
 
 
+
 #_(defmethod ->form ::var-symbol
     [_ ctx]
     (with-meta
@@ -935,66 +1080,3 @@
           sym    (->form ::fn/var-symbol ctx)
           form   (->form ::fn ctx)]
       `(def ~sym ~form)))
-
-(comment
-
-  ;; TODO: dynamic `:fm/args`
-  (def args1 [int?])
-  (fm ^{:fm/args args1} [x] (+ x 1))
-
-  ;; TODO: warnings (log level?), `conformsplain`
-  (fm ^{:fm/args [int?]} [x1 x2])
-
-  ;;;
-  )
-
-(comment
-
-  (def f1 (fn [a b c] (mapv inc [a b c])))
-  (def f2 (fn [d e f] (mapv inc [d e f])))
-
-  (defn comp1
-    [& fs]
-    (fn [& args] (reduce (fn [acc f] (apply f acc)) args fs)))
-
-  ((comp1
-    f1
-    f2) 1 2 3)
-
-  (def f3 (fn [[a b c]] (mapv inc [a b c])))
-  (def f4 (fn [[d e f]] (mapv inc [d e f])))
-
-  (defn comp2
-    [& fs]
-    (fn [& args]
-      (let [args (if (and (= (count args) 1) (sequential? (first args))) (first args) args)]
-        (reduce
-         (fn [acc f] (f acc)) args fs))))
-
-  ((comp2
-    f3
-    f4) {:a 1 :b 2 :c 3})
-
-  ;;;
-  )
-
-(comment
-
-  (fm/,,,
-   {:fm/args            [[int?]
-                         [int? & int?]]
-    :fm/ret             [[int?]]
-    :fm/trace           (fn [t] ,,,)
-    :fm/handler (fn [a] ,,,)}
-   f1)
-
-  (fm/,,,
-   {:fm/f               f1
-    :fm/args            [[int?]
-                         [int? & int?]]
-    :fm/ret             [[int?]]
-    :fm/trace           (fn [t] ,,,)
-    :fm/handler (fn [a] ,,,)})
-
-  ;;;
-  )

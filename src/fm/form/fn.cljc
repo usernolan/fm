@@ -1,7 +1,7 @@
 (ns fm.form.fn
   (:require
    [clojure.spec.alpha :as s]
-   [fm.form.lib :as lib]))
+   [fm.lib :as lib]))
 
   ;; TODO: revisit tags
   ;; TODO: generators
@@ -9,7 +9,7 @@
 
 (s/def ::signature
   (s/cat
-   :fm.form/argv vector?
+   :fm.form/argv :fm.form/argv
    :fm.form/body (s/* any?)))
 
 (s/def ::signatures
@@ -26,10 +26,10 @@
 
 (s/def ::arg
   (s/or
-   ::lib/spec-keyword ::lib/spec-keyword
-   ::lib/arg-symbol ::lib/arg-symbol
-   ::lib/spec-form ::lib/spec-form
-   ::lib/fn-form ::lib/fn-form
+   :fm.form/spec-keyword :fm.form/spec-keyword
+   :fm.form/arg-symbol :fm.form/arg-symbol
+   :fm.form/spec-form :fm.form/spec-form
+   :fm.form/fn-form :fm.form/fn-form
    ::args ::args))
 
   ;; NOTE: keyword arguments are poorly named in Clojure's case
@@ -43,7 +43,7 @@
   (s/or
    ::arg ::arg
    ::keyword-args-map ::keyword-args-map
-   ::lib/sequence-spec-form ::lib/sequence-spec-form))
+   :fm.form/sequence-spec-form :fm.form/sequence-spec-form))
 
 (s/def ::args
   (s/&
@@ -51,14 +51,6 @@
     ::args (s/* ::arg)
     ::variadic-arg (s/? (s/cat :& #{'&} ::variadic-arg ::variadic-arg)))
    seq)) ; NOTE: disallow {:fm/args []}
-
-(s/def ::doc string?)
-(s/def ::ret any?)     ; fn, spec
-(s/def ::rel any?)     ; fn, spec?
-(s/def ::trace any?)   ; bool, set, fn
-(s/def ::conform any?) ; bool, set, fn?
-(s/def ::handler any?) ; fn
-(s/def ::handler? boolean?)
 
 (defn arg->symbol
   [arg]

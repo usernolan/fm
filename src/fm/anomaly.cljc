@@ -51,7 +51,7 @@
       ::nested
       ::ret
       ::rel
-      ::nonse
+      ::nonse ; ALT: ::ret
       ::thrown})
 
 #_(s/def ::ident
