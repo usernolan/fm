@@ -60,7 +60,7 @@
   (s/and
    seq?
    not-empty
-   (comp fn-symbol? first))) ; ALT: (comp fn?? eval), (comp #{fn ,,,} deref resolve)
+   (comp fn-symbol? first))) ; ALT: (comp fn? eval), (comp #{fn ,,,} deref resolve)
 
 (def fn-form?
   (partial s/valid? ::fn-form))
@@ -132,32 +132,11 @@
    ;;; NOTE: `fm` specs
    ;;;
 
-(comment ; NOTE: from deprecated `fm.form.lib`
-
-  (s/def :fm/ident any?)
-  (s/def :fm/arglists any?)
-  (s/def :fm/doc string?)
-  (s/def :fm/args
-    (s/&
-     (s/cat
-      :fm/args (s/* :fm/arg)
-      :fm/variadic (s/? (s/cat :& #{'&} :fm/variadic-arg :fm/variadic-arg)))
-     seq)) ; NOTE: disallow {:fm/args []}
-  (s/def :fm/ret any?)     ; fn, spec
-  (s/def :fm/rel any?)     ; fn, spec?
-  (s/def :fm/trace any?)   ; bool, set, fn
-  (s/def :fm/conform any?) ; bool, set
-  (s/def :fm.anomaly/handler any?) ; fn
-  (s/def :fm.anomaly/handler? boolean?)
-
-  ;;;
-  )
-
 (s/def :fm/ident
   qualified-keyword?)
 
 (s/def :fm/arglists
-  (s/* vector?)) ; ALT: `s/coll-of`, `s/*`, `argv?`, `::argv`
+  (s/* vector?)) ; ALT: `s/coll-of`, `s/*`, `argv?`, `:clojure.core/arglist`
 
 (s/def :fm/doc
   (s/or
@@ -166,13 +145,13 @@
 
 (s/def :fm/args
   (s/or
-   ::definition ::fn/args
-   ::metadata (s/* (s/or ::fn/args ::fn/args :nil nil?))))
+   ::definition :fm.form/argv
+   ::metadata (s/* (s/or :fm.form/argv :fm.form/argv :nil nil?))))
 
 (s/def :fm/ret
   (s/or
-   ::definition ::fn/arg
-   ::metadata (s/* (s/or ::fn/arg ::fn/arg :nil nil?))))
+   ::definition (s/or :fm.form.fn/arg :fm.form.fn/arg :fm.form/argv :fm.form/argv)
+   ::metadata (s/* (s/or :fm.form.fn/arg :fm.form.fn/arg :nil nil?))))
 
 (s/def :fm/rel
   (s/or
@@ -197,6 +176,15 @@
 (s/def :fm/handler?
   boolean?)
 
+(s/def :fm/throw any?) ; (fm/fn ^:fm/throw [a] (inc a)) == (fn [a] (inc a))
+
+(s/def :fm/sequent
+  (s/keys
+   :opt
+   [:fm.sequent/ident
+    :fm.sequent/unit
+    :fm.sequent/combine])) ; TODO: full definition
+
 
    ;;;
    ;;; NOTE: `fm.form` specs
@@ -209,12 +197,44 @@
   (partial instance? clojure.lang.Namespace))
 
 (s/def ::defaults
-  any?)
+  (s/keys
+   :opt
+   [:fm/trace
+    :fm/trace-fn
+    :fm/handler])) ; TODO: `:fm.sequent/...`
 
 (s/def ::definition
   (s/or
    ::fn/definition ::fn/definition
    ::sequent/definition ::sequent/definition))
+
+(s/def ::seqv
+  (s/or
+   :fm.sequent/positional (s/coll-of ::sequent/arg :kind vector?)
+   :fm.sequent/nominal (s/tuple (s/coll-of ::sequent/arg :kind vector?))))
+
+(s/def :fm.form/argv
+  (s/or
+   ::seqv ::seqv
+   :clojure.core/argv vector?)) ; NOTE: order-dependent; defer to core
+
+(s/def :fm.form/signature
+  (s/cat
+   :fm.form/argv :fm.form/argv
+   :fm.form/retv (s/? :fm.form/seqv)
+   :fm.form/body (s/+ any?)))
+
+(s/def :fm.form/signatures
+  (s/+
+   (s/spec :fm.form/signature)))
+
+(s/def :fm.form/definition
+  (s/cat
+   :fm.definition/simple-symbol (s/? simple-symbol?)
+   :fm.definition/rest
+   (s/alt
+    :fm.form/signature :fm.form/signature
+    :fm.form/signatures :fm.form/signatures)))
 
 (s/def ::conformed-definition
   (s/keys
@@ -234,8 +254,7 @@
     :fm/trace
     :fm/conform
     :fm/handler
-    :fm/handler?
-    :fm/context]))
+    :fm/handler?]))
 
 (s/def ::outer-metadata (s/or ::metadata ::metadata :nil nil?))
 (s/def ::inner-metadatas (s/* ::outer-metadata))
@@ -286,11 +305,19 @@
   [ctx]
   (get-in ctx [::conformed-definition :fm.definition/rest 0]))
 
+(def form-hierarchy "Specifies an ontology of form tags"
+  (->
+   (make-hierarchy)
+   (derive ::conse ::sequent)
+   (derive ::nonse ::sequent)
+   (derive ::merge ::sequent)))
+
 (defmulti ->form
   "Produces a form to be evaluated as with `eval` or combined with other forms"
   (fn [_ctx tag]
     (swap! trace-atom conj ["->form" tag])
-    tag))
+    tag)
+  :hierarchy #'form-hierarchy)
 
 (defmulti ->def "Produces a `def` form"
   (fn [_ctx tag]
@@ -438,7 +465,37 @@
          (fn ~sym ~@definition)
          ~metadata))))
 
-#_(defmethod ->form ::conse [ctx _])
+(defmethod ->form ::sequent
+  [ctx tag]
+  (let [conformed (lib/conform-throw ::sequent/definition (get ctx ::definition))
+        ctx       (assoc ctx ::ident tag ::conformed-definition conformed)
+          ;; TODO: left -> `:fm/args`, right -> `:fm/ret`
+        ctx       (assoc ctx ::metadata (->metadata ctx ::metadata))
+        tags      [:fm/args :fm/ret :fm/rel :fm/trace :fm/handler]
+        ctx       (bind ctx tags)
+        bindings  (bindings ctx tags)
+        sym       (->form ctx :fm/simple-symbol)
+        argm      (->form ctx ::sequent/argm)
+        body      (->form ctx ::sequent/body)
+        metadata  (->form ctx ::metadata)]
+    `(let [~@bindings]
+       (with-meta
+         (fn ~sym [& argms#]
+           (try
+             (let [~argm (into (hash-map) argms#)] ; TODO: when seq
+                 ;; TODO: left -> dispatch
+                 ;; TODO: signatures -> body
+                 ;; TODO: right?
+                 ;; TODO: left and right contexts, autolifting; `lift?`, `only?`
+               ~body)
+             (catch Throwable t#
+               (~handler
+                {:fm/ident        ~ident
+                 ::anomaly/ident  ::anomaly/thrown
+                 ::anomaly/args   (vec argms)
+                 ::anomaly/thrown t#}))))
+         ~metadata))))
+
 #_(defmethod ->form ::nonse [ctx _])
 #_(defmethod ->form ::merge [ctx _])
 #_(defmethod ->form ::iso [ctx _])
@@ -477,16 +534,22 @@
         metadata   (into {} xf tags)]
     metadata))
 
+(defn -sequent-metadata
+  [ctx]
+  (let [metadatas (-signature)])
+  )
+
 
    ;;;
    ;;; NOTE: `->metadata` implementations
    ;;;
 
-(defmethod ->metadata ::metadata      [ctx _] (->metadata ctx (->signature-tag ctx)))
-(defmethod ->metadata ::fn/signature  [ctx _] (-signature-metadata ctx ::argv))
-(defmethod ->metadata ::fn/signatures [ctx _] (-signatures-metadata ctx ::argv))
-#_(defmethod ->metadata :fm.form.sequent/signature [ctx _] (-signature-metadata ctx ::sequent/left))
-#_(defmethod ->metadata :fm.form.sequent/signatures [ctx _] (-signatures-metadata ctx ::sequent/left))
+(defmethod ->metadata ::metadata           [ctx _] (->metadata ctx (->signature-tag ctx)))
+(defmethod ->metadata ::fn/signature       [ctx _] (-signature-metadata ctx ::argv))
+(defmethod ->metadata ::fn/signatures      [ctx _] (-signatures-metadata ctx ::argv))
+(defmethod ->metadata ::sequent/signature  [ctx _] (-signature-metadata ctx ::sequent/left))
+(defmethod ->metadata ::sequent/signatures [ctx _] (-signatures-metadata ctx ::sequent/left))
+  ;; TODO: left -> args, right -> ret
 
 (defmethod ->metadata :fm/ident
   [ctx _]
@@ -1004,7 +1067,7 @@
   [ctx _]
   (let [argv  (get-in ctx [::conformed-definition :fm.definition/rest 1 ::argv])
         norm  (->form argv ::fn/normalized-argv)
-        argv  (if (some #{:as} argv) (vec (drop-last 2 argv)) argv)
+        argv  (if (some #{:as} argv) (vec (drop-last 2 argv)) argv) ; TODO: `::fn/argv`
         ctx   (assoc ctx ::signature-index 0 ::fn/normalized-argv norm)
         body  (->form ctx ::fn/body)
         forms (list argv body)]

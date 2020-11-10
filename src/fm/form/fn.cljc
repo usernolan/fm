@@ -7,23 +7,6 @@
   ;; TODO: generators
   ;; TODO: order tags according to observed frequency
 
-(s/def ::signature
-  (s/cat
-   :fm.form/argv :fm.form/argv
-   :fm.form/body (s/* any?)))
-
-(s/def ::signatures
-  (s/+
-   (s/spec ::signature)))
-
-(s/def ::definition
-  (s/cat
-   :fm.definition/simple-symbol (s/? simple-symbol?)
-   :fm.definition/rest
-   (s/alt
-    ::signature ::signature
-    ::signatures ::signatures)))
-
 (s/def ::arg
   (s/or
    :fm.form/spec-keyword :fm.form/spec-keyword

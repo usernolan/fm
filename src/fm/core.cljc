@@ -50,11 +50,11 @@
                        :fm/handler  *anomaly-handler*}}
    ::form/fn))
 
-(defmacro conse [& definition]
-  (form/->form
+(defmacro defn [& definition]
+  (form/->def
    {::form/definition definition
     ::form/ns         *ns*
     ::form/defaults   {:fm/trace    *trace*
                        :fm/trace-fn *trace-fn*
                        :fm/handler  *anomaly-handler*}}
-   ::form/conse))
+   ::form/fn))

@@ -2,24 +2,6 @@
   (:require
    [clojure.spec.alpha :as s]))
 
-(s/def ::signature
-  (s/cat
-   ::left :fm.form/seqv
-   ::right (s/? :fm.form/seqv)
-   :fm.form/body (s/* any?)))
-
-(s/def ::signatures
-  (s/+
-   (s/spec ::signature)))
-
-(s/def ::definition
-  (s/cat
-   :fm.definition/simple-symbol (s/? simple-symbol?)
-   :fm.definition/rest
-   (s/alt
-    ::signature  ::signature
-    ::signatures ::signatures)))
-
 (s/def ::keyword-or-destructure-form
   (s/or
    :keyword keyword?
@@ -28,7 +10,7 @@
 (s/def ::destructure-map
   (s/map-of
    ::keyword-or-destructure-form
-   ::keyword-or-destructure-form))
+   ::keyword-or-destructure-form)) ; ALT: either
 
 (s/def ::arg
   (s/or

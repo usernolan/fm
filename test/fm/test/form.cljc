@@ -218,22 +218,141 @@
                   :fm/handler  `identity}}
    ::fn)
 
+  (->form
+   {::ns         *ns*
+    ::definition '(#_^{:fm/doc "fn1"}
+                     fn1
+                     #_^{:fm/rel     (fn [{args :args ret :ret}]
+                                       (>= ret (apply + (vals args))))
+                         :fm/trace   true
+                         :fm/conform true
+                         :fm/handler identity}
+                     [[::a :as ctx]]
+                     (prn argv)
+                     (inc a))
+    ::defaults   {:fm/trace    nil
+                  :fm/trace-fn `prn
+                  :fm/handler  `identity}}
+   ::conse)
+
+  (lib/conform-explain
+   ::seqv
+   [[:a]])
+
+  (defn f1
+    ([argm & argms] (prn argm argms) (f1 (into (hash-map) (cons argm argms))))
+    ([argm]
+
+     ))
+
+  ([] ,,,)
+  ([] [] ,,,)
+  ([] [[]] ,,,)
+  ([[]] ,,,)
+  ([[]] [] ,,,)
+  ([[]] [[]] ,,,)
+
+  ;; merges: meta-merge, deep merge, specter?
+  (into (hash-map) argms)
+  (into (vector) (mapcat (fn [x] (sequential? x) x (vector x))) args)
+  (into (vector) args)
+  (into (vector) (mapcat identity) argvs)
+  (partial apply meta-merge)
+  (partial apply deep-merge)
+  (partial apply zip)
+  (->> (select-keys ret right) (partial into args)) ; "closed"
+
+  (derive :fm.sequent/-> :fm.sequent/conse)
+  (derive :fm.sequent/<- :fm.sequent/conse)
+  (derive :fm.sequent/-- :fm.sequent/nonse)
+  (derive :fm.sequent/-! :fm.sequent/nonse)
+  (derive :fm.sequent/!! :fm.sequent/nonse)
+  (derive :fm.sequent/>< :fm.sequent/nonse)
+  (derive :fm.sequent/<< :fm.sequent/merge)
+  (derive :fm.sequent/>> :fm.sequent/merge)
+  (derive :fm.sequent/<> :fm.sequent/iso)
+
+  (derive :fm.sequent/combine :fm.sequent/merge)
+
+ (fm/defn f1
+    [a]
+    a)
+
+ (fm/defn m1 [[::a ::b]]
+   ::c)
+
+ (defn f1 [a] (inc a)) ; b
+ (fm/defn f1 ^:fm/throw [a] (inc a))
+ #_(fm/defn f1 ^:fm/ignore [a] (inc a))
+
+ (defn f2 [a]
+   (try
+     (if (s/valid? int? a)
+       (inc a)
+       'args-anomaly)
+     (catch Throwable t
+       'thrown-anomaly)))
+
+ (fm/defn f2 ^{:fm/args [int?]} [a] (inc a))
+
+ (s/def ::a int?)
+ (fm/defn f2 [::a] (inc a))
+
+ (fm/defn f1 ^{:fm/args [::a]} [a] (inc a)) ; b
+ (fm/defn f1 ^{:fm/args [::a]} [a :as argv] (prn argv) (inc a)) ; b
+ (fm/defn f1 [::a] (inc a)) ; b
+ (fm/defn f1 ^:fm.sequent/-> [::a] (inc a)) ; [b]
+ (fm/defn f1 ^:fm.sequent/-- [::a] (inc a)) ; [a]
+ (fm/defn f1 ^:fm.sequent/<< [::a] (inc a)) ; [a b]
+ (fm/defn f1 ^:fm.sequent/<> [::a] [::b] (inc a), (dec b)) ; [a] | [b]
+
+ (fm/defn f1 [a] [::b] (inc a))
+
+  (fm/defn m1
+    ^{:fm/sequent
+      {:fm.sequent/ident   :fm.sequent/merge
+       :fm.sequent/unit    (partial into [] ,,,)
+       :fm.sequent/combine (partial into [] ,,,)}}
+    [:a :b :c]
+    [:d :e :f]
+    [d e f])
+
+  (fm/defn ^:fm.sequent/<< m1
+    ^{:fm/sequent {:fm.sequent/combine (partial apply meta-merge)}}
+    [[:a :b :c]]
+    [[:d :e :f]]
+    [d e f])
+
+  (m1 [:a] [:b] [:c])
+
+  (fm/defn ^:fm.sequent/<< m2
+    [])
+
   (fm/defconse conse1 [[::a ::b ::c]] [[::d]]
     ::d)
 
   (fm/defn f1 [x y z :as v3]
     v3)
 
-  (fm/defmerge req<<developer
-    [[::db.developer/conn {::session/data {:nu/keys [id]}}]] ; TODO: seqv -> pull-pattern
-    [[::portal/developer]]
+  (lib/conform-explain
+   (s/cat
+    :fm.form/argv vector?
+    :fm.form/retv (s/? vector?)
+    :fm.form/body (s/+ any?))
+   '([a b c] []))
+
+  #_(seqv->pull-pattern)
+  #_(seqv->argv)
+  (fm/defn ^:fm.sequent/merge req<<developer
+    [::db.developer/conn {::session/data {:nu/keys [id]}}] ; TODO: seqv -> pull-pattern
+    [::portal/developer]
     (let [ref    (credential.datalog/nuid->lookup-ref id)
           result (d/q q/credential->developer (d/db conn) ref)]
       (datalog.lib/<-ident (ffirst result))))
 
-  (fm/defnonse req<transact!>
-    [[:body-params ::db.developer/conn ::portal/developer]]
-    [[::d/tx-report]]
+  (fm/defn ^:fm.sequent/nonse req<transact!>
+    [:body-params ::db.developer/conn ::portal/developer]
+    [::d/tx-report]
     (let [eid           (get developer :db/id)
           subscriptions (get body-params ::portal/subscriptions)
           tx-data       [{:db/id eid ::portal/subscriptions subscriptions}]]
@@ -252,6 +371,30 @@
      req<<developer
      req<transact!>
      req->post-response))
+
+  (s/def ::req
+    (s/keys
+     :req [::session/data]
+     :req-un [::request-method]))
+
+  (defmulti handler
+    (fm/fn ^{:fm/args ::req}
+      [{:keys [request-method] ::session/keys [data]}]
+      (let [session-tag (first (lib/conform-throw ::session/data data))]
+        [request-method session-tag]))
+    :hierarchy #'h1)
+
+  (defmulti handler
+    (fn [{:keys [request-method] ::session/keys [data]}]
+      [request-method (first (fm/conform-throw ::session/data data))]))
+
+  (defmethod handler [:post ::session/authenticated]
+    [req]
+    ())
+
+  (defmethod handler :default
+    [_req]
+    {:status 405})
 
   (fm/defnonse nonse1
     ([[::db.developer/conn ::b]]
@@ -293,8 +436,8 @@
                (fm.anomaly/anomalous? argv11111)
                 (handler11110
                  {:fm.anomaly/ident :fm.anomaly/received,
-                  :fm.anomaly/args argv11111,
-                  :fm/ident :fm.form/fn1})
+                  :fm.anomaly/args  argv11111,
+                  :fm/ident         :fm.form/fn1})
                 (clojure.core/let
                  [conformed-args11112 (clojure.spec.alpha/conform args11106 argv11111)]
                   (trace11109
@@ -305,7 +448,7 @@
                      {:fm.anomaly/ident :fm.anomaly/args,
                       :clojure.spec.alpha/explain-data
                       (clojure.spec.alpha/explain-data args11106 argv11111),
-                      :fm/ident :fm.form/fn1})
+                      :fm/ident         :fm.form/fn1})
                     (clojure.core/let
                      [argv11111 conformed-args11112]
                       (clojure.core/let
@@ -314,14 +457,14 @@
                         (if
                          (fm.anomaly/anomalous? ret11113)
                           (handler11110
-                           {:fm.anomaly/ret ret11113,
+                           {:fm.anomaly/ret   ret11113,
                             :fm.anomaly/ident :fm.anomaly/nested,
-                            :fm.anomaly/args argv11111,
-                            :fm/ident :fm.form/fn1})
+                            :fm.anomaly/args  argv11111,
+                            :fm/ident         :fm.form/fn1})
                           (clojure.core/let
                            [conformed-ret11114 (clojure.spec.alpha/conform ret11107 ret11113)]
                             (trace11109
-                             {:fm/ident :fm.form/fn1,
+                             {:fm/ident               :fm.form/fn1,
                               :fm.trace/conformed-ret conformed-ret11114})
                             (if
                              (clojure.spec.alpha/invalid? conformed-ret11114)
@@ -329,36 +472,36 @@
                                {:fm.anomaly/ident :fm.anomaly/ret,
                                 :clojure.spec.alpha/explain-data
                                 (clojure.spec.alpha/explain-data ret11107 ret11113),
-                                :fm.anomaly/args argv11111,
-                                :fm/ident :fm.form/fn1})
+                                :fm.anomaly/args  argv11111,
+                                :fm/ident         :fm.form/fn1})
                               (clojure.core/let
                                [ret11113 conformed-ret11114]
                                 (if
-                                 (rel11108 {:args argv11111, :ret ret11113})
+                                    (rel11108 {:args argv11111, :ret ret11113})
                                   ret11113
                                   {:fm.anomaly/ident :fm.anomaly/rel,
                                    :clojure.spec.alpha/explain-data
                                    (clojure.spec.alpha/explain-data
                                     rel11108
                                     {:args argv11111, :ret ret11113}),
-                                   :fm/ident :fm.form/fn1})))))))))))
+                                   :fm/ident         :fm.form/fn1})))))))))))
             (catch
              java.lang.Throwable
              thrown__6594__auto__
               (handler11110
-               {:fm.anomaly/ident :fm.anomaly/thrown,
+               {:fm.anomaly/ident  :fm.anomaly/thrown,
                 :fm.anomaly/thrown thrown__6594__auto__,
-                :fm.anomaly/args [a],
-                :fm/ident :fm.form/fn1}))))
-        '#:fm{:args [[int?]],
-              :rel [(fn [{args :args, ret :ret}] (>= ret (apply + (vals args))))],
-              :ret [int?],
-              :trace [true],
-              :conform [true],
-              :ident :fm.form/fn1,
+                :fm.anomaly/args   [a],
+                :fm/ident          :fm.form/fn1}))))
+        '#:fm{:args     [[int?]],
+              :rel      [(fn [{args :args, ret :ret}] (>= ret (apply + (vals args))))],
+              :ret      [int?],
+              :trace    [true],
+              :conform  [true],
+              :ident    :fm.form/fn1,
               :arglists [[a]],
-              :doc "fn1",
-              :handler [identity]})))
+              :doc      "fn1",
+              :handler  [identity]})))
 
   (defn fn1
     ([a] (prn "a") a)
