@@ -2,7 +2,7 @@
   (:refer-clojure :exclude [fn?])
   (:require
    [clojure.spec.alpha :as s]
-   [clojure.string :as string]
+   [clojure.core.specs.alpha :as core.specs]
    [fm.anomaly :as anomaly]
    [fm.form.fn :as fn]
    [fm.form.sequent :as sequent]
@@ -23,7 +23,7 @@
 
 
    ;;;
-   ;;; NOTE: `fm.form` helpers
+   ;;; NOTE: `fm.form` specs
    ;;;
 
   ;; TODO: `spec2` requires symbolic specs; no inline (fn ,,,), `comp`, etc.
@@ -35,49 +35,30 @@
 (def fn?
   (some-fn clojure.core/fn? multi?))
 
-  ;; TODO: refactor; (comp #{fn ,,,} resolve)
-(def ^:dynamic *fn-symbol-set*
-  #{'fn 'fn* `fn
-    'constantly `constantly
-    'memfn `memfn
-    'comp `comp
-    'complement `complement
-    'partial `partial
-    'juxt `juxt
-    'memoize `memoize
-    'fnil `fnil
-    'every-pred `every-pred
-    'some-fn `some-fn}) ; TODO: include `fm` forms
-
-(s/def ::fn-symbol
-  (fn [x]
-    (*fn-symbol-set* x))) ; NOTE: `s/def` evaluates set, breaks rebinding
-
 (def fn-symbol?
-  (partial s/valid? ::fn-symbol))
+  (comp fn? deref resolve))
+
+(s/def ::bound-fn
+  (s/and
+   symbol?
+   resolve
+   fn-symbol?)) ; NOTE: `requiring-resolve`?
+
+(def bound-fn?
+  (partial s/valid? ::bound-fn))
 
 (s/def ::fn-form
   (s/and
    seq?
    not-empty
-   (comp fn-symbol? first))) ; ALT: (comp fn? eval), (comp #{fn ,,,} deref resolve)
+   (comp bound-fn? first)))
 
 (def fn-form?
   (partial s/valid? ::fn-form))
 
-(s/def ::bound-fn
-  (s/and
-   symbol?
-   (comp fn? deref resolve)))
-
-(def bound-fn?
-  (partial s/valid? ::bound-fn))
-
 (def -spec-form?
   (comp
-   (hash-set
-    (namespace
-     `s/*)) ; TODO: revisit
+   #{(namespace `s/*)}
    namespace
    symbol
    resolve
@@ -87,14 +68,14 @@
   (s/and
    seq?
    not-empty
+   (comp symbol? first)
+   (comp resolve first)
    -spec-form?))
 
 (def spec-form?
   (partial s/valid? ::spec-form))
 
-  ;; TODO: rename e.g. `regex-op` ,,,
-(def ^:dynamic
-  *sequence-spec-symbol-set*
+(def ^:dynamic *regex-op-symbol-set*
   #{`s/cat
     `s/alt
     `s/*
@@ -102,30 +83,148 @@
     `s/?
     `s/&})
 
-(s/def ::sequence-spec-form
+  ;; NOTE: `comp` evaluates set, breaks rebinding
+(s/def ::regex-op-form
   (s/and
    ::spec-form
-   (fn [x] ; NOTE: `comp` evaluates set, breaks rebinding
-     (*sequence-spec-symbol-set*
+   (fn [spec-form]
+     (*regex-op-symbol-set*
       (symbol
        (resolve
-        (first x)))))))
+        (first spec-form)))))))
 
-(def sequence-spec-form?
-  (partial s/valid? ::sequence-spec-form))
+(def regex-op-form?
+  (partial s/valid? ::regex-op-form))
 
-  ;; ALT: `s/get-spec`
-  ;; NOTE: `spec` respects TBD specs by their qualified keywords
-(s/def ::spec-keyword
+(s/def ::keyword-or-binding-form
+  (s/or
+   :keyword keyword?
+   ::core.specs/binding-form ::core.specs/binding-form))
+
+(s/def ::binding-map
+  (s/map-of
+   ::keyword-or-binding-form
+   ::keyword-or-binding-form))
+
+(s/def ::spec-binding
+  (s/or
+   :keyword keyword?
+   ::binding-map ::binding-map))
+
+(s/def ::spec-param-list
+  (s/cat
+   ::spec-params (s/* ::spec-binding)
+   :as (s/? (s/cat
+             :as #{:as}
+             ::core.specs/local-name ::core.specs/local-name))))
+
+  ;; NOTE: see `::core.specs/param-list`
+(s/def ::specv
+  (s/or
+   :fm.context/positional (s/and vector? ::spec-param-list)
+   :fm.context/nominal (s/tuple (s/and vector? ::spec-param-list))))
+
+(s/def ::param-list
+  (s/cat
+   :params (s/* ::core.specs/binding-form)
+   :var-params (s/? (s/cat
+                     :ampersand #{'&}
+                     :var-form ::core.specs/binding-form))
+   :as (s/? (s/cat
+             :as #{:as}
+             ::core.specs/local-name ::core.specs/local-name))))
+
+  ;; NOTE: order-dependent; `::specv` where ambiguous
+(s/def ::argv
+  (s/or
+   :fm/specv ::specv
+   :fm/argv (s/and vector? ::param-list)))
+
+(s/def ::signature
+  (s/cat
+   ::argv ::argv
+   ::retv (s/? ::specv)
+   ::body (s/+ any?)))
+
+(s/def ::signatures
+  (s/+
+   (s/spec ::signature)))
+
+(s/def ::definition
+  (s/cat
+   :fm.definition/simple-symbol (s/? simple-symbol?)
+   :fm.definition/rest
+   (s/alt
+    ::signature ::signature
+    ::signatures ::signatures)))
+
+(s/def ::conformed-definition
+  (s/keys
+   :opt [:fm.definition/simple-symbol]
+   :req [:fm.definition/rest]))
+
+(s/def ::ident
   qualified-keyword?)
 
-(def spec-keyword?
-  (partial s/valid? ::spec-keyword))
+(s/def ::ns
+  (partial instance? clojure.lang.Namespace))
 
-(s/def ::arg-symbol ; TODO: `clojure.core.specs.alpha/local-name`
-  (s/and
-   symbol?
-   (complement #{'&})))
+(s/def ::defaults
+  (s/keys
+   :opt
+   [:fm/trace
+    :fm/trace-fn
+    :fm/handler
+    :fm/sequent]))
+
+(s/def ::metadata
+  (s/keys
+   :opt
+   [:fm/ident
+    :fm/arglists
+    :fm/doc
+    :fm/throw
+    :fm/args
+    :fm/ret
+    :fm/rel
+    :fm/trace
+    :fm/conform
+    :fm/handler
+    :fm/handler?
+    :fm/sequent
+    :fm/ignore]))
+
+(s/def ::outer-metadata (s/or ::metadata ::metadata :nil nil?))
+(s/def ::inner-metadatas (s/* ::outer-metadata))
+
+(s/def ::tag
+  (s/or
+   :qualified-ident qualified-ident?
+   :compound (s/coll-of qualified-ident? :kind vector?)))
+
+(s/def ::binding
+  (s/or
+   :default (s/keys :req [::symbol ::form])
+   ::metadata (s/* (s/keys :req [::symbol ::form]))))
+
+(s/def ::bindings
+  (s/map-of ::tag ::binding))
+
+(s/def ::signature-index int?)
+
+(s/def ::context
+  (s/keys
+   :opt
+   [::ident
+    ::ns
+    ::defaults
+    ::definition
+    ::conformed-definition
+    ::metadata
+    ::outer-metadata
+    ::inner-metadatas
+    ::bindings
+    ::signature-index]))
 
 
    ;;;
@@ -136,7 +235,7 @@
   qualified-keyword?)
 
 (s/def :fm/arglists
-  (s/* vector?)) ; ALT: `s/coll-of`, `s/*`, `argv?`, `:clojure.core/arglist`
+  (s/* ::core.specs/param-list)) ; ALT: `::argv`
 
 (s/def :fm/doc
   (s/or
@@ -184,116 +283,6 @@
    [:fm.sequent/ident
     :fm.sequent/unit
     :fm.sequent/combine])) ; TODO: full definition
-
-
-   ;;;
-   ;;; NOTE: `fm.form` specs
-   ;;;
-
-(s/def ::ident
-  qualified-keyword?)
-
-(s/def ::ns
-  (partial instance? clojure.lang.Namespace))
-
-(s/def ::defaults
-  (s/keys
-   :opt
-   [:fm/trace
-    :fm/trace-fn
-    :fm/handler])) ; TODO: `:fm.sequent/...`
-
-(s/def ::definition
-  (s/or
-   ::fn/definition ::fn/definition
-   ::sequent/definition ::sequent/definition))
-
-(s/def ::seqv
-  (s/or
-   :fm.sequent/positional (s/coll-of ::sequent/arg :kind vector?)
-   :fm.sequent/nominal (s/tuple (s/coll-of ::sequent/arg :kind vector?))))
-
-(s/def :fm.form/argv
-  (s/or
-   ::seqv ::seqv
-   :clojure.core/argv vector?)) ; NOTE: order-dependent; defer to core
-
-(s/def :fm.form/signature
-  (s/cat
-   :fm.form/argv :fm.form/argv
-   :fm.form/retv (s/? :fm.form/seqv)
-   :fm.form/body (s/+ any?)))
-
-(s/def :fm.form/signatures
-  (s/+
-   (s/spec :fm.form/signature)))
-
-(s/def :fm.form/definition
-  (s/cat
-   :fm.definition/simple-symbol (s/? simple-symbol?)
-   :fm.definition/rest
-   (s/alt
-    :fm.form/signature :fm.form/signature
-    :fm.form/signatures :fm.form/signatures)))
-
-(s/def ::conformed-definition
-  (s/keys
-   :opt [:fm.definition/simple-symbol]
-   :req [:fm.definition/rest]))
-
-(s/def ::metadata
-  (s/keys
-   :opt
-   [::ident
-    :fm/ident
-    :fm/arglists
-    :fm/doc
-    :fm/args
-    :fm/ret
-    :fm/rel
-    :fm/trace
-    :fm/conform
-    :fm/handler
-    :fm/handler?]))
-
-(s/def ::outer-metadata (s/or ::metadata ::metadata :nil nil?))
-(s/def ::inner-metadatas (s/* ::outer-metadata))
-
-(s/def ::binding
-  (s/or
-   :default (s/keys :req [::symbol ::form])
-   ::metadata (s/* (s/keys :req [::symbol ::form]))))
-
-(s/def ::tag
-  (s/or
-   :qualified-keyword qualified-keyword?
-   :compound (s/coll-of qualified-keyword? :kind vector?)))
-
-(s/def ::bindings
-  (s/map-of ::tag ::binding)) ; ALT: `any?` => `::binding`
-
-(s/def ::signature-index int?)
-
-(s/def ::context
-  (s/keys
-   :opt
-   [::ident
-    ::ns
-    ::defaults
-    ::definition
-    ::conformed-definition
-    ::metadata
-    ::bindings
-    ::outer-metadata
-    ::inner-metadatas
-    ::signature-index]))
-
-  ;; TODO: refine
-(s/def ::argv vector?)
-(s/def ::seqv
-  (s/or
-   ::sequent/positional (s/coll-of ::sequent/arg :kind vector?)
-   ::sequent/nominal (s/tuple (s/coll-of ::sequent/arg :kind vector?))))
 
 
    ;;;
@@ -451,6 +440,26 @@
 
 (defmethod ->form ::fn
   [ctx _]
+  (let [conformed  (lib/conform-throw ::definition (get ctx ::definition))
+        ctx        (assoc ctx ::ident ::fn ::conformed-definition conformed)
+        ctx        (assoc ctx ::metadata (->metadata ctx ::metadata))
+        tags       [:fm/args :fm/ret :fm/rel :fm/trace :fm/handler]
+        ctx        (bind ctx tags)
+        bindings   (bindings ctx tags)
+        sym        (->form ctx :fm/simple-symbol)
+        definition (->forms ctx ::fn/definition)
+        metadata   (->form ctx ::metadata)]
+    `(let [~@bindings]
+       (with-meta
+         (fn ~sym ~@definition)
+         ~metadata))))
+
+(defmethod ->metadata ::metadata
+  [ctx _]
+  (->metadata ctx (->signature-tag ctx)))
+
+(defmethod ->form ::fn
+  [ctx _]
   (let [conformed  (lib/conform-throw ::fn/definition (get ctx ::definition))
         ctx        (assoc ctx ::ident ::fn ::conformed-definition conformed)
         ctx        (assoc ctx ::metadata (->metadata ctx ::metadata))
@@ -505,6 +514,12 @@
    ;;; NOTE: `->metadata` helpers
    ;;;
 
+{::argv ^{:fm/,,, ,,,} ,,, ::retv ,,, ::body ,,,}
+
+(defn signature->metadata
+  []
+  )
+
 (defn -signature-metadata
   [ctx tag]
   (swap! trace-atom conj ["-signature-metadata" tag])
@@ -526,7 +541,7 @@
                     (meta (get-in ctx [::conformed-definition :fm.definition/simple-symbol]))
                     (meta (first signatures)))
         inners     (map
-                    (comp meta tag)
+                    (comp meta tag) ; TODO: `signature->metadata`
                     (get-in ctx [::conformed-definition :fm.definition/rest 1]))
         ctx        (assoc ctx ::outer-metadata outer ::inner-metadatas inners)
         xf         (map (juxt identity (partial ->metadata ctx)))

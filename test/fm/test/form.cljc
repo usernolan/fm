@@ -239,6 +239,11 @@
    ::seqv
    [[:a]])
 
+  (lib/conform-explain
+   ::argv
+   '[a]
+   )
+
   (defn f1
     ([argm & argms] (prn argm argms) (f1 (into (hash-map) (cons argm argms))))
     ([argm]
@@ -262,15 +267,15 @@
   (partial apply zip)
   (->> (select-keys ret right) (partial into args)) ; "closed"
 
-  (derive :fm.sequent/-> :fm.sequent/conse)
-  (derive :fm.sequent/<- :fm.sequent/conse)
-  (derive :fm.sequent/-- :fm.sequent/nonse)
-  (derive :fm.sequent/-! :fm.sequent/nonse)
-  (derive :fm.sequent/!! :fm.sequent/nonse)
-  (derive :fm.sequent/>< :fm.sequent/nonse)
-  (derive :fm.sequent/<< :fm.sequent/merge)
-  (derive :fm.sequent/>> :fm.sequent/merge)
-  (derive :fm.sequent/<> :fm.sequent/iso)
+  (derive :fm/-> :fm.sequent/conse)
+  (derive :fm/<- :fm.sequent/conse)
+  (derive :fm/-- :fm.sequent/nonse)
+  (derive :fm/-! :fm.sequent/nonse)
+  (derive :fm/!! :fm.sequent/nonse)
+  (derive :fm/>< :fm.sequent/nonse)
+  (derive :fm/<< :fm.sequent/merge)
+  (derive :fm/>> :fm.sequent/merge)
+  (derive :fm/<> :fm.sequent/iso)
 
   (derive :fm.sequent/combine :fm.sequent/merge)
 
@@ -301,10 +306,10 @@
  (fm/defn f1 ^{:fm/args [::a]} [a] (inc a)) ; b
  (fm/defn f1 ^{:fm/args [::a]} [a :as argv] (prn argv) (inc a)) ; b
  (fm/defn f1 [::a] (inc a)) ; b
- (fm/defn f1 ^:fm.sequent/-> [::a] (inc a)) ; [b]
- (fm/defn f1 ^:fm.sequent/-- [::a] (inc a)) ; [a]
- (fm/defn f1 ^:fm.sequent/<< [::a] (inc a)) ; [a b]
- (fm/defn f1 ^:fm.sequent/<> [::a] [::b] (inc a), (dec b)) ; [a] | [b]
+ (fm/defn f1 ^:fm/-> [::a] (inc a)) ; [b]
+ (fm/defn f1 ^:fm/-- [::a] (inc a)) ; [a]
+ (fm/defn f1 ^:fm/<< [::a] (inc a)) ; [a b]
+ (fm/defn f1 ^:fm/<> [::a] [::b] (inc a), (dec b)) ; [a] | [b]
 
  (fm/defn f1 [a] [::b] (inc a))
 
@@ -317,7 +322,7 @@
     [:d :e :f]
     [d e f])
 
-  (fm/defn ^:fm.sequent/<< m1
+  (fm/defn ^:fm/<< m1
     ^{:fm/sequent {:fm.sequent/combine (partial apply meta-merge)}}
     [[:a :b :c]]
     [[:d :e :f]]
@@ -325,7 +330,7 @@
 
   (m1 [:a] [:b] [:c])
 
-  (fm/defn ^:fm.sequent/<< m2
+  (fm/defn ^:fm/<< m2
     [])
 
   (fm/defconse conse1 [[::a ::b ::c]] [[::d]]
@@ -341,16 +346,57 @@
     :fm.form/body (s/+ any?))
    '([a b c] []))
 
+    ;; NOTE: seqv, argv ambiguity
+  (fm/fn [{::keys [a b c]}] ; recognized as sequent by default
+    ,,,)
+
+  (fm/fn [[::a ::b ::c]] ; unambiguous `seqv` expression
+    ,,,)
+
+  (s/def ::xs ,,,)
+  (fm/fn [{::xs {::keys [a b c]}}] ; semantically equivalent `seqv`
+    ,,,)
+
+    ;; NOTE: warning + explicit disambiguation
+  (fm/fn ^:fm.form/argv
+    [{::keys [a b c]}]
+    ,,,)
+
+    ;; NOTE: warning + don't handle at all; "[{::keys [a b c]}] is a seqv"
+  (fm/fn [{::xs {::keys [a b c] :as xs}}]
+    ,,,)
+
+  ;; NOTE: eliminate `seqv` destructuring
+  ;; NOTE: change `seqv` specification
+  ;; NOTE: try to detect/infer special `:keys` cases
+
+
+  [[a b c]] :: ::keys
+
+  (defmergesequent req<<developer
+    [::db.developer/conn ::session/data]
+    [::portal/developer]
+    (let [ref    (credential.datalog/nuid->lookup-ref (:nu/id data))
+          result (d/q q/credential->developer (d/db conn) ref)]
+      (datalog.lib/->data (ffirst result))))
+
   #_(seqv->pull-pattern)
   #_(seqv->argv)
-  (fm/defn ^:fm.sequent/merge req<<developer
+  (fm/defn ^:fm.sequent/merge merge-developer
     [::db.developer/conn {::session/data {:nu/keys [id]}}] ; TODO: seqv -> pull-pattern
     [::portal/developer]
     (let [ref    (credential.datalog/nuid->lookup-ref id)
           result (d/q q/credential->developer (d/db conn) ref)]
       (datalog.lib/<-ident (ffirst result))))
 
-  (fm/defn ^:fm.sequent/nonse req<transact!>
+  (fm/defn ^:fm/<< merge-developer
+    [[::db.developer/conn {::session/data {:nu/keys [id]}}]]
+    [[::portal/developer]]
+    (let [ref    (credential.datalog/nuid->lookup-ref id)
+          result (d/q q/credential->developer (d/db conn) ref)]
+      (datalog.lib/->data (ffirst result))))
+
+  (fm/defn ^:fm.sequent/nonse transact!
     [:body-params ::db.developer/conn ::portal/developer]
     [::d/tx-report]
     (let [eid           (get developer :db/id)
@@ -411,6 +457,49 @@
     ([::unauthenticated]
      [::resp]
      {:status 401}))
+
+  (ns ns1.core)
+
+  (derive :fm.sequent/conse :fm.sequent/ident)
+  (derive :fm.sequent/nonse :fm.sequent/ident)
+  (derive :fm.sequent/merge :fm.sequent/ident)
+
+  (defmulti multi1
+    (fn [metadata]
+      (let [descs (descendants :fm.sequent/ident)
+            tag   (reduce
+                   (fn [acc k]
+                     (when-let [v (get metadata k)]
+                       (reduced (if (true? v) k v))))
+                   nil
+                   (conj descs :fm.sequent/ident))]
+        tag)))
+
+  (defmethod multi1 :fm.sequent/conse
+    [metadata]
+    :fm.sequent/conse)
+
+  (defmethod multi1 :fm.sequent/nonse
+    [metadata]
+    :fm.sequent/nonse)
+
+  (defmethod multi1 :fm.sequent/merge
+    [metadata]
+    :fm.sequent/merge)
+
+  (defmacro macro1 [& definition]
+    (multi1 (meta (first definition))))
+
+  (ns ns2.core
+    (:require [ns1.core :as ns1]))
+
+  (derive ::-> :fm.sequent/conse)
+  (derive ::-- :fm.sequent/nonse)
+  (derive ::<< :fm.sequent/merge)
+
+  (descendants :fm.sequent/ident)
+
+  (ns1/macro ^::-> [])
 
   (def f1
     (clojure.core/let
@@ -1785,4 +1874,43 @@
   (ns2/f sym [] [])
 
   ;;;
+  )
+
+(comment
+
+  (lib/conform-explain
+   ::argv
+   '[a b c & ds :as asv]
+   #_'[:as argv]
+   #_'[ctx tag]
+   #_'[[::a ::b ::c :as xs]]
+   #_'[{::keys [a b c] :as xs} :as as]
+   )
+
+  (lib/conform-explain ::argv '[{:keys [a b c]}])
+  (fm/fn [& as :as argv] )
+  (fm/fn [:as argv])
+
+  (fm/fn '(::a ::b ::c)
+    )
+
+
+  (defm -wrap-session ^{:fm/args    [router.lib/fn? ::opts]
+                        :fm/handler -anomaly-handler}
+    [handler opts]
+    (fn [{:keys [uri] :as req}]
+      (let [route (router/match-route uri)
+            req   (into req #::session{:handler handler :opts opts :route route})]
+        (session/req->res req))))
+
+  (s/def ::handler)
+
+  (fn/defn -wrap-session ^{:fm/handler -anomaly-handler}
+    [::router.lib/handler ::opts & {::as [a b c]} :as horse]
+    (fn [{:keys [uri] :as req}]
+      (let [route (router/match-route uri)
+            req   (into req #::session{:handler handler :opts opts :route route})]
+        (session/req->res req))))
+
+
   )
