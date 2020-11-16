@@ -83,6 +83,16 @@
 (def rreduce
   (comp unreduced -rreduce))
 
+(defn deep-contains?
+  [xs data]
+  (rreduce
+   (fn recur? [_acc x]
+     (if (contains? xs x)
+       (reduced x)
+       (coll? x)))
+   (constantly false)
+   data))
+
 (defn conform-explain
   [spec x]
   (let [c (s/conform spec x)]

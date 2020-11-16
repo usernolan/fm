@@ -236,19 +236,183 @@
    ::conse)
 
   (lib/conform-explain
-   ::seqv
+   ::specv
    [[:a]])
 
   (lib/conform-explain
-   ::argv
-   '[a]
-   )
+   ::core.specs/param-list
+   '[a [b :as bs] & xs])
+
+  (lib/conform-explain
+   ::specv
+   '[a])
+
+  (lib/conform-explain
+   ::definition
+   '([a b] [a b]))
+
+  (lib/conform-explain
+   ::definition
+   '([a b & cs] [a b cs]))
+
+  (lib/conform-explain
+   ::definition
+   '([a ::b & cs] [a b cs]))
+
+  (s/def ::b any?)
+
+  (lib/conform-explain
+   ::definition
+   '([a ::b & cs] [a b cs]))
+
+  (s/def ::cs (s/keys* :opt-un [::a ::b]))
+
+  (lib/conform-explain
+   ::definition
+   '(^:fm/conform [a ::b & ::cs] [a b cs]))
+
+  (lib/conform-explain
+   ::definition
+   '(([a] a)
+     ([a ::b] [a b])
+     ([a ::b & ::cs] [a b cs])))
+
+  (def conformed-definition1
+    #:fm.definition
+     {:rest
+      [:fm.form/signatures
+       [#:fm.signature
+         {:argv
+          [:fm.context/positional
+           {:params
+            [[:clojure.core.specs.alpha/binding-form
+              '[:local-symbol a]]]}],
+          :body '[a]}
+        #:fm.signature
+         {:argv
+          [:fm.context/positional
+           {:params
+            [[:clojure.core.specs.alpha/binding-form
+              '[:local-symbol a]]
+             [:clojure.spec.alpha/registry-keyword
+              :fm.form/b]]}],
+          :body '[[a b]]}
+        #:fm.signature
+         {:argv
+          [:fm.context/positional
+           {:params
+            [[:clojure.core.specs.alpha/binding-form
+              '[:local-symbol a]]
+             [:clojure.spec.alpha/registry-keyword
+              :fm.form/b]],
+            :var-params
+            {:ampersand '&,
+             :var-form
+             [:clojure.spec.alpha/registry-keyword
+              :fm.form/cs]}}],
+          :body '[[a b cs]]}]]})
+
+  (def conformed-param-list1
+    [:fm.context/positional
+     {:params
+      [[:clojure.core.specs.alpha/binding-form
+        '[:local-symbol a]]
+       [:clojure.spec.alpha/registry-keyword
+        :fm.form/b]],
+      :var-params
+      {:ampersand '&,
+       :var-form
+       [:clojure.spec.alpha/registry-keyword
+        :fm.form/cs]}
+      :as-form {:as :as :as-sym 'specv1}}])
+
+  (->metadata conformed-param-list1 ::conformed-param-list)
+
+  (s/def ::a any?)
+  (s/def ::b any?)
+  (s/def ::cs any?)
+
+  (->metadata
+   (lib/conform-explain
+    ::specv
+    '[])
+   ::conformed-specv)
+
+  (->metadata
+   (lib/conform-explain
+    ::specv
+    '[a])
+   ::conformed-specv)
+
+  (->metadata
+   (lib/conform-explain
+    ::specv
+    '[::a])
+   ::conformed-specv)
+
+  (->metadata
+   (lib/conform-explain
+    ::specv
+    '[::a b])
+   ::conformed-specv)
+
+  (->metadata
+   (lib/conform-explain
+    ::specv
+    '[::a b & cs])
+   ::conformed-specv)
+
+  (->metadata
+   (lib/conform-explain
+    ::specv
+    '[::a b & ::cs])
+   ::conformed-specv)
+
+  (->metadata
+   (lib/conform-explain
+    ::specv
+    '[::a b & {::cs [c1 c2 c3]}])
+   ::conformed-specv)
+
+  (->metadata
+   (lib/conform-explain
+    ::specv
+    '[[::b {:a [a1 a2 a3] ::c c1 ::d {:keys [d1 d2 d3]}}]])
+   ::conformed-specv) ; TODO: generator
+
+  (s/unform
+   ::specv
+   '[:fm.context/nominal
+     [{:params
+       [[:keyword :fm.form/b]
+        [:fm.form/nominal-binding-map
+         {:a
+          [:seq-destructure
+           {:forms [[:local-symbol a1] [:local-symbol a2] [:local-symbol a3]]}],
+          :fm.form/c [:local-symbol c1],
+          :fm.form/d [:map-destructure {:keys [d1 d2 d3]}]}]]}]])
+
+  (s/unform
+   ::core.specs/binding-form
+   '[:local-symbol c1]
+   #_
+   '[:map-destructure {:keys [d1 d2 d3]}]
+   #_
+   '[:seq-destructure
+     {:forms [[:local-symbol a1] [:local-symbol a2] [:local-symbol a3]]}])
+
+  (let [conformed (lib/conform-explain
+                   ::definition
+                   '(([a] a)
+                     ([a b] [a b])
+                     ([a b & cs] [a b cs])))
+        ctx       (assoc ctx ::ident ::fn ::conformed-definition conformed)
+        ctx       (assoc ctx ::metadata (->metadata ctx ::metadata))
+        ])
 
   (defn f1
-    ([argm & argms] (prn argm argms) (f1 (into (hash-map) (cons argm argms))))
-    ([argm]
-
-     ))
+    [& argms]
+    (,,, (into (hash-map) argms)))
 
   ([] ,,,)
   ([] [] ,,,)
@@ -267,12 +431,9 @@
   (partial apply zip)
   (->> (select-keys ret right) (partial into args)) ; "closed"
 
+  (derive :fm/-- :fm.sequent/nonse)
   (derive :fm/-> :fm.sequent/conse)
   (derive :fm/<- :fm.sequent/conse)
-  (derive :fm/-- :fm.sequent/nonse)
-  (derive :fm/-! :fm.sequent/nonse)
-  (derive :fm/!! :fm.sequent/nonse)
-  (derive :fm/>< :fm.sequent/nonse)
   (derive :fm/<< :fm.sequent/merge)
   (derive :fm/>> :fm.sequent/merge)
   (derive :fm/<> :fm.sequent/iso)
@@ -330,7 +491,7 @@
 
   (m1 [:a] [:b] [:c])
 
-  (fm/defn ^:fm/<< m2
+  (fm/defn ^:fm/-- m2
     [])
 
   (fm/defconse conse1 [[::a ::b ::c]] [[::d]]
@@ -1903,14 +2064,89 @@
             req   (into req #::session{:handler handler :opts opts :route route})]
         (session/req->res req))))
 
-  (s/def ::handler)
-
   (fn/defn -wrap-session ^{:fm/handler -anomaly-handler}
-    [::router.lib/handler ::opts & {::as [a b c]} :as horse]
+    [::handler ::opts]
     (fn [{:keys [uri] :as req}]
       (let [route (router/match-route uri)
             req   (into req #::session{:handler handler :opts opts :route route})]
         (session/req->res req))))
 
+  (fn/defn -wrap-session ^{:fm/handler -anomaly-handler}
+    [{::router.lib/fn handler} ::opts]
+    (fn [{:keys [uri] :as req}]
+      (let [route (router/match-route uri)
+            req   (into req #::session{:handler handler :opts opts :route route})]
+        (session/req->res req))))
+
+  [handler opts]
+  [::handler opts]
+  [{::handler h} _opts]
+  [{::router.lib/fn handler} opts]
+  [{::router.lib/keys [a b c]} opts] ; potentially confusing
+  [{::router.lib/keys [a b c] :as handler} opts]
+  [{::handler {::router.lib/keys [a b c]}} opts]
+  [{::router.lib/fn handler} opts]
+  [{::router.lib/fn [h1 h2 h3]} opts]
+  [{::router.lib/fn [h1 h2 h3]} opts]
+  [{::router.lib/fn [h1 h2 h3]} ::opts]
+  [{::router.lib/fn [h1 h2 h3]} {::opts {:keys [k1 k2 k3]}}]
+  [{::router.lib/fn [h1 h2 h3]} {::opts {:keys [k1 k2 k3]}} & xs]
+  [{::router.lib/fn [h1 h2 h3]} {::opts {:keys [k1 k2 k3]}} & ::xs]
+  [{::router.lib/fn [h1 h2 h3]} {::opts {:keys [k1 k2 k3]}} & {::xs [x y z]}]
+
+  [[:a {::b {:nu/keys [id]} ::c [c1 c2 c3]}]]
+
+  (fn/defn ^:fm/throw! -wrap-session
+    [{:as k}] #_=> [k] #_=> 
+    [{:keys [k]}] #_=> [[k :as keys]]
+    [{:keys [k] :as ks}] #_=> [{:keys [k] :as ks}]
+    (fn [{:keys [uri] :as req}]
+      (let [route (router/match-route uri)
+            req   (into req #::session{:handler handler :opts opts :route route})]
+        (session/req->res req))))
+
+  [::a _b ::c & ::ds :as xs]
+
+  [_]
+  [_a]
+  [::a]
+  [{::a ,,,}]
+
+  (fm/defn ^:fm/-- f1
+    ([[::a ::b]]
+     [[::c]]
+     (inc a b))
+    ([[::d ::e]]
+     [[::f]]
+     )
+    )
+
+  [[:a]]
+  [[::a]]
+  [[{:a ,,,}]]
+  [[{::a ,,,}]]
+  [[{,,, :a}]]
+  [[{,,, ::a}]]
+
+  (s/def ::email->recently-delivered?_args
+    (s/keys
+     :req [::db.developer/conn ::email/hash-key ::email/debounce-inst]))
+
+  (defm email->recently-delivered? ^{:fm/args ::email->recently-delivered?_args}
+    [{::db.developer/keys [conn]
+      ::email/keys        [debounce-inst hash-key]}]
+    (-> q/email->recently-delivered-count
+        (d/q (d/db conn) hash-key debounce-inst)
+        (ffirst)
+        (or 0)
+        (> 0)))
+
+  (fm/defn email->recently-delivered?
+    [[::db.developer/conn ::email/hash-key ::email/debounce-inst]]
+    (-> q/email->recently-delivered-count
+        (d/q (d/db conn) hash-key debounce-inst)
+        (ffirst)
+        (or 0)
+        (> 0)))
 
   )
