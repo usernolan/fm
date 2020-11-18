@@ -41,7 +41,3 @@
     (vector? arg) (when (some #{:as} arg) (last arg))
     (map? arg)    (:as arg)
     :else         arg))
-
-(defn zipv-args
-  [argv args]
-  (lib/zipvf vector? (fn [_ a] a) argv args))

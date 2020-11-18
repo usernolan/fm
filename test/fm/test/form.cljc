@@ -371,8 +371,12 @@
   (->metadata
    (lib/conform-explain
     ::specv
-    '[::a b & {::cs [c1 c2 c3]}])
+    '[::a b & {::cs [{[[c111 c112 v113] c12 c13] :xs} c2 [x1 x2 x3] :as cs]}])
    ::conformed-specv)
+
+  (lib/conform-explain
+   ::specv
+   '[[]])
 
   (->metadata
    (lib/conform-explain
@@ -391,6 +395,17 @@
            {:forms [[:local-symbol a1] [:local-symbol a2] [:local-symbol a3]]}],
           :fm.form/c [:local-symbol c1],
           :fm.form/d [:map-destructure {:keys [d1 d2 d3]}]}]]}]])
+
+  (s/unform
+   ::core.specs/binding-form
+   '[:seq-destructure
+     {:forms
+      [[:local-symbol c1] [:local-symbol c2] [:local-symbol c3]],
+      :as-form {:as :as, :as-sym cs}}])
+
+  (s/unform
+   ::core.specs/binding-form
+   '[:map-destructure {:keys [d1 d2 d3] :as ds}])
 
   (s/unform
    ::core.specs/binding-form
