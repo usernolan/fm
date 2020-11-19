@@ -180,87 +180,97 @@
     ::signature ::signature
     ::signatures ::signatures)))
 
-  ;; NOTE: "kinds"?
-(s/def ::conformed-definition
-  (s/keys
-   :opt [:fm.definition/simple-symbol]
-   :req [:fm.definition/rest]))
 
-(s/def ::conformed-param-list
-  (s/keys
-   :opt-un [::params ::var-params ::as-form]))
+   ;;;
+   ;;; NOTE: internal concepts, shapes
+   ;;;
 
-(s/def ::conformed-specv
-  (s/tuple
-   (hash-set
-    :fm.context/nominal
-    :fm.context/positional)
-   (s/or
-    :tuple (s/tuple ::conformed-param-list)
-    ::conformed-param-list ::conformed-param-list)))
+(comment
 
-(s/def ::ident
-  qualified-keyword?)
+    ;; NOTE: "kinds"
+  (s/def ::conformed-definition
+    (s/keys
+     :opt [:fm.definition/simple-symbol]
+     :req [:fm.definition/rest]))
 
-(s/def ::ns
-  (partial instance? clojure.lang.Namespace))
+  (s/def ::conformed-param-list
+    (s/keys
+     :opt-un [::params ::var-params ::as-form]))
 
-(s/def ::defaults
-  (s/keys
-   :opt
-   [:fm/trace
-    :fm/trace-fn
-    :fm/handler
-    :fm/sequent]))
+  (s/def ::conformed-specv
+    (s/tuple
+     (hash-set
+      :fm.context/nominal
+      :fm.context/positional)
+     (s/or
+      :tuple (s/tuple ::conformed-param-list)
+      ::conformed-param-list ::conformed-param-list)))
 
-(s/def ::metadata
-  (s/keys
-   :opt
-   [:fm/ident
-    :fm/arglists ; [a k]
-    :fm/doc
-    :fm/throw!
-    :fm/args ; [any?] | [any? ::k]
-    :fm/ret ; ::k | [::k] ,,,
-    :fm/rel
-    :fm/trace
-    :fm/conform
-    :fm/handler
-    :fm/handler?
-    :fm/sequent
-    :fm/ignore]))
+  (s/def ::ident
+    qualified-keyword?)
 
-(s/def ::outer-metadata (s/or ::metadata ::metadata :nil nil?))
-(s/def ::inner-metadatas (s/* ::outer-metadata))
+  (s/def ::ns
+    (partial instance? clojure.lang.Namespace))
 
-(s/def ::tag
-  (s/or
-   :qualified-ident qualified-ident?
-   :compound (s/coll-of qualified-ident? :kind vector?)))
+  (s/def ::defaults
+    (s/keys
+     :opt
+     [:fm/trace
+      :fm/trace-fn
+      :fm/handler
+      :fm/sequent]))
 
-(s/def ::binding
-  (s/or
-   :default (s/keys :req [::symbol ::form])
-   ::metadata (s/* (s/keys :req [::symbol ::form]))))
+  (s/def ::metadata
+    (s/keys
+     :opt
+     [:fm/ident
+      :fm/arglists ; [a k]
+      :fm/doc
+      :fm/throw!
+      :fm/args ; [any?] | [any? ::k]
+      :fm/ret ; ::k | [::k] ,,,
+      :fm/rel
+      :fm/trace
+      :fm/conform
+      :fm/handler
+      :fm/handler?
+      :fm/sequent
+      :fm/ignore]))
 
-(s/def ::bindings
-  (s/map-of ::tag ::binding))
+  (s/def ::outer-metadata (s/or ::metadata ::metadata :nil nil?))
+  (s/def ::inner-metadatas (s/* ::outer-metadata))
 
-(s/def ::signature-index int?)
+  (s/def ::tag
+    (s/or
+     :qualified-ident qualified-ident?
+     :compound (s/coll-of qualified-ident? :kind vector?)))
 
-(s/def ::context
-  (s/keys
-   :opt
-   [::ident
-    ::ns
-    ::defaults
-    ::definition
-    ::conformed-definition
-    ::metadata
-    ::outer-metadata
-    ::inner-metadatas
-    ::bindings
-    ::signature-index]))
+  (s/def ::binding
+    (s/or
+     :default (s/keys :req [::symbol ::form])
+     ::metadata (s/* (s/keys :req [::symbol ::form]))))
+
+  (s/def ::bindings
+    (s/map-of ::tag ::binding))
+
+  (s/def ::signature-index int?)
+
+  (s/def ::context
+    (s/keys
+     :opt
+     [::ident
+      ::ns
+      ::defaults
+      ::definition
+      ::conformed-definition
+      ::metadata
+      ::outer-metadata
+      ::inner-metadatas
+      ::bindings
+      ::signature-index]))
+
+  ;;;
+  )
 
 
    ;;;
@@ -271,7 +281,7 @@
   qualified-keyword?)
 
 (s/def :fm/arglists
-  (s/* ::core.specs/param-list)) ; NOTE: `:as`; `::positional-param-list`
+  (s/* ::core.specs/param-list))
 
 (s/def :fm/doc
   (s/or
@@ -283,9 +293,14 @@
    ::definition boolean?
    ::metadata (s/* (s/or :boolean boolean? :nil nil?))))
 
+(s/def :fm/specv
+  (s/or
+   :fm.context/nominal (s/tuple vector?)
+   :fm.context/positional vector?))
+
 (s/def :fm/spec
   (s/or
-   ::specv ::specv
+   :fm/specv :fm/specv
    ::s/registry-keyword ::s/registry-keyword
    ::bound-fn ::bound-fn
    ::fn-form ::fn-form ; ALT: `:fm/fn`
@@ -316,7 +331,7 @@
    ::bound-fn ::bound-fn
    ::fn-form ::fn-form))
 
-  ;; ALT: maximally enumerated at top level
+  ;; ALT: keep tags at top level
 (s/def :fm/trace
   (s/or
    :fm/pred :fm/pred
@@ -332,7 +347,9 @@
    ::metadata (s/* (s/or :fm/handler :fm/handler :nil nil?))))
 
 (s/def :fm/handler?
-  boolean?)
+  (s/or
+   ::definition boolean?
+   ::metadata (s/* (s/or :boolean boolean? :nil nil?))))
 
 (s/def :fm/sequent
   (s/keys
@@ -494,13 +511,21 @@
    ;;; NOTE: top-level `->form` implementations
    ;;;
 
+(defn invalid-definition!
+  [t]
+  (throw
+   (ex-info
+    (str "\n:: Invalid definition ::\nAre all positional specs in the registry?\n\n" (ex-message t))
+    (ex-data t))))
+
 (defmethod ->form ::fn
   [ctx _]
-  (let [conformed  (lib/conform-throw ::definition (get ctx ::definition))
+  (let [conformed  (try (lib/conform-throw ::definition (get ctx ::definition))
+                        (catch Throwable t (invalid-definition! t)))
         ctx        (assoc ctx ::ident ::fn ::conformed-definition conformed)
         ctx        (assoc ctx ::metadata (->metadata ctx ::metadata))
         tags       [:fm/args]
-        #_#_ctx        (bind ctx tags)]
+        ctx        (bind ctx tags)]
     ctx)
   #_(let [conformed  (lib/conform-throw ::definition (get ctx ::definition))
         ctx        (assoc ctx ::ident ::fn ::conformed-definition conformed)
@@ -693,10 +718,8 @@
   (let [params   (when-let [params (get conformed :params)]
                    (->metadata params (conj tag :params)))
         var-form (when-let [var-params (get conformed :var-params)]
-                   (->metadata var-params (conj tag :var-params)))
-        as-form  (when-let [as-form (get conformed :as-form)]
-                   (->metadata as-form (conj tag :as-form)))] ; ALT: drop `:as`
-    `[~@params ~@var-form ~@as-form]))
+                   (->metadata var-params (conj tag :var-params)))]
+    `[~@params ~@var-form]))
 
 (defmethod ->metadata [:fm/arglist :fm.context/nominal ::conformed-param-list]
   [conformed tag]
@@ -704,7 +727,7 @@
                           (->metadata params (conj tag :params))
                           (hash-map))
         map-destructure (if-let [as-sym (get-in conformed [:as-form :as-sym])]
-                          (update map-destructure :as as-sym)
+                          (assoc map-destructure :as as-sym)
                           map-destructure)]
     `[~map-destructure]))
 
@@ -798,10 +821,8 @@
   (let [params   (when-let [params (get conformed :params)]
                    (->metadata params (conj tag :params)))
         var-form (when-let [var-params (get conformed :var-params)]
-                   (->metadata var-params (conj tag :var-params)))
-        as-form  (when-let [as-form (get conformed :as-form)]
-                   (->metadata as-form (conj tag :as-form)))] ; ALT: drop `:as`
-    `[~@params ~@var-form ~@as-form]))
+                   (->metadata var-params (conj tag :var-params)))]
+    `[~@params ~@var-form]))
 
 (defmethod ->metadata [:fm/args ::conformed-param-list :params]
   [params _]
@@ -948,33 +969,69 @@
     (or
      (get-in ctx [::bindings :fm/args index ::symbol])
      (when-let [args (get-in ctx [::metadata :fm/args index])]
-       (->form args [::s/form :fm/args])))))
+       (let [ctx (into ctx {:fm/args args})]
+         (->form ctx [::s/form :fm/args]))))))
 
 (defmethod ->form [::s/form :fm/args]
-  [args _]
-  (let [[tag _] (lib/conform-throw :fm/spec args)]
-    (->form args [::s/form tag])))
+  [ctx _]
+  (let [args    (get ctx :fm/args)
+        [tag _] (lib/conform-throw :fm/spec args)
+        ctx     (if (= tag :fm/specv) ctx args)]
+    (->form ctx [::s/form tag])))
 
-(defmethod ->form [::s/form ::specv]
+(defmethod ->form [::s/form :fm/specv]
+  [ctx tag]
+  (let [specv       (get ctx :fm/args)
+        [context _] (lib/conform-throw :fm/specv specv)
+        ctx         (case context
+                      :fm.context/positional specv
+                      :fm.context/nominal    ctx)]
+    (->form ctx (conj tag context))))
+
+(defmethod ->form [::s/form :fm/specv :fm.context/positional]
   [specv tag]
-  (let [[context _] (lib/conform-throw ::specv specv)]
-    (->form specv (conj tag context))))
+  (let [parts      (partition-by (hash-set '&) specv)
+        var?       (> (count parts) 1)
+        var-only?  (= (count parts) 2)
+        params     (when (not var-only?) (->forms (first parts) (conj tag :params)))
+        var-params (when var? (->forms (first (last parts)) (conj tag :var-params)))]
+   `(s/cat ~@params ~@var-params)))
 
-(defmethod ->form [::s/form ::specv :fm.context/positional]
-  [specv _]
-  (let [parts (partition-by (hash-set '&) args)
-        args  (when (not= (count parts) 2) (->forms (first parts) [:fm/args ::fn/args])) ; NOTE: count `2` implies [& ,,,]
-        var   (when (>    (count parts) 1) (->forms (first (last parts)) [:fm/args ::fn/variadic-arg]))]
-   `(s/cat ~@args ~@var)))
+(defmethod ->forms [::s/form :fm/specv :fm.context/positional :params]
+  [params _]
+  (into
+   (vector)
+   (comp
+    (map-indexed (fn [i param] (vector (keyword (str i)) param)))
+    (mapcat identity))
+   params))
 
-(defmethod ->form [::s/form ::specv :fm.context/nominal]
-  [specv _]
-  )
+(defmethod ->forms [::s/form :fm/specv :fm.context/positional :var-params]
+  [var-params _]
+  `(:& ~var-params))
+
+(defmethod ->form [::s/form :fm/specv :fm.context/nominal]
+  [ctx _]
+  (let [default-ns     (str (get ctx ::ns))
+        ks             (first (get ctx :fm/args))
+        {req    true
+         req-un false} (group-by qualified-keyword? ks)
+        req-forms      (when (seq req) `(:req ~req))
+        req-un-forms   (when (seq req-un)
+                         (let [xf     (comp (partial keyword default-ns) name)
+                               req-un (into (vector) (map xf) req-un)]
+                           `(:req-un ~req-un)))]
+    `(s/keys ~@req-forms ~@req-un-forms)))
 
 (defmethod ->form [::s/form ::s/registry-keyword] [k _] k)
 (defmethod ->form [::s/form ::bound-fn] [sym _] sym)
 (defmethod ->form [::s/form ::fn-form] [form _] form) ; TODO: may need `s/spec` in spec2
 (defmethod ->form [::s/form ::spec-form] [form _] form)
+
+
+
+
+
 
 (defmethod ->form [:fm/args ::fn/arg]
   [arg _]

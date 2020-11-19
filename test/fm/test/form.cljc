@@ -765,10 +765,10 @@
       (^{:fm/ret ::x}
        [::a :as argv]
        (inc a))
-      ([::a ::b]
+      ([::a b]
        [::x]
        [(inc (+ a b))])
-      ([::a ::b ::c]
+      ([[::a :b ::c :as x]]
        [[::x]]
        {::x (inc (+ a b c))}))}
    ::fn)
