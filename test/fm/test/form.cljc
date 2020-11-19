@@ -279,38 +279,38 @@
 
   (def conformed-definition1
     #:fm.definition
-     {:rest
-      [:fm.form/signatures
-       [#:fm.signature
-         {:argv
-          [:fm.context/positional
-           {:params
-            [[:clojure.core.specs.alpha/binding-form
-              '[:local-symbol a]]]}],
-          :body '[a]}
-        #:fm.signature
-         {:argv
-          [:fm.context/positional
-           {:params
-            [[:clojure.core.specs.alpha/binding-form
-              '[:local-symbol a]]
-             [:clojure.spec.alpha/registry-keyword
-              :fm.form/b]]}],
-          :body '[[a b]]}
-        #:fm.signature
-         {:argv
-          [:fm.context/positional
-           {:params
-            [[:clojure.core.specs.alpha/binding-form
-              '[:local-symbol a]]
-             [:clojure.spec.alpha/registry-keyword
-              :fm.form/b]],
-            :var-params
-            {:ampersand '&,
-             :var-form
-             [:clojure.spec.alpha/registry-keyword
-              :fm.form/cs]}}],
-          :body '[[a b cs]]}]]})
+    {:rest
+     [:fm.form/signatures
+      [#:fm.signature
+       {:argv
+        [:fm.context/positional
+         {:params
+          [[:clojure.core.specs.alpha/binding-form
+            '[:local-symbol a]]]}],
+        :body '[a]}
+       #:fm.signature
+       {:argv
+        [:fm.context/positional
+         {:params
+          [[:clojure.core.specs.alpha/binding-form
+            '[:local-symbol a]]
+           [:clojure.spec.alpha/registry-keyword
+            :fm.form/b]]}],
+        :body '[[a b]]}
+       #:fm.signature
+       {:argv
+        [:fm.context/positional
+         {:params
+          [[:clojure.core.specs.alpha/binding-form
+            '[:local-symbol a]]
+           [:clojure.spec.alpha/registry-keyword
+            :fm.form/b]],
+          :var-params
+          {:ampersand '&,
+           :var-form
+           [:clojure.spec.alpha/registry-keyword
+            :fm.form/cs]}}],
+        :body '[[a b cs]]}]]})
 
   (def conformed-param-list1
     [:fm.context/positional
@@ -329,50 +329,53 @@
   (->metadata conformed-param-list1 ::conformed-param-list)
 
   (s/def ::a any?)
+  (s/def ::as any?)
   (s/def ::b any?)
+  (s/def ::bs any?)
+  (s/def ::c any?)
   (s/def ::cs any?)
 
   (->metadata
    (lib/conform-explain
     ::specv
     '[])
-   ::conformed-specv)
+   [:fm/arglist ::conformed-specv])
 
   (->metadata
    (lib/conform-explain
     ::specv
     '[a])
-   ::conformed-specv)
+   [:fm/arglist ::conformed-specv])
 
   (->metadata
    (lib/conform-explain
     ::specv
     '[::a])
-   ::conformed-specv)
+   [:fm/arglist ::conformed-specv])
 
   (->metadata
    (lib/conform-explain
     ::specv
     '[::a b])
-   ::conformed-specv)
+   [:fm/arglist ::conformed-specv])
 
   (->metadata
    (lib/conform-explain
     ::specv
     '[::a b & cs])
-   ::conformed-specv)
+   [:fm/arglist ::conformed-specv])
 
   (->metadata
    (lib/conform-explain
     ::specv
-    '[::a b & ::cs])
-   ::conformed-specv)
+    '[{::as [a1 a2 a3]} & ::cs])
+   [:fm/arglist ::conformed-specv])
 
   (->metadata
    (lib/conform-explain
     ::specv
-    '[::a b & {::cs [{[[c111 c112 v113] c12 c13] :xs} c2 [x1 x2 x3] :as cs]}])
-   ::conformed-specv)
+    '[::a b & {::cs [{[[c111 c112 v113] c12 c13] :xs} c2 [x1 x2 x3]]}])
+   [:fm/arglist ::conformed-specv])
 
   (lib/conform-explain
    ::specv
@@ -382,7 +385,29 @@
    (lib/conform-explain
     ::specv
     '[[::b {:a [a1 a2 a3] ::c c1 ::d {:keys [d1 d2 d3]}}]])
-   ::conformed-specv) ; TODO: generator
+   [:fm/arglist ::conformed-specv])
+
+  (->metadata
+   (lib/conform-explain
+    ::specv
+    '[[]])
+   [:fm/arglist ::conformed-specv])
+
+  (->metadata
+   (lib/conform-explain
+    ::specv
+    '[[::a ::b {::c {:keys [k1 k2 k3]}}]])
+   [:fm/arglist ::conformed-specv])
+
+  (let [[{a :fm.form/a, b :fm.form/b, {:keys [k1 k2 k3], :as c} :fm.form/c}]]
+    {::a 'a ::b 'b ::c {:k1 'k1 :k2 'k2 :k3 'k3}}
+    [a b c k1 k2 k3])
+
+  (->metadata
+   (lib/conform-explain
+    ::specv
+    '[::a ::b & {::cs {:keys [k1 k2 k3]}}])
+   [:fm/args ::conformed-specv])
 
   (s/unform
    ::specv
@@ -455,39 +480,38 @@
 
   (derive :fm.sequent/combine :fm.sequent/merge)
 
- (fm/defn f1
+  (fm/defn f1
     [a]
     a)
 
- (fm/defn m1 [[::a ::b]]
-   ::c)
+  (fm/defn m1 [[::a ::b]]
+    ::c)
 
- (defn f1 [a] (inc a)) ; b
- (fm/defn f1 ^:fm/throw [a] (inc a))
- #_(fm/defn f1 ^:fm/ignore [a] (inc a))
+  (defn f1 [a] (inc a)) ; b
+  (fm/defn f1 ^:fm/throw [a] (inc a))
+  #_(fm/defn f1 ^:fm/ignore [a] (inc a))
 
- (defn f2 [a]
-   (try
+  (defn f2 [a]
+    (try
      (if (s/valid? int? a)
        (inc a)
        'args-anomaly)
      (catch Throwable t
        'thrown-anomaly)))
+  (fm/defn f2 ^{:fm/args [int?]} [a] (inc a))
 
- (fm/defn f2 ^{:fm/args [int?]} [a] (inc a))
+  (s/def ::a int?)
 
- (s/def ::a int?)
- (fm/defn f2 [::a] (inc a))
+  (fm/defn f2 [::a] (inc a))
+  (fm/defn f1 ^{:fm/args [::a]} [a] (inc a)) ; b
+  (fm/defn f1 ^{:fm/args [::a]} [a :as argv] (prn argv) (inc a)) ; b
+  (fm/defn f1 [::a] (inc a)) ; b
+  (fm/defn f1 ^:fm/-> [::a] (inc a)) ; [b]
+  (fm/defn f1 ^:fm/-- [::a] (inc a)) ; [a]
+  (fm/defn f1 ^:fm/<< [::a] (inc a)) ; [a b]
+  (fm/defn f1 ^:fm/<> [::a] [::b] (inc a), (dec b)) ; [a] | [b]
 
- (fm/defn f1 ^{:fm/args [::a]} [a] (inc a)) ; b
- (fm/defn f1 ^{:fm/args [::a]} [a :as argv] (prn argv) (inc a)) ; b
- (fm/defn f1 [::a] (inc a)) ; b
- (fm/defn f1 ^:fm/-> [::a] (inc a)) ; [b]
- (fm/defn f1 ^:fm/-- [::a] (inc a)) ; [a]
- (fm/defn f1 ^:fm/<< [::a] (inc a)) ; [a b]
- (fm/defn f1 ^:fm/<> [::a] [::b] (inc a), (dec b)) ; [a] | [b]
-
- (fm/defn f1 [a] [::b] (inc a))
+  (fm/defn f1 [a] [::b] (inc a))
 
   (fm/defn m1
     ^{:fm/sequent
@@ -571,6 +595,18 @@
     (let [ref    (credential.datalog/nuid->lookup-ref id)
           result (d/q q/credential->developer (d/db conn) ref)]
       (datalog.lib/->data (ffirst result))))
+
+  (fm/defn ^:fm/<< merge-developer
+    ([[::db.developer/conn {::session/data {:nu/keys [id]}}]]
+     [[::portal/developer]]
+     (let [ref    (credential.datalog/nuid->lookup-ref id)
+           result (d/q q/credential->developer (d/db conn) ref)]
+       (datalog.lib/->data (ffirst result))))
+    ([[::db.developer/conn :nu/id]]
+     [[::portal/developer]]
+     (let [ref    (credential.datalog/nuid->lookup-ref id)
+           result (d/q q/credential->developer (d/db conn) ref)]
+       (datalog.lib/->data (ffirst result)))))
 
   (fm/defn ^:fm.sequent/nonse transact!
     [:body-params ::db.developer/conn ::portal/developer]
@@ -677,1014 +713,67 @@
 
   (ns1/macro ^::-> [])
 
-  (def f1
-    (clojure.core/let
-     [args11106
-      (clojure.spec.alpha/cat :0 int?)
-      ret11107
-      int?
-      rel11108
-      (fn [{args :args, ret :ret}] (>= ret (apply + (vals args))))
-      trace11109
-      clojure.core/prn
-      handler11110
-      identity]
-      (clojure.core/with-meta
-        (clojure.core/fn
-          fn1
-          [a]
-          (try
-            (clojure.core/let
-             [argv11111 [a]]
-              (trace11109 {:fm/ident :fm.form/fn1, :fm.trace/args argv11111})
-              (if
-               (fm.anomaly/anomalous? argv11111)
-                (handler11110
-                 {:fm.anomaly/ident :fm.anomaly/received,
-                  :fm.anomaly/args  argv11111,
-                  :fm/ident         :fm.form/fn1})
-                (clojure.core/let
-                 [conformed-args11112 (clojure.spec.alpha/conform args11106 argv11111)]
-                  (trace11109
-                   {:fm/ident :fm.form/fn1, :fm.trace/conformed-args conformed-args11112})
-                  (if
-                   (clojure.spec.alpha/invalid? conformed-args11112)
-                    (handler11110
-                     {:fm.anomaly/ident :fm.anomaly/args,
-                      :clojure.spec.alpha/explain-data
-                      (clojure.spec.alpha/explain-data args11106 argv11111),
-                      :fm/ident         :fm.form/fn1})
-                    (clojure.core/let
-                     [argv11111 conformed-args11112]
-                      (clojure.core/let
-                       [ret11113 (do (inc a))]
-                        (trace11109 {:fm/ident :fm.form/fn1, :fm.trace/ret ret11113})
-                        (if
-                         (fm.anomaly/anomalous? ret11113)
-                          (handler11110
-                           {:fm.anomaly/ret   ret11113,
-                            :fm.anomaly/ident :fm.anomaly/nested,
-                            :fm.anomaly/args  argv11111,
-                            :fm/ident         :fm.form/fn1})
-                          (clojure.core/let
-                           [conformed-ret11114 (clojure.spec.alpha/conform ret11107 ret11113)]
-                            (trace11109
-                             {:fm/ident               :fm.form/fn1,
-                              :fm.trace/conformed-ret conformed-ret11114})
-                            (if
-                             (clojure.spec.alpha/invalid? conformed-ret11114)
-                              (handler11110
-                               {:fm.anomaly/ident :fm.anomaly/ret,
-                                :clojure.spec.alpha/explain-data
-                                (clojure.spec.alpha/explain-data ret11107 ret11113),
-                                :fm.anomaly/args  argv11111,
-                                :fm/ident         :fm.form/fn1})
-                              (clojure.core/let
-                               [ret11113 conformed-ret11114]
-                                (if
-                                    (rel11108 {:args argv11111, :ret ret11113})
-                                  ret11113
-                                  {:fm.anomaly/ident :fm.anomaly/rel,
-                                   :clojure.spec.alpha/explain-data
-                                   (clojure.spec.alpha/explain-data
-                                    rel11108
-                                    {:args argv11111, :ret ret11113}),
-                                   :fm/ident         :fm.form/fn1})))))))))))
-            (catch
-             java.lang.Throwable
-             thrown__6594__auto__
-              (handler11110
-               {:fm.anomaly/ident  :fm.anomaly/thrown,
-                :fm.anomaly/thrown thrown__6594__auto__,
-                :fm.anomaly/args   [a],
-                :fm/ident          :fm.form/fn1}))))
-        '#:fm{:args     [[int?]],
-              :rel      [(fn [{args :args, ret :ret}] (>= ret (apply + (vals args))))],
-              :ret      [int?],
-              :trace    [true],
-              :conform  [true],
-              :ident    :fm.form/fn1,
-              :arglists [[a]],
-              :doc      "fn1",
-              :handler  [identity]})))
-
-  (defn fn1
-    ([a] (prn "a") a)
-    ([a & as] (prn "as") [a as]))
-
-  (clojure.core/let
-      [args8064 [:fm.form/bindings :fm/args]]
-    (clojure.core/with-meta
-      (clojure.core/fn fn1 [])
-      '#:fm{:arglists [[a]], :doc "fn1", :args [[int?]], :ident :fm.form/fn1}))
-
-  (->metadata-form
-   (->>
-    {::ident      ::fn
-     ::ns         *ns*
-     ::definition (list
-                   (with-meta 'fn1 {:fm/doc "fn1"})
-                   (list
-                    (with-meta '[a [b [c]] & ds] {:fm/args '[int? [int? [int?]] & int?]})
-                    '[a b c ds])
-                   (list '[a & bs] '[a bs])
-                   (list
-                    (with-meta '[a] {:fm/doc "sig1" :fm/args '[even?]})
-                    'a))}
-    <<conformed-definition
-    <<metadata)
-   :fm/args)
-
-  (->context
-   {::ident      ::fn
-    ::ns         *ns*
-    ::definition '(^{:fm/doc "fn1"} fn1
-                   ^{:fm/args [int?]}
-                   [a]
-                   (inc a))})
-
-  (->context
-   {::ident      ::fn
-    ::ns         *ns*
-    ::definition '(^{:fm/doc "fn1"} fn1
-                   ^{:fm/args [int? int?]}
-                   (^{:fm/doc "sig1"}
-                    [a] (inc a))
-                   ([a b] (+ a b)))})
-
-  (->context
-   {::ident      ::fn
-    ::ns         *ns*
-    ::definition (list
-                  (with-meta 'fn1 {:fm/doc "fn1"})
-                  (with-meta '[a [b [c]] & ds] {:fm/args '[int? [int? [int?]] & int?]})
-                  '[a b c ds])})
-
-  (->context
-   {::ident      ::fn
-    ::ns         *ns*
-    ::definition (list
-                  (with-meta 'fn1 {:fm/doc "fn1"})
-                  (with-meta '[a [b [c] :as b&c] & ds] {:fm/args '[int? [int? [int?]] & int?]})
-                  '[a b c ds])})
-
-  (->context
-   {::ident      ::fn
-    ::ns         *ns*
-    ::definition (list
-                  (with-meta 'fn1 {:fm/doc "fn1"})
-                  (with-meta '[a [b [c] :as b&c] & [d]] {:fm/args '[int? [int? [int?]] & [int?]]})
-                  '[a b c ds])})
-
-  (->context
-   {::ident      ::fn
-    ::ns         *ns*
-    ::definition (list
-                  (with-meta 'fn1 {:fm/doc "fn1"})
-                  (with-meta '[a [b [c] :as b&c] & [d :as f]] {:fm/args '[int? [int? [int?]] & [int?]]})
-                  '[a b c ds])})
-
-  (->context
-   {::ident      ::fn
-    ::ns         *ns*
-    ::definition (list
-                  (with-meta 'fn1 {:fm/doc "fm1"})
-                  (list
-                   (with-meta '[a] {:fm/args '[int?]})
-                   'a)
-                  (list
-                   (with-meta '[a b] {:fm/args '[int? int?]})
-                   '[a b]))})
-
-  (->context
-   {::ident      ::fn
-    ::ns         *ns*
-    ::definition (list
-                  (with-meta 'fn1 {:fm/doc "fn1"})
-                  (list
-                   (with-meta '[a [b [c]]] {:fm/args '[int? [int? [int?]]]})
-                   '[a b c])
-                  (list
-                   (with-meta '[a [b [c]] & ds] {:fm/args '[int? [int? [int?]] & int?]})
-                   '[a b c ds]))})
-
-  (->context
-   {::ident      ::fn
-    ::ns         *ns*
-    ::definition (list
-                  (with-meta 'fn1 {:fm/doc "fn1" :fm/args '[int? int?]})
-                  (list '[a] 'a)
-                  (list '[a b] '[a b]))})
-
-  (->context
-   {::ident      ::fn
-    ::ns         *ns*
-    ::definition (list
-                  (with-meta 'fn1 {:fm/doc "fn1" :fm/args '[int? & int?]})
-                  (list '[a] 'a)
-                  (list '[a & bs] '[a bs]))})
-
-  (s/def ::m1 (s/map-of keyword? any?))
-
-  (->context
-   {::ident      ::fn
-    ::ns         *ns*
-    ::definition (list
-                  (with-meta 'fm1 {:fm/doc "fm1" :fm/args '[int? [int? [int?]] ::m1 & {:f int? :g int?}]})
-                  (list '[a] 'a)
-                  (list '[a [b]] '[a b])
-                  (list '[a [b [c]]] '[a b c])
-                  (list '[a [b [c]] {:keys [d] :as e}] '[a b c d e])
-                  (list '[a [b [c]] {:keys [d] :as e} & {:keys [f g] :as h}] '[a b c d e f g h]))})
-
-  (->context
-   {::ident ::fn
-    ::ns    *ns*
+  (->form
+   {::ns *ns*
     ::definition
-    '(^{:fm/doc             "fn1"
-        :fm/args            [int?]
-        :fm/ret             int?
-        :fm/rel             (fn [{args :args ret :ret}]
-                              (= (apply + args) ret))
-        :fm/trace           #{:fm/args :fm/ret}
-        :fm/conform         #{:fm/args}
-        :fm.anomaly/handler (fn [a] a)}
-      fn1
-      [a]
-      (inc a))})
+    '(^{:fm/doc "fn1"}
+      [a [b1 & [b2]] & [c & ds]]
+      (apply + a b1 b2 c ds))}
+   ::fn)
 
-  (->context
-   {::ident ::fn
-    ::ns    *ns*
+  (s/def ::a any?)
+  (s/def ::as any?)
+  (s/def ::b any?)
+  (s/def ::bs any?)
+  (s/def ::c any?)
+  (s/def ::cs any?)
+
+  (->form
+   {::ns *ns*
     ::definition
-    '(^{:fm/doc             "fn1"
-        :fm/args            [int? int?]
-        :fm/ret             int?
-        :fm/rel             (fn [{args :args ret :ret}]
-                              (>= ret (apply + args)))
-        :fm/trace           #{:fm/args :fm/ret}
-        :fm/conform         #{:fm/args}
-        :fm.anomaly/handler (fn [a] a)}
-      fn1
-      ([a] (inc a))
-      ([a b] (+ a b)))})
+    '(^{:fm/doc "fn1"}
+      [::a {::b [{:keys [k1 k2 k3]} & [b2]]} & [c & ds]]
+      (apply + a b1 b2 c ds))}
+   ::fn)
 
-  (->context
-   {::ident ::fn
-    ::ns    *ns*
+  (->form
+   {::ns *ns*
     ::definition
-    '(^{:fm/doc             "fn1"
-        :fm/args            [int? int?]
-        :fm/ret             int?
-        :fm/rel             (fn [{args :args ret :ret}]
-                              (>= ret (apply + args)))
-        :fm/trace           #{:fm/args :fm/ret}
-        :fm/conform         #{:fm/args}
-        :fm.anomaly/handler (fn [a] a)}
-      fn1
-      (^{:fm/doc "sig1"}
-       [a] (inc a))
-      (^{:fm/trace #{:fm/args}
-         :fm/ret   even?}
-       [a b] (+ a b)))})
+    '(^{:fm/doc "variadic increment"}
+      ([::a]
+       (inc a))
+      ([::a ::b]
+       (inc (+ a b))))}
+   ::fn)
 
-  (->context
-   {::ident ::fn
-    ::ns    *ns*
+  (->form
+   {::ns *ns*
     ::definition
-    '(^{:fm/doc             "fn1"
-        :fm/args            [int? int?]
-        :fm/ret             int?
-        :fm/rel             (fn [{args :args ret :ret}]
-                              (>= ret (apply + args)))
-        :fm/trace           #{:fm/args :fm/ret}
-        :fm/conform         #{:fm/args}
-        :fm.anomaly/handler (fn [a] a)}
-      (^{:fm/doc "sig1"}
-       [a] (inc a))
-      (^{:fm/trace #{:fm/args}
-         :fm/ret   int?}
-       [a b] (+ a b)))})
+    '(^{:fm/doc "variadic increment"}
+      ([::a]
+       (inc a))
+      (^:fm/throw! [x ::b]
+       (inc (+ x b))))}
+   ::fn)
+
+  (s/def ::x any?)
 
   (->form
-   ::fn
-   (->context
-    {::ident ::fn
-     ::ns    *ns*
-     ::definition
-     '(^{:fm/doc             "fn1"
-         :fm/args            [int? int?]
-         :fm/ret             int?
-         :fm/rel             (fn [{args :args ret :ret}]
-                               (>= ret (apply + args)))
-         :fm/trace           true
-         :fm/conform         true
-         :fm.anomaly/handler (fn [a] (prn "anomaly!" a) a)}
-       ([a] (inc a))
-       ([a b] (+ a b)))}))
+   {::ns *ns*
+    ::definition
+    '(^{:fm/doc "variadic increment"}
+      (^{:fm/ret ::x}
+       [::a :as argv]
+       (inc a))
+      ([::a ::b]
+       [::x]
+       [(inc (+ a b))])
+      ([::a ::b ::c]
+       [[::x]]
+       {::x (inc (+ a b c))}))}
+   ::fn)
 
-  (def fn1
-    (clojure.core/let
-     [trace11666
-      true
-      arglists11668
-      '[a]
-      arglists11669
-      '[a b]
-      doc11670
-      "fn1"
-      rel11671
-      (fn [{args :args, ret :ret}] (>= ret (apply + args)))
-      column11673
-      15
-      conform11674
-      true
-      line11676
-      2989
-      args11677
-      [int?]
-      args11678
-      [int? int?]
-      handler11679
-      (fn [a] (prn "anomaly!" a) a)
-      ident11681
-      :fm.form/fm11665
-      ret11682
-      int?]
-      (clojure.core/with-meta
-        (clojure.core/fn
-          fm11665
-          ([a]
-           (try
-             (clojure.core/let
-              [args11684 [a]]
-               (trace11666 {:fm/ident :fm.form/fm11665, :fm.trace/args args11684})
-               (if
-                (fm.anomaly/anomalous? args11684)
-                 (handler11679
-                  {:fm.anomaly/ident :fm.anomaly/received,
-                   :fm.anomaly/args  args11684,
-                   :fm/ident         :fm.form/fm11665})
-                 (clojure.core/let
-                  [conformed-args11686
-                   (clojure.spec.alpha/conform args-spec11685 args11684)]
-                   (trace11666
-                    {:fm/ident                :fm.form/fm11665,
-                     :fm.trace/conformed-args conformed-args11686})
-                   (if
-                    (clojure.spec.alpha/invalid? conformed-args11686)
-                     (handler11679
-                      {:fm.anomaly/ident :fm.anomaly/args,
-                       :clojure.spec.alpha/explain-data
-                       (clojure.spec.alpha/explain-data args-spec11685 args11684),
-                       :fm/ident         :fm.form/fm11665})
-                     (clojure.core/let
-                      [[a] conformed-args11686]
-                       (clojure.core/let
-                        [ret11687 (do (inc a))]
-                         (trace11666 {:fm/ident :fm.form/fm11665, :fm.trace/ret ret11687})
-                         (if
-                          (fm.anomaly/anomalous? ret11687)
-                           (handler11679
-                            {:fm.anomaly/ret   ret11687,
-                             :fm.anomaly/ident :fm.anomaly/nested,
-                             :fm.anomaly/args  args11684,
-                             :fm/ident         :fm.form/fm11665})
-                           (clojure.core/let
-                            [conformed-ret11689
-                             (clojure.spec.alpha/conform ret-spec11688 ret11687)]
-                             (trace11666
-                              {:fm/ident               :fm.form/fm11665,
-                               :fm.trace/conformed-ret conformed-ret11689})
-                             (if
-                              (clojure.spec.alpha/invalid? conformed-ret11689)
-                               (handler11679
-                                {:fm.anomaly/ident :fm.anomaly/ret,
-                                 :clojure.spec.alpha/explain-data
-                                 (clojure.spec.alpha/explain-data ret-spec11688 ret11687),
-                                 :fm.anomaly/args  args11684,
-                                 :fm/ident         :fm.form/fm11665})
-                               (clojure.core/let
-                                [ret11687 conformed-ret11689]
-                                 (if
-                                     (rel11671 {:args args11684, :ret ret11687})
-                                   ret11687
-                                   {:fm.anomaly/ident :fm.anomaly/rel,
-                                    :clojure.spec.alpha/explain-data
-                                    (clojure.spec.alpha/explain-data
-                                     rel11671
-                                     {:args args11684, :ret ret11687}),
-                                    :fm/ident         :fm.form/fm11665 })))))))))))
-             (catch
-              java.lang.Throwable
-              thrown__6700__auto__
-               (handler11679
-                {:fm.anomaly/ident  :fm.anomaly/thrown,
-                 :fm.anomaly/thrown thrown__6700__auto__,
-                 :fm.anomaly/args   [a],
-                 :fm/ident          :fm.form/fm11665}))))
-          ([a b]
-           (try
-             (clojure.core/let
-              [args11690 [a b]]
-               (trace11666 {:fm/ident :fm.form/fm11665, :fm.trace/args args11690})
-               (if
-                (fm.anomaly/anomalous? args11690)
-                 (handler11679
-                  {:fm.anomaly/ident :fm.anomaly/received,
-                   :fm.anomaly/args  args11690,
-                   :fm/ident         :fm.form/fm11665})
-                 (clojure.core/let
-                  [args-spec11691
-                   (clojure.spec.alpha/cat :0 int? :1 int?)
-                   conformed-args11692
-                   (clojure.spec.alpha/conform args-spec11691 args11690)]
-                   (trace11666
-                    {:fm/ident                :fm.form/fm11665,
-                     :fm.trace/conformed-args conformed-args11692})
-                   (if
-                    (clojure.spec.alpha/invalid? conformed-args11692)
-                     (handler11679
-                      {:fm.anomaly/ident :fm.anomaly/args,
-                       :clojure.spec.alpha/explain-data
-                       (clojure.spec.alpha/explain-data args-spec11691 args11690),
-                       :fm/ident         :fm.form/fm11665})
-                     (clojure.core/let
-                      [[a b] conformed-args11692]
-                       (clojure.core/let
-                        [ret11693 (do (+ a b))]
-                         (trace11666 {:fm/ident :fm.form/fm11665, :fm.trace/ret ret11693})
-                         (if
-                          (fm.anomaly/anomalous? ret11693)
-                           (handler11679
-                            {:fm.anomaly/ret   ret11693,
-                             :fm.anomaly/ident :fm.anomaly/nested,
-                             :fm.anomaly/args  args11690,
-                             :fm/ident         :fm.form/fm11665})
-                           (clojure.core/let
-                            [ret-spec11694
-                             int?
-                             conformed-ret11695
-                             (clojure.spec.alpha/conform ret-spec11694 ret11693)]
-                             (trace11666
-                              {:fm/ident               :fm.form/fm11665,
-                               :fm.trace/conformed-ret conformed-ret11695})
-                             (if
-                              (clojure.spec.alpha/invalid? conformed-ret11695)
-                               (handler11679
-                                {:fm.anomaly/ident :fm.anomaly/ret,
-                                 :clojure.spec.alpha/explain-data
-                                 (clojure.spec.alpha/explain-data ret-spec11694 ret11693),
-                                 :fm.anomaly/args  args11690,
-                                 :fm/ident         :fm.form/fm11665})
-                               (clojure.core/let
-                                [ret11693 conformed-ret11695]
-                                 (if
-                                     (rel11671 {:args args11690, :ret ret11693})
-                                   ret11693
-                                   {:fm.anomaly/ident :fm.anomaly/rel,
-                                    :clojure.spec.alpha/explain-data
-                                    (clojure.spec.alpha/explain-data
-                                     rel11671
-                                     {:args args11690, :ret ret11693}),
-                                    :fm/ident         :fm.form/fm11665})))))))))))
-             (catch
-              java.lang.Throwable
-              thrown__6700__auto__
-               (handler11679
-                {:fm.anomaly/ident  :fm.anomaly/thrown,
-                 :fm.anomaly/thrown thrown__6700__auto__,
-                 :fm.anomaly/args   [a b],
-                 :fm/ident          :fm.form/fm11665})))))
-        '{:fm/trace    [true true],
-          :fm/arglists ['[a] '[a b]],
-          :fm/doc      "fn1",
-          :fm/rel
-          [(fn [{args :args, ret :ret}] (>= ret (apply + args)))
-           (fn [{args :args, ret :ret}] (>= ret (apply + args)))],
-          :column      15,
-          :fm/conform  [true true],
-          :line        2989,
-          :fm/args     [[int?] [int? int?]],
-          :fm.anomaly/handler
-          [(fn [a] (prn "anomaly!" a) a) (fn [a] (prn "anomaly!" a) a)],
-          :fm/ident    :fm.form/fm11665,
-          :fm/ret      [int? int?]})))
-
-  (->form
-   ::fn
-   (->context
-    {::ident ::fn
-     ::ns    *ns*
-     ::definition
-     '(^{:fm/doc             "fn1"
-         :fm/args            [int? int? & int?]
-         :fm/ret             int?
-         :fm/rel             (fn [{args :args ret :ret}]
-                               (>= ret (apply + args)))
-         :fm/trace           #{:fm/args :fm/ret}
-         :fm/conform         #{:fm/args}
-         :fm.anomaly/handler (fn [a] a)}
-       [a b & cs] (apply + a b cs))}))
-
-
-  (lib/conform-explain
-   (clojure.spec.alpha/cat
-    :0
-    int?
-    :1
-    int?
-    :&
-    (clojure.spec.alpha/?
-     (clojure.spec.alpha/cat
-      :0
-      int?
-      :rest
-      (clojure.spec.alpha/* clojure.core/any?))))
-   '[1 2])
-
-  (lib/conform-explain
-   (clojure.spec.alpha/cat
-    :0
-    int?
-    :1
-    int?
-    :&
-    (clojure.spec.alpha/?
-     (clojure.spec.alpha/cat
-      :0
-      int?
-      :rest
-      (clojure.spec.alpha/* clojure.core/any?))))
-   '[1 2 3])
-
-  (lib/conform-explain
-   (clojure.spec.alpha/cat
-    :0
-    int?
-    :1
-    int?
-    :&
-    (clojure.spec.alpha/?
-     (clojure.spec.alpha/cat
-      :0
-      int?
-      :rest
-      (clojure.spec.alpha/* clojure.core/any?))))
-   '[1 2 3 a])
-
-  (lib/conform-explain
-   (clojure.spec.alpha/cat
-    :0
-    int?
-    :1
-    int?
-    :&
-    (clojure.spec.alpha/?
-     (clojure.spec.alpha/cat
-      :0
-      int?
-      :rest
-      (clojure.spec.alpha/* clojure.core/any?))))
-   '[a 2 a])
-
-  (->form
-   ::fn
-   (->context
-    {::ident ::fn
-     ::ns    *ns*
-     ::definition
-     '(^{:fm/doc             "fn1"
-         :fm/args            [int? [int? int? int?] & int?]
-         :fm/ret             int?
-         :fm/rel             (fn [{args :args ret :ret}]
-                               (>= ret (apply + args)))
-         :fm/trace           #{:fm/args :fm/ret}
-         :fm/conform         #{:fm/args}
-         :fm.anomaly/handler (fn [a] a)}
-       [a [b1 b2 b3] & cs] (apply + a b1 b2 b3 cs))}))
-
-  (lib/conform-explain
-   (clojure.spec.alpha/cat
-    :0
-    int?
-    :1
-    (clojure.spec.alpha/spec
-     (clojure.spec.alpha/cat :0 int? :1 int? :2 int?))
-    :&
-    (clojure.spec.alpha/?
-     (clojure.spec.alpha/cat
-      :0
-      int?
-      :rest
-      (clojure.spec.alpha/* clojure.core/any?))))
-   '[1])
-
-  (lib/conform-explain
-   (clojure.spec.alpha/cat
-    :0
-    int?
-    :1
-    (clojure.spec.alpha/spec
-     (clojure.spec.alpha/cat :0 int? :1 int? :2 int?))
-    :&
-    (clojure.spec.alpha/?
-     (clojure.spec.alpha/cat
-      :0
-      int?
-      :rest
-      (clojure.spec.alpha/* clojure.core/any?))))
-   '[1 nil])
-
-  (lib/conform-explain
-   (clojure.spec.alpha/cat
-    :0
-    int?
-    :1
-    (clojure.spec.alpha/spec
-     (clojure.spec.alpha/cat :0 int? :1 int? :2 int?))
-    :&
-    (clojure.spec.alpha/?
-     (clojure.spec.alpha/cat
-      :0
-      int?
-      :rest
-      (clojure.spec.alpha/* clojure.core/any?))))
-   '[1 2])
-
-  (lib/conform-explain
-   (clojure.spec.alpha/cat
-    :0
-    int?
-    :1
-    (clojure.spec.alpha/spec
-     (clojure.spec.alpha/cat :0 int? :1 int? :2 int?))
-    :&
-    (clojure.spec.alpha/?
-     (clojure.spec.alpha/cat
-      :0
-      int?
-      :rest
-      (clojure.spec.alpha/* clojure.core/any?))))
-   '[1 [2]])
-
-  (lib/conform-explain
-   (clojure.spec.alpha/cat
-    :0
-    int?
-    :1
-    (clojure.spec.alpha/spec
-     (clojure.spec.alpha/cat :0 int? :1 int? :2 int?))
-    :&
-    (clojure.spec.alpha/?
-     (clojure.spec.alpha/cat
-      :0
-      int?
-      :rest
-      (clojure.spec.alpha/* clojure.core/any?))))
-   '[1 [a]])
-
-  (lib/conform-explain
-   (clojure.spec.alpha/cat
-    :0
-    int?
-    :1
-    (clojure.spec.alpha/spec
-     (clojure.spec.alpha/cat :0 int? :1 int? :2 int?))
-    :&
-    (clojure.spec.alpha/?
-     (clojure.spec.alpha/cat
-      :0
-      int?
-      :rest
-      (clojure.spec.alpha/* clojure.core/any?))))
-   '[1 [a]])
-
-  (lib/conform-explain
-   (clojure.spec.alpha/cat
-    :0
-    int?
-    :1
-    (clojure.spec.alpha/spec
-     (clojure.spec.alpha/cat :0 int? :1 int? :2 int?))
-    :&
-    (clojure.spec.alpha/?
-     (clojure.spec.alpha/cat
-      :0
-      int?
-      :rest
-      (clojure.spec.alpha/* clojure.core/any?))))
-   '[1 [2 3 4]])
-
-  (lib/conform-explain
-   (clojure.spec.alpha/cat
-    :0
-    int?
-    :1
-    (clojure.spec.alpha/spec
-     (clojure.spec.alpha/cat :0 int? :1 int? :2 int?))
-    :&
-    (clojure.spec.alpha/?
-     (clojure.spec.alpha/cat
-      :0
-      int?
-      :rest
-      (clojure.spec.alpha/* clojure.core/any?))))
-   '[1 [2 3 4] 5 a])
-
-  (lib/conform-explain
-   (clojure.spec.alpha/cat
-    :0
-    int?
-    :1
-    (clojure.spec.alpha/spec
-     (clojure.spec.alpha/cat :0 int? :1 int? :2 int?))
-    :&
-    (clojure.spec.alpha/?
-     (clojure.spec.alpha/cat
-      :0
-      int?
-      :rest
-      (clojure.spec.alpha/* clojure.core/any?))))
-   '[a [2 3 4] 5 a])
-
-  (->form
-   ::fn
-   (->context
-    {::ident ::fn
-     ::ns    *ns*
-     ::definition
-     '(^{:fm/doc             "fn1"
-         :fm/args            [int? [int? int? int? & int?] & int?]
-         :fm/ret             int?
-         :fm/rel             (fn [{args :args ret :ret}]
-                               (>= ret (apply + args)))
-         :fm/trace           #{:fm/args :fm/ret}
-         :fm/conform         #{:fm/args}
-         :fm.anomaly/handler (fn [a] a)}
-       [a [b1 b2 b3 & bs :as bs] & cs] (apply + a (into bs cs)))}))
-
-  (lib/conform-explain
-   (clojure.spec.alpha/cat
-    :0
-    int?
-    :1
-    (clojure.spec.alpha/spec
-     (clojure.spec.alpha/cat
-      :0
-      int?
-      :1
-      int?
-      :2
-      int?
-      :&
-      (clojure.spec.alpha/* int?)))
-    :&
-    (clojure.spec.alpha/* int?))
-   '[1 [2 3 4]])
-
-  (lib/conform-explain
-   (clojure.spec.alpha/cat
-    :0
-    int?
-    :1
-    (clojure.spec.alpha/spec
-     (clojure.spec.alpha/cat
-      :0
-      int?
-      :1
-      int?
-      :2
-      int?
-      :&
-      (clojure.spec.alpha/* int?)))
-    :&
-    (clojure.spec.alpha/* int?))
-   '[1 [2 3 4 5]])
-
-  (lib/conform-explain
-   (clojure.spec.alpha/cat
-    :0
-    int?
-    :1
-    (clojure.spec.alpha/spec
-     (clojure.spec.alpha/cat
-      :0
-      int?
-      :1
-      int?
-      :2
-      int?
-      :&
-      (clojure.spec.alpha/* int?)))
-    :&
-    (clojure.spec.alpha/* int?))
-   '[1 [2 3 4 5] 6])
-
-  (lib/conform-explain
-   (clojure.spec.alpha/cat
-    :0
-    int?
-    :1
-    (clojure.spec.alpha/spec
-     (clojure.spec.alpha/cat
-      :0
-      int?
-      :1
-      int?
-      :2
-      int?
-      :&
-      (clojure.spec.alpha/* int?)))
-    :&
-    (clojure.spec.alpha/* int?))
-   '[1 [2 3 4 5] 6 7])
-
-  (->form
-   ::fn
-   (->context
-    {::ident ::fn
-     ::ns    *ns*
-     ::definition
-     '(^{:fm/doc             "fn1"
-         :fm/args            [int? [int? & [int?]] & [int? & even?]]
-         :fm/ret             int?
-         :fm/rel             (fn [{args :args ret :ret}]
-                               (>= ret (apply + args)))
-         :fm/trace           #{:fm/args :fm/ret}
-         :fm/conform         #{:fm/args}
-         :fm.anomaly/handler (fn [a] a)}
-       [a [b1 & [b2]] & [c & ds]] (apply + a (into bs cs)))}))
-
-  (lib/conform-explain
-   (clojure.spec.alpha/cat
-    :a
-    int?
-    :bs
-    (clojure.spec.alpha/spec
-     (clojure.spec.alpha/cat
-      :b1
-      int?
-      :&
-      (clojure.spec.alpha/?
-       (clojure.spec.alpha/cat
-        :b2
-        int?
-        :rest
-        (clojure.spec.alpha/* clojure.core/any?)))))
-    :&
-    (clojure.spec.alpha/?
-     (clojure.spec.alpha/cat
-      :c int?
-      :& (clojure.spec.alpha/* even?))))
-   '[1 [2 3 a b c] d 6])
-
-  (->form
-   ::fn
-   (->context
-    {::ident ::fn
-     ::ns    *ns*
-     ::definition
-     '(^{:fm/doc             "fn1"
-         :fm/args            [int? [int? & [int?]] & [int? & [even?]]]
-         :fm/ret             int?
-         :fm/rel             (fn [{args :args ret :ret}]
-                               (>= ret (apply + args)))
-         :fm/trace           #{:fm/args :fm/ret}
-         :fm/conform         #{:fm/args}
-         :fm.anomaly/handler (fn [a] a)}
-       [a [b1 & [b2] :as bs] & [c & [ds] :as cs]] (apply + a (into bs cs)))}))
-
-  ((fn [a [b & [c :as cs] :as bs] & [e & f :as es]]
-     [a b bs c cs e f es])
-   'a '[b c h] 'e 'f 'g)
-
-  (->form
-   ::fn
-   (->context
-    {::ident ::fn
-     ::ns    *ns*
-     ::definition
-     '(^{:fm/doc             "fn1"
-         :fm/args            [int? [int? & [int?]] & [int? & even?]]
-         :fm/ret             int?
-         :fm/rel             (fn [{args :args ret :ret}]
-                               (>= ret (apply + args)))
-         :fm/trace           #{:fm/args :fm/ret}
-         :fm/conform         #{:fm/args}
-         :fm.anomaly/handler (fn [a] a)}
-       [a [b1 b2 b3 & bs :as bs] & cs] (apply + a (into bs cs)))}))
-
-  (->form
-   ::fn
-   (->context
-    {::ident ::fn
-     ::ns    *ns*
-     ::definition
-     '(^{:fm/doc             "fn1"
-         :fm/args            [int? int?]
-         :fm/ret             int?
-         :fm/rel             (fn [{args :args ret :ret}]
-                               (>= ret (apply + args)))
-         :fm/trace           #{:fm/args :fm/ret}
-         :fm/conform         #{:fm/args}
-         :fm.anomaly/handler (fn [a] a)}
-       ([a] (inc a))
-       (^{:fm/trace #{}
-          :fm/ret   even?}
-        [a b] (+ a b)))}))
-
-  (->form
-   ::fn
-   (->context
-    {::ident ::fn
-     ::ns    *ns*
-     ::definition
-     '(^{:fm/doc             "fn1"
-         :fm/args            [int? int?]
-         :fm/ret             int?
-         :fm/rel             (fn [{args :args ret :ret}]
-                               (>= ret (apply + args)))
-         :fm/trace           #{:fm/args :fm/ret}
-         :fm/conform         #{:fm/args :fm/ret}
-         :fm.anomaly/handler (fn [a] a)}
-       ([] 1)
-       (^{:fm/trace            #{}
-          :fm/ret              even?
-          :fm.anomaly/handler? true}
-        [a b] (+ a b)))}))
-
-  (->form
-   ::fn
-   (->context
-    {::ident ::fn
-     ::ns    *ns*
-     ::definition
-     '(^{:fm/doc             "fn1"
-         :fm/args            [int? int?]
-         :fm/ret             int?
-         :fm/rel             (fn [{args :args ret :ret}]
-                               (>= ret (apply + args)))
-         :fm/trace           #{:fm/args :fm/ret}
-         :fm/conform         #{:fm/args :fm/ret}
-         :fm.anomaly/handler (fn [a] a)}
-       ([] 1)
-       (^{:fm/trace            #{}
-          :fm/ret              [even? & [even? int?]]
-          :fm.anomaly/handler? true}
-        [a b] (+ a b)))}))
-
-  (->form
-   ::fn
-   (->context
-    {::ident ::fn
-     ::ns    *ns*
-     ::definition
-     '(^{:fm/doc             "fn1"
-         :fm/ret             int?
-         :fm/rel             (fn [{args :args ret :ret}]
-                               (>= ret (apply + args)))
-         :fm/trace           #{:fm/args :fm/ret}
-         :fm/conform         #{:fm/args}
-         :fm.anomaly/handler (fn [a] a)}
-       ([] 1)
-       (^{:fm/args [int? int?]}
-        [a b] (+ a b)))}))
-
-  (->form
-   ::fn
-   (->context
-    {::ident ::fn
-     ::ns    *ns*
-     ::definition
-     '(^{:fm/doc             "fn1"
-         :fm/ret             int?
-         :fm/rel             (fn [{args :args ret :ret}]
-                               (>= ret (apply + args)))
-         :fm/trace           #{:fm/args :fm/ret}
-         :fm/conform         #{:fm/args}
-         :fm.anomaly/handler (fn [a] a)}
-       ([a] (inc a))
-       (^{:fm/args [int? int?]}
-        [a b] (+ a b)))}))
-
-  (->form
-   ::fn
-   (->context
-    {::ident ::fn
-     ::ns    *ns*
-     ::definition
-     '(^{:fm/doc             "fn1"
-         :fm/args            [int? int? & int?]
-         :fm/ret             int?
-         :fm/rel             (fn [{args :args ret :ret}]
-                               (>= ret (apply + args)))
-         :fm/trace           #{:fm/args :fm/ret}
-         :fm/conform         #{:fm/args}
-         :fm.anomaly/handler (fn [a] a)}
-       (^{:fm/trace #{}
-          :fm/ret   even?}
-        [a b & cs] (apply + a b cs)))}))
+  (s/conform ::specv [[::a]])
 
   '[int? int? & [int? int? int?]]
   (let [[a b & [c d e]] '[a b [c d e] [d e] [e]]]

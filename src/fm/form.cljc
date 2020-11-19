@@ -26,8 +26,7 @@
    ;;; NOTE: `fm.form` specs
    ;;;
 
-  ;; TODO: `spec2` requires symbolic specs; no inline (fn ,,,), `comp`, etc.
-  ;; TODO: unify with `clojure.core.specs.alpha/...`
+  ;; NOTE: `spec2` requires symbolic specs; no inline (fn ,,,), `comp`, etc..
 
 (def multi?
   (partial instance? clojure.lang.MultiFn))
@@ -109,7 +108,7 @@
 (def regex-op-form?
   (partial s/valid? ::regex-op-form))
 
-  ;; TODO: generators
+  ;; TODO: test-only generators
 (s/def ::s/registry-keyword
   (s/and
    qualified-keyword?
@@ -128,7 +127,7 @@
    ::positional-binding-map ::positional-binding-map
    ::core.specs/binding-form ::core.specs/binding-form))
 
-  ;; NOTE: see `::core.specs/param-list`, `::core.specs/binding-form`
+  ;; NOTE: see `::core.specs/param-list`
 (s/def ::positional-param-list
   (s/cat
    :params (s/* ::positional-binding-form)
@@ -272,47 +271,68 @@
   qualified-keyword?)
 
 (s/def :fm/arglists
-  (s/* ::core.specs/param-list)) ; ALT: `::argv`
+  (s/* ::core.specs/param-list)) ; NOTE: `:as`; `::positional-param-list`
 
 (s/def :fm/doc
   (s/or
    ::definition string?
-   ::metadata (s/* (some-fn string? nil?))))
+   ::metadata (s/* (s/or :string string? :nil nil?))))
+
+(s/def :fm/throw!
+  (s/or
+   ::definition boolean?
+   ::metadata (s/* (s/or :boolean boolean? :nil nil?))))
+
+(s/def :fm/spec
+  (s/or
+   ::specv ::specv
+   ::s/registry-keyword ::s/registry-keyword
+   ::bound-fn ::bound-fn
+   ::fn-form ::fn-form ; ALT: `:fm/fn`
+   ::spec-form ::spec-form))
 
 (s/def :fm/args
   (s/or
-   ::definition :fm.form/argv
-   ::metadata (s/* (s/or :fm.form/argv :fm.form/argv :nil nil?))))
+   ::definition :fm/spec
+   ::metadata (s/* (s/or :fm/spec :fm/spec :nil nil?))))
 
 (s/def :fm/ret
   (s/or
-   ::definition (s/or :fm.form.fn/arg :fm.form.fn/arg :fm.form/argv :fm.form/argv)
-   ::metadata (s/* (s/or :fm.form.fn/arg :fm.form.fn/arg :nil nil?))))
+   ::definition :fm/spec
+   ::metadata (s/* (s/or :fm/spec :fm/spec :nil nil?))))
 
 (s/def :fm/rel
   (s/or
-   ::spec (some-fn spec-form? spec-keyword?)
-   ::fn (some-fn fn-form? bound-fn?)
-   ::metadata ,,,))
+   ::definition :fm/spec
+   ::metadata (s/* (s/or :fm/spec :fm/spec :nil nil?))))
 
+(s/def :fm/pred
+  (s/or
+   :boolean boolean?
+   :set set?))
+
+(s/def :fm/fn
+  (s/or
+   ::bound-fn ::bound-fn
+   ::fn-form ::fn-form))
+
+  ;; ALT: maximally enumerated at top level
 (s/def :fm/trace
   (s/or
-   ::pred (some-fn true? set?)
-   ::fn (some-fn fn-form? bound-fn?)
-   ::metadata ,,,))
+   :fm/pred :fm/pred
+   :fm/fn :fm/fn
+   ::metadata (s/* (s/or :fm/trace :fm/trace :nil nil?)))) ; TODO: revisit
 
 (s/def :fm/conform
-  any?) ; bool, set
+  :fm/pred)
 
 (s/def :fm/handler
   (s/or
-   ::fn (some-fn fn-form? bound-fn?)
-   ::metadata ,,,))
+   :fm/fn :fm/fn
+   ::metadata (s/* (s/or :fm/handler :fm/handler :nil nil?))))
 
 (s/def :fm/handler?
   boolean?)
-
-(s/def :fm/throw any?) ; (fm/fn ^:fm/throw [a] (inc a)) == (fn [a] (inc a))
 
 (s/def :fm/sequent
   (s/keys
@@ -364,22 +384,18 @@
   include outer metadata.
   `:fm.metadata/fallback` — when a signature has no inner metadata, the outer
   metadata for that key will be used as a fallback. the resulting metadata form
-  will always be the same size as `:fm/arglists`.
-  `:fm.context/default` — useful for concisely expressing overlap between
-  contexts."
+  will always be the same size as `:fm/arglists`."
   (->
    (make-hierarchy)
-   (derive :fm.metadata/fallback  :fm.metadata/default)
-   (derive :fm/throw!             :fm.metadata/fallback)
-   (derive :fm/args               :fm.metadata/fallback)
-   (derive :fm/ret                :fm.metadata/fallback)
-   (derive :fm/rel                :fm.metadata/fallback)
-   (derive :fm/trace              :fm.metadata/fallback)
-   (derive :fm/conform            :fm.metadata/fallback)
-   (derive :fm/handler            :fm.metadata/fallback)
-   (derive :fm/handler?           :fm.metadata/fallback)
-   (derive :fm.context/nominal    :fm.context/default)
-   (derive :fm.context/positional :fm.context/default))) ; TODO: atom, `..metadata/hierarchy`
+   (derive :fm.metadata/fallback :fm.metadata/default)
+   (derive :fm/throw!            :fm.metadata/fallback)
+   (derive :fm/args              :fm.metadata/fallback)
+   (derive :fm/ret               :fm.metadata/fallback)
+   (derive :fm/rel               :fm.metadata/fallback)
+   (derive :fm/trace             :fm.metadata/fallback)
+   (derive :fm/conform           :fm.metadata/fallback)
+   (derive :fm/handler           :fm.metadata/fallback)
+   (derive :fm/handler?          :fm.metadata/fallback))) ; TODO: atom, `..metadata/hierarchy`
 
 (defmulti ->metadata
   "Formats and combines metadata forms"
@@ -422,7 +438,7 @@
 
 (defn binding->tuple [binding]
   (swap! trace-atom conj ["binding->tuple" binding])
-  (when (some? (::form binding))
+  (when (some? (get binding ::form))
     ((juxt ::symbol ::form) binding)))
 
 (defn bindings [ctx tags]
@@ -483,6 +499,12 @@
   (let [conformed  (lib/conform-throw ::definition (get ctx ::definition))
         ctx        (assoc ctx ::ident ::fn ::conformed-definition conformed)
         ctx        (assoc ctx ::metadata (->metadata ctx ::metadata))
+        tags       [:fm/args]
+        #_#_ctx        (bind ctx tags)]
+    ctx)
+  #_(let [conformed  (lib/conform-throw ::definition (get ctx ::definition))
+        ctx        (assoc ctx ::ident ::fn ::conformed-definition conformed)
+        ctx        (assoc ctx ::metadata (->metadata ctx ::metadata))
         tags       [:fm/args :fm/ret :fm/rel :fm/trace :fm/handler]
         ctx        (bind ctx tags)
         bindings   (bindings ctx tags)
@@ -540,6 +562,36 @@
                    ::anomaly/args   (vec argms)
                    ::anomaly/thrown t#}))))
            ~metadata))))
+
+
+   ;;;
+   ;;; NOTE: `->metadata` helpers
+   ;;;
+
+  ;; ALT: abstract "dispatch", "split", "branch", "forward", "retag"
+(defn -arglist-metadata
+  [[tag data]]
+  (swap! trace-atom conj ["-arglist-metadata" [tag data]])
+  (->metadata data [:fm/arglist tag]))
+
+(defn -normalized-binding-tuple [[k [tag conformed]]]
+  (swap! trace-atom conj ["-normalized-binding-tuple" [k [tag conformed]]])
+  (let [data
+        (case tag
+          :local-symbol    conformed
+          :map-destructure (update conformed :as (fnil identity (symbol (name k))))
+          :seq-destructure (update conformed :as-form (fnil identity {:as :as :as-sym (symbol (name k))})))]
+    [tag data]))
+
+(def -normalized-arglist-metadata
+  (comp
+   -arglist-metadata
+   -normalized-binding-tuple))
+
+(defn -args-metadata
+  [[tag conformed]]
+  (swap! trace-atom conj ["-args-metadata" [tag conformed]])
+  (->metadata conformed [:fm/args tag]))
 
 
    ;;;
@@ -612,7 +664,6 @@
   [ctx _]
   (->form ctx :fm/ident))
 
-  ;; TODO: unify common cases of `:fm/args` and `:fm/arglists`
 (defmethod ->metadata :fm/arglists
   [ctx tag]
   (let [tag [tag (->signature-tag ctx)]]
@@ -620,18 +671,18 @@
 
 (defmethod ->metadata [:fm/arglists ::signature]
   [ctx _]
-  (let [argv    (get-in ctx [::conformed-definition :fm.definition/rest 1 ::argv])
+  (let [argv    (get-in ctx [::conformed-definition :fm.definition/rest 1 :fm.signature/argv])
         arglist (->metadata argv [:fm/arglist ::conformed-specv])]
     (vector arglist)))
 
 (defmethod ->metadata [:fm/arglists ::signatures]
   [ctx _]
-  (let [argvs    (map ::argv (get-in ctx [::conformed-definition :fm.definition/rest 1]))
+  (let [argvs    (map :fm.signature/argv (get-in ctx [::conformed-definition :fm.definition/rest 1]))
         arglists (map (fn [argv] (->metadata argv [:fm/arglist ::conformed-specv])) argvs)]
     (vec arglists)))
 
 (defmethod ->metadata [:fm/arglist ::conformed-specv]
-  [[context data] tag]
+  [[context data] _]
   (let [data (case context
                :fm.context/positional data
                :fm.context/nominal    (first data))]
@@ -639,49 +690,31 @@
 
 (defmethod ->metadata [:fm/arglist :fm.context/positional ::conformed-param-list]
   [conformed tag]
-  (let [params   (when-let [params (get conformed :params)] (->metadata params (conj tag :params)))
-        var-form (when-let [var-params (get conformed :var-params)] (->metadata var-params (conj tag :var-params)))
-        as-form  (when-let [as-form (get conformed :as-form)] (->metadata as-form (conj tag :as-form)))]
+  (let [params   (when-let [params (get conformed :params)]
+                   (->metadata params (conj tag :params)))
+        var-form (when-let [var-params (get conformed :var-params)]
+                   (->metadata var-params (conj tag :var-params)))
+        as-form  (when-let [as-form (get conformed :as-form)]
+                   (->metadata as-form (conj tag :as-form)))] ; ALT: drop `:as`
     `[~@params ~@var-form ~@as-form]))
 
 (defmethod ->metadata [:fm/arglist :fm.context/nominal ::conformed-param-list]
   [conformed tag]
-  (let [map-destructure (->metadata (get conformed :params) (conj tag :params))
+  (let [map-destructure (if-let [params (get conformed :params)]
+                          (->metadata params (conj tag :params))
+                          (hash-map))
         map-destructure (if-let [as-sym (get-in conformed [:as-form :as-sym])]
                           (update map-destructure :as as-sym)
                           map-destructure)]
     `[~map-destructure]))
 
-(defn -arglist-metadata
-  [[tag data]]
-  (->metadata data [:fm/arglist tag]))
-
-(defn -normalized-binding-tuple
-  [[k [tag conformed]]]
-  (let [data (case tag
-               :local-symbol    conformed
-               :map-destructure (update conformed :as (fnil identity (symbol (name k))))
-               :seq-destructure (update conformed :as-form (fnil identity {:as :as :as-sym (symbol (name k))})))]
-    [tag data]))
-
-(def -normalized-arglist-metadata
-  (comp
-   -arglist-metadata
-   -normalized-binding-tuple))
-
 (defmethod ->metadata [:fm/arglist :fm.context/positional ::conformed-param-list :params]
   [params _]
-  (into
-   (vector)
-   (map -arglist-metadata)
-   params))
+  (into (vector) (map -arglist-metadata) params))
 
 (defmethod ->metadata [:fm/arglist :fm.context/nominal ::conformed-param-list :params]
   [params _]
-  (into
-   (hash-map)
-   (map -arglist-metadata)
-   params))
+  (into (hash-map) (map -arglist-metadata) params))
 
 (defmethod ->metadata [:fm/arglist :fm.context/positional ::conformed-param-list :var-params]
   [var-params _]
@@ -711,24 +744,24 @@
 
 (defmethod ->metadata [:fm/arglist ::nominal-binding-map]
   [m _]
-  (into
-   (hash-map)
-   (map (juxt -normalized-arglist-metadata first))
-   m))
+  (into (hash-map) (map (juxt -normalized-arglist-metadata first)) m))
 
 (defmethod ->metadata [:fm/arglist :local-symbol]    [sym _] sym)
 (defmethod ->metadata [:fm/arglist :map-destructure] [m _] m)
 (defmethod ->metadata [:fm/arglist :seq-destructure]
   [conformed _]
-  (let [forms   (map -arglist-metadata (get conformed :forms))
-        as-form (get-in conformed [:as-form :as-sym])]
-    `[~@forms ~@as-form]))
+  (let [forms     (map -arglist-metadata (get conformed :forms))
+        rest-form (when-let [rest-form (get-in conformed [:rest-forms :form])]
+                    (let [form (-arglist-metadata rest-form)]
+                      `(& ~form)))
+        as-form   (when-let [as-sym (get-in conformed [:as-form :as-sym])]
+                    `(:as ~as-sym))]
+    `[~@forms ~@rest-form ~@as-form]))
 
-  ;; TODO: argv -> args; args -> param-list
 (defn zipv-args
-  "Zips outer `:fm/args` to match an inner param-list"
-  [argv args]
-  (lib/zipvf vector? (fn [_ a] a) argv args))
+  "Zips outer `:fm/args` to match an inner arglist"
+  [arglist args]
+  (lib/zipvf vector? (fn [_ a] a) arglist args))
 
 (defmethod ->metadata [:fm/args ::signatures]
   [ctx _]
@@ -738,40 +771,46 @@
                     (partial lib/conform-throw :fm/args)
                     (remove nil? (cons outer inners)))
         signatures (get-in ctx [::conformed-definition :fm.definition/rest 1])
-        argvs      (map ::argv signatures)
+        f          (fn [argv] (->metadata argv [:fm/arglist ::conformed-specv]))
+        arglists   (map (comp f :fm.signature/argv) signatures)
         args       (map-indexed
                     (fn [i inner]
-                      (let [argv (nth argvs i)]
+                      (let [arglist (nth arglists i)]
                         (when-let [args (or inner outer)]
-                          (zipv-args argv args))))
+                          (zipv-args arglist args))))
                     inners)]
-    (vec args))) ; TODO: qualify, `s/explicate`
+    (vec args))) ; TODO: qualify, `s/explicate`?
 
-(defmethod ->metadata [:fm/args ::conformed-specv]                        [[context data] tag] (->metadata data (conj tag context)))
-(defmethod ->metadata [:fm/args ::conformed-specv :fm.context/nominal]    [[data] _] (vector (->metadata data [:fm/args ::conformed-param-list])))
-(defmethod ->metadata [:fm/args ::conformed-specv :fm.context/positional] [data _] (->metadata data [:fm/args ::conformed-param-list]))
+(defmethod ->metadata [:fm/args ::conformed-specv]
+  [[context data] tag]
+  (->metadata data (conj tag context)))
+
+(defmethod ->metadata [:fm/args ::conformed-specv :fm.context/nominal]
+  [[data] _]
+  (vector (->metadata data [:fm/args ::conformed-param-list])))
+
+(defmethod ->metadata [:fm/args ::conformed-specv :fm.context/positional]
+  [data _]
+  (->metadata data [:fm/args ::conformed-param-list]))
 
 (defmethod ->metadata [:fm/args ::conformed-param-list]
   [conformed tag]
-  (let [params   (when-let [params (get conformed :params)] (->metadata params (conj tag :params)))
-        var-form (when-let [var-params (get conformed :var-params)] (->metadata var-params (conj tag :var-params)))
-        as-form  (when-let [as-form (get conformed :as-form)] (->metadata as-form (conj tag :as-form)))]
+  (let [params   (when-let [params (get conformed :params)]
+                   (->metadata params (conj tag :params)))
+        var-form (when-let [var-params (get conformed :var-params)]
+                   (->metadata var-params (conj tag :var-params)))
+        as-form  (when-let [as-form (get conformed :as-form)]
+                   (->metadata as-form (conj tag :as-form)))] ; ALT: drop `:as`
     `[~@params ~@var-form ~@as-form]))
 
 (defmethod ->metadata [:fm/args ::conformed-param-list :params]
   [params _]
-  (into
-   (vector)
-   (mapcat
-    (fn [[tag conformed]]
-      (let [form (->metadata conformed [:fm/args tag])]
-        (if (sequential? form) form (vector form)))))
-   params))
+  (let [f (fn [x] (if (sequential? x) x (vector x)))]
+    (into (vector) (mapcat (comp f -args-metadata)) params)))
 
 (defmethod ->metadata [:fm/args ::conformed-param-list :var-params]
   [var-params _]
-  (let [[tag conformed] (get var-params :var-form)
-        var-form        (->metadata conformed [:fm/args tag])]
+  (let [var-form (-args-metadata (get var-params :var-form))]
     `(& ~var-form)))
 
 (defmethod ->metadata [:fm/args ::conformed-param-list :as-form]
@@ -779,16 +818,11 @@
   (let [as-sym (get as-form :as-sym)]
     `(:as ~as-sym)))
 
-
-  ;; NOTE: positional
 (defmethod ->metadata [:fm/args ::s/registry-keyword]      [k _] k)
 (defmethod ->metadata [:fm/args ::positional-binding-map]  [m _] (first (keys m)))
 (defmethod ->metadata [:fm/args ::core.specs/binding-form] [_ _] `any?) ; TODO: additional inference
-
-  ;; NOTE: nominal
 (defmethod ->metadata [:fm/args :keyword]                  [k _] k)
 (defmethod ->metadata [:fm/args ::nominal-binding-map]     [m _] (keys m))
-
 
   ;; NOTE: default for recognized keys
 (defmethod ->metadata :fm.metadata/default
@@ -812,7 +846,6 @@
                 (remove nil? (cons outer inners)))
         metas  (map (fn fallback [inner] (or inner outer)) inners)]
     (vec metas)))
-
 
   ;; NOTE: default for unrecognized keys and `:fm/doc`
 (defmethod ->metadata :default
@@ -875,10 +908,10 @@
                   forms))]
     binding))
 
-(defmethod ->binding ::fn/args
-  [ctx tag]
-  {::symbol (last (get ctx ::fn/normalized-argv))
-   ::form   (->form ctx tag)})
+#_(defmethod ->binding ::fn/args
+    [ctx tag]
+    {::symbol (last (get ctx ::fn/normalized-argv))
+     ::form   (->form ctx tag)})
 
 
    ;;;
@@ -899,7 +932,7 @@
     (name
      (or
       (get-in ctx [::conformed-definition :fm.definition/simple-symbol])
-      (gensym (name (get ctx ::ident))))))))
+      (gensym (name (get ctx ::ident)))))))) ; TODO: sequent
 
 (defmethod ->form :fm/symbol
   [ctx _]
@@ -914,16 +947,34 @@
   (let [index (get ctx ::signature-index 0)]
     (or
      (get-in ctx [::bindings :fm/args index ::symbol])
-     (let [args (get-in ctx [::metadata :fm/args index])
-           form (->form args [:fm/args ::fn/args])]
-       form))))
+     (when-let [args (get-in ctx [::metadata :fm/args index])]
+       (->form args [::s/form :fm/args])))))
 
-(defmethod ->form [:fm/args ::fn/args]
+(defmethod ->form [::s/form :fm/args]
   [args _]
+  (let [[tag _] (lib/conform-throw :fm/spec args)]
+    (->form args [::s/form tag])))
+
+(defmethod ->form [::s/form ::specv]
+  [specv tag]
+  (let [[context _] (lib/conform-throw ::specv specv)]
+    (->form specv (conj tag context))))
+
+(defmethod ->form [::s/form ::specv :fm.context/positional]
+  [specv _]
   (let [parts (partition-by (hash-set '&) args)
         args  (when (not= (count parts) 2) (->forms (first parts) [:fm/args ::fn/args])) ; NOTE: count `2` implies [& ,,,]
         var   (when (>    (count parts) 1) (->forms (first (last parts)) [:fm/args ::fn/variadic-arg]))]
-    `(s/cat ~@args ~@var)))
+   `(s/cat ~@args ~@var)))
+
+(defmethod ->form [::s/form ::specv :fm.context/nominal]
+  [specv _]
+  )
+
+(defmethod ->form [::s/form ::s/registry-keyword] [k _] k)
+(defmethod ->form [::s/form ::bound-fn] [sym _] sym)
+(defmethod ->form [::s/form ::fn-form] [form _] form) ; TODO: may need `s/spec` in spec2
+(defmethod ->form [::s/form ::spec-form] [form _] form)
 
 (defmethod ->form [:fm/args ::fn/arg]
   [arg _]
@@ -1261,7 +1312,7 @@
 
 (defmethod ->forms [::fn/definition ::fn/signature]
   [ctx _]
-  (let [argv  (get-in ctx [::conformed-definition :fm.definition/rest 1 ::argv])
+  (let [argv  (get-in ctx [::conformed-definition :fm.definition/rest 1 :fm.signature/argv])
         norm  (->form argv ::fn/normalized-argv)
         argv  (if (some #{:as} argv) (vec (drop-last 2 argv)) argv) ; TODO: `::fn/argv`
         ctx   (assoc ctx ::signature-index 0 ::fn/normalized-argv norm)
@@ -1274,7 +1325,7 @@
   (let [signatures (get-in ctx [::conformed-definition :fm.definition/rest 1])
         forms      (map-indexed
                     (fn [i signature]
-                      (let [argv (get signature ::argv)
+                      (let [argv (get signature :fm.signature/argv)
                             norm (->form argv ::fn/normalized-argv)
                             argv (if (some #{:as} argv) (vec (drop-last 2 argv)) argv)
                             ctx  (assoc ctx ::signature-index i ::fn/normalized-argv norm)
