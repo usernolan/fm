@@ -765,7 +765,9 @@
       (^{:fm/ret ::x}
        [::a :as argv]
        (inc a))
-      ([::a b]
+      (^{:fm/rel   (fn [{[a b] :args [x] :ret}] (>= x (+ a b)))
+         :fm/trace false}
+       [::a b]
        [::x]
        [(inc (+ a b))])
       ([[::a :b ::c :as x]]

@@ -277,6 +277,30 @@
    ;;; NOTE: `fm` specs
    ;;;
 
+
+(s/def :fm/pred
+  (s/or
+   :boolean boolean?
+   :set set?))
+
+(s/def :fm/fn
+  (s/or
+   ::bound-fn ::bound-fn
+   ::fn-form ::fn-form))
+
+(s/def :fm/specv
+  (s/or
+   :fm.context/nominal (s/tuple vector?)
+   :fm.context/positional vector?))
+
+(s/def :fm/spec
+  (s/or
+   :fm/specv :fm/specv
+   ::s/registry-keyword ::s/registry-keyword
+   ::bound-fn ::bound-fn
+   ::fn-form ::fn-form ; ALT: `:fm/fn`
+   ::spec-form ::spec-form))
+
 (s/def :fm/ident
   qualified-keyword?)
 
@@ -293,19 +317,6 @@
    ::definition boolean?
    ::metadata (s/* (s/or :boolean boolean? :nil nil?))))
 
-(s/def :fm/specv
-  (s/or
-   :fm.context/nominal (s/tuple vector?)
-   :fm.context/positional vector?))
-
-(s/def :fm/spec
-  (s/or
-   :fm/specv :fm/specv
-   ::s/registry-keyword ::s/registry-keyword
-   ::bound-fn ::bound-fn
-   ::fn-form ::fn-form ; ALT: `:fm/fn`
-   ::spec-form ::spec-form))
-
 (s/def :fm/args
   (s/or
    ::definition :fm/spec
@@ -321,29 +332,20 @@
    ::definition :fm/spec
    ::metadata (s/* (s/or :fm/spec :fm/spec :nil nil?))))
 
-(s/def :fm/pred
-  (s/or
-   :boolean boolean?
-   :set set?))
-
-(s/def :fm/fn
-  (s/or
-   ::bound-fn ::bound-fn
-   ::fn-form ::fn-form))
-
   ;; ALT: keep tags at top level
 (s/def :fm/trace
   (s/or
-   :fm/pred :fm/pred
-   :fm/fn :fm/fn
+   ::definition (s/or :fm/pred :fm/pred :fm/fn :fm/fn)
    ::metadata (s/* (s/or :fm/trace :fm/trace :nil nil?)))) ; TODO: revisit
 
 (s/def :fm/conform
-  :fm/pred)
+  (s/or
+   ::definition :fm/pred
+   ::metadata (s/* (s/or :fm/pred :fm/pred :nil nil?))))
 
 (s/def :fm/handler
   (s/or
-   :fm/fn :fm/fn
+   ::definition :fm/fn
    ::metadata (s/* (s/or :fm/handler :fm/handler :nil nil?))))
 
 (s/def :fm/handler?
@@ -352,11 +354,9 @@
    ::metadata (s/* (s/or :boolean boolean? :nil nil?))))
 
 (s/def :fm/sequent
-  (s/keys
-   :opt
-   [:fm.sequent/ident
-    :fm.sequent/unit
-    :fm.sequent/combine])) ; TODO: full definition
+  (s/or
+   ::definition (s/keys :opt [:fm.sequent/ident :fm.sequent/unit :fm.sequent/combine])
+   ::metadata (s/* (s/or :fm/sequent :fm/sequent :nil nil?)))) ; TODO: full definition
 
 
    ;;;
@@ -371,6 +371,9 @@
 (def form-hierarchy "Specifies an ontology of form tags"
   (->
    (make-hierarchy)
+   (derive :fm/args          :fm/spec)
+   (derive :fm/ret           :fm/spec)
+   (derive :fm/rel           :fm/spec)
    (derive :fm.sequent/conse ::sequent)
    (derive :fm.sequent/nonse ::sequent)
    (derive :fm.sequent/merge ::sequent)))
@@ -390,7 +393,8 @@
 (defmulti ->forms "Produces a sequence of forms to be spliced as with `~@`"
   (fn [_ctx tag]
     (swap! trace-atom conj ["->forms" tag])
-    tag))
+    tag)
+  :hierarchy #'form-hierarchy)
 
 (def metadata-hierarchy
   "Specifies an ontology to concisely handle special cases of combining metadata
@@ -524,7 +528,7 @@
                         (catch Throwable t (invalid-definition! t)))
         ctx        (assoc ctx ::ident ::fn ::conformed-definition conformed)
         ctx        (assoc ctx ::metadata (->metadata ctx ::metadata))
-        tags       [:fm/args]
+        tags       [:fm/args :fm/ret :fm/rel :fm/trace]
         ctx        (bind ctx tags)]
     ctx)
   #_(let [conformed  (lib/conform-throw ::definition (get ctx ::definition))
@@ -963,32 +967,32 @@
   [ctx _]
   (symbol (name (->form ctx :fm/ident))))
 
-(defmethod ->form :fm/args
-  [ctx _]
+(defmethod ->form :fm/spec
+  [ctx tag]
   (let [index (get ctx ::signature-index 0)]
     (or
-     (get-in ctx [::bindings :fm/args index ::symbol])
-     (when-let [args (get-in ctx [::metadata :fm/args index])]
-       (let [ctx (into ctx {:fm/args args})]
-         (->form ctx [::s/form :fm/args]))))))
+     (get-in ctx [::bindings tag index ::symbol])
+     (when-let [data (get-in ctx [::metadata tag index])]
+       (let [ctx (into ctx {tag data})]
+         (->form ctx [::s/form tag]))))))
 
-(defmethod ->form [::s/form :fm/args]
-  [ctx _]
-  (let [args    (get ctx :fm/args)
-        [tag _] (lib/conform-throw :fm/spec args)
-        ctx     (if (= tag :fm/specv) ctx args)]
-    (->form ctx [::s/form tag])))
+(defmethod ->form [::s/form :fm/spec]
+  [ctx [_ spec-tag :as tag]]
+  (let [spec  (get ctx spec-tag)
+        [t _] (lib/conform-throw :fm/spec spec)
+        ctx   (if (= t :fm/specv) ctx spec)]
+    (->form ctx (conj tag t))))
 
-(defmethod ->form [::s/form :fm/specv]
-  [ctx tag]
-  (let [specv       (get ctx :fm/args)
+(defmethod ->form [::s/form :fm/spec :fm/specv]
+  [ctx [_ spec-tag _ :as tag]]
+  (let [specv       (get ctx spec-tag)
         [context _] (lib/conform-throw :fm/specv specv)
         ctx         (case context
                       :fm.context/positional specv
                       :fm.context/nominal    ctx)]
     (->form ctx (conj tag context))))
 
-(defmethod ->form [::s/form :fm/specv :fm.context/positional]
+(defmethod ->form [::s/form :fm/spec :fm/specv :fm.context/positional]
   [specv tag]
   (let [parts      (partition-by (hash-set '&) specv)
         var?       (> (count parts) 1)
@@ -997,7 +1001,7 @@
         var-params (when var? (->forms (first (last parts)) (conj tag :var-params)))]
    `(s/cat ~@params ~@var-params)))
 
-(defmethod ->forms [::s/form :fm/specv :fm.context/positional :params]
+(defmethod ->forms [::s/form :fm/spec :fm/specv :fm.context/positional :params]
   [params _]
   (into
    (vector)
@@ -1006,14 +1010,14 @@
     (mapcat identity))
    params))
 
-(defmethod ->forms [::s/form :fm/specv :fm.context/positional :var-params]
+(defmethod ->forms [::s/form :fm/spec :fm/specv :fm.context/positional :var-params]
   [var-params _]
   `(:& ~var-params))
 
-(defmethod ->form [::s/form :fm/specv :fm.context/nominal]
-  [ctx _]
+(defmethod ->form [::s/form :fm/spec :fm/specv :fm.context/nominal]
+  [ctx [_ spec-tag _ _]]
   (let [default-ns     (str (get ctx ::ns))
-        ks             (first (get ctx :fm/args))
+        ks             (first (get ctx spec-tag))
         {req    true
          req-un false} (group-by qualified-keyword? ks)
         req-forms      (when (seq req) `(:req ~req))
@@ -1023,85 +1027,10 @@
                            `(:req-un ~req-un)))]
     `(s/keys ~@req-forms ~@req-un-forms)))
 
-(defmethod ->form [::s/form ::s/registry-keyword] [k _] k)
-(defmethod ->form [::s/form ::bound-fn] [sym _] sym)
-(defmethod ->form [::s/form ::fn-form] [form _] form) ; TODO: may need `s/spec` in spec2
-(defmethod ->form [::s/form ::spec-form] [form _] form)
-
-
-
-
-
-
-(defmethod ->form [:fm/args ::fn/arg]
-  [arg _]
-  (let [[tag _] (lib/conform-throw ::fn/arg arg)]
-    (case tag
-      ::fn/args `(s/spec ~(->form arg [:fm/args ::fn/args]))
-      arg)))
-
-(defmethod ->form [:fm/args ::fn/variadic-arg ::fn/arg]
-  [arg _]
-  (let [[tag _] (lib/conform-throw ::fn/arg arg)]
-    (case tag
-      ::fn/args (->form arg [:fm/args ::fn/variadic-arg ::fn/args])
-      `(s/* ~arg))))
-
-(defmethod ->form [:fm/args ::fn/variadic-arg ::fn/args]
-  [args _]
-  (let [ctx {::args args ::index 0}]
-    (->form ctx [:fm/args ::fn/variadic-arg ::fn/args ::recur])))
-
-(defmethod ->form [:fm/args ::fn/variadic-arg ::fn/args ::recur]
-  [ctx tag]
-  (let [i    (get ctx ::index)
-        args (get ctx ::args)
-        arg  (nth args i)] ; NOTE: seq
-    (if (= arg '&)
-      (->form (update ctx ::index inc) tag) ; NOTE: skip `&`
-      (let [index-tag (keyword (str i))
-            arg       (->form arg [:fm/args ::fn/arg])
-            last?     (or (= i (dec (count args))) (= (nth args (inc i)) '&))
-            variadic? (some #{'&} args)
-            rest      (if last?
-                        (if variadic?
-                          (->forms (last args) [:fm/args ::fn/variadic-arg])
-                          (list :rest `(s/* any?))) ; TODO: revisit tags
-                        (list :rest (->form (update ctx ::index inc) tag)))]
-        `(s/? (s/cat ~index-tag ~arg ~@rest))))))
-
-  ;; ALT: `s/keys*`; drop `strs`, `syms` support
-(defmethod ->form [:fm/args ::fn/variadic-arg ::fn/keyword-args-map]
-  [arg _]
-  (let [->form (fn [[k arg]] ; TODO: revisit tags
-                 (let [form (->form arg [:fm/args ::fn/arg])]
-                   `(s/cat :k #{~k} :form ~form)))
-        ->tag  (comp keyword key)
-        forms  (mapcat (juxt ->tag ->form) arg)]
-    `(s/* (s/alt ~@forms))))
-
-(defmethod ->form :fm/ret
-  [ctx _]
-  (let [index (get ctx ::signature-index 0)]
-    (or
-     (get-in ctx [::bindings :fm/ret index ::symbol])
-     (when-let [ret (get-in ctx [::metadata :fm/ret index])]
-       (let [[tag _] (lib/conform-throw ::fn/arg ret)]
-         (case tag
-           ::fn/args (->form ret [:fm/args ::fn/args])
-           ret))))))
-
-(defmethod ->form :fm/rel
-  [ctx _]
-  (let [index (get ctx ::signature-index 0)]
-    (or
-     (get-in ctx [::bindings :fm/rel index ::symbol])
-     (when-let [form (get-in ctx [::metadata :fm/rel index])]
-       (let [spec? (some-fn spec-form? spec-keyword?)
-             fn?   (some-fn fn-form? bound-fn?)]
-         (cond
-           (spec? form) `(fn [rel#] (s/valid? ~form rel#))
-           (fn? form)   form))))))
+(defmethod ->form [::s/form :fm/spec ::s/registry-keyword] [k _] k)
+(defmethod ->form [::s/form :fm/spec ::bound-fn] [sym _] sym) ; NOTE: may require `s/spec` in spec2
+(defmethod ->form [::s/form :fm/spec ::fn-form] [form _] form)
+(defmethod ->form [::s/form :fm/spec ::spec-form] [form _] form)
 
 (defmethod ->form :fm/trace
   [ctx _]
@@ -1113,9 +1042,10 @@
        (let [pred? (some-fn true? set?)
              fn?   (some-fn fn-form? bound-fn?)]
          (cond
-           (pred? form) (get-in ctx [::defaults :fm/trace-fn])
-           (fn? form)   form
-           :else        `(partial ~(get-in ctx [::defaults :fm/trace-fn]) ~form)))))))
+           (pred? form)  (get-in ctx [::defaults :fm/trace-fn])
+           (fn? form)    form
+           (false? form) nil ; ALT: `form`
+           :else         `(partial ~(get-in ctx [::defaults :fm/trace-fn]) ~form)))))))
 
 (defmethod ->form :fm/handler
   [ctx _]
@@ -1328,7 +1258,7 @@
         args  (->form ctx ::fn/args)
         ret   (->form ctx ::fn/ret)
         ident (->form ctx :fm/ident)]
-    `(if (~rel {:args ~args :ret ~ret})
+    `(if (s/valid? ~rel {:args ~args :ret ~ret})
        ~ret
        {:fm/ident        ~ident
         ::anomaly/ident  ::anomaly/rel
