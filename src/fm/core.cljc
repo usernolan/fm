@@ -10,6 +10,9 @@
    ;;; NOTE: dynamic variables; configuration
    ;;;
 
+(def ^:dynamic *throw!*
+  nil)
+
 (def ^:dynamic *trace*
   nil)
 
@@ -45,7 +48,8 @@
   (form/->form
    {::form/definition definition
     ::form/ns         *ns*
-    ::form/defaults   {:fm/trace    *trace*
+    ::form/defaults   {:fm/throw!   *throw!*
+                       :fm/trace    *trace*
                        :fm/trace-fn *trace-fn*
                        :fm/handler  *anomaly-handler*}}
    ::form/fn))
@@ -54,7 +58,8 @@
   (form/->def
    {::form/definition definition
     ::form/ns         *ns*
-    ::form/defaults   {:fm/trace    *trace*
+    ::form/defaults   {:fm/throw!   *throw!*
+                       :fm/trace    *trace*
                        :fm/trace-fn *trace-fn*
                        :fm/handler  *anomaly-handler*}}
    ::form/fn))

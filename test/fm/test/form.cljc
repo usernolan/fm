@@ -335,6 +335,67 @@
   (s/def ::c any?)
   (s/def ::cs any?)
 
+  (->form
+   {::ns *ns*
+    ::definition
+    '(^{:fm/doc "fn1"}
+      [a [b1 & [b2]] & [c & ds]]
+      (apply + a b1 b2 c ds))}
+   ::fn)
+
+  (->form
+   {::ns *ns*
+    ::definition
+    '(^{:fm/doc "fn1"}
+      [::a {::b [{:keys [k1 k2 k3]} & [b2]]} & [c & ds]]
+      (apply + a b1 b2 c ds))}
+   ::fn)
+
+  (->form
+   {::ns *ns*
+    ::definition
+    '(^{:fm/doc "variadic increment"}
+      ([::a]
+       (inc a))
+      ([::a ::b]
+       (inc (+ a b))))}
+   ::fn)
+
+  (->form
+   {::ns *ns*
+    ::definition
+    '(^{:fm/doc "variadic increment"}
+      ([::a]
+       (inc a))
+      (^:fm/throw! [x ::b]
+       (inc (+ x b))))}
+   ::fn)
+
+  (s/def ::x any?)
+
+  (->form
+   {::ns *ns*
+    ::definition
+    '(^{:fm/doc "variadic increment"}
+      (^{:fm/ret ::x}
+       [::a :as argv]
+       (inc a))
+      (^:fm/trace ^:fm/throw! ^{:fm/rel (fn [{[a b] :args [x] :ret}] (>= x (+ a b)))}
+       [::a b]
+       [::x]
+       [(inc (+ a b))])
+      (^:fm/handler? ^{:fm/trace (fn [t] (prn :flavor))}
+       [[::a :b ::c :as x]]
+       [[::x]]
+       {::x (inc (+ a b c))}))
+    ::defaults
+    {:fm/trace    nil
+     :fm/trace-fn `prn
+     :fm/handler  `identity}}
+   ::fn)
+
+  (s/conform ::specv [[::a]])
+
   (->metadata
    (lib/conform-explain
     ::specv
@@ -712,70 +773,6 @@
   (descendants :fm.sequent/ident)
 
   (ns1/macro ^::-> [])
-
-  (->form
-   {::ns *ns*
-    ::definition
-    '(^{:fm/doc "fn1"}
-      [a [b1 & [b2]] & [c & ds]]
-      (apply + a b1 b2 c ds))}
-   ::fn)
-
-  (s/def ::a any?)
-  (s/def ::as any?)
-  (s/def ::b any?)
-  (s/def ::bs any?)
-  (s/def ::c any?)
-  (s/def ::cs any?)
-
-  (->form
-   {::ns *ns*
-    ::definition
-    '(^{:fm/doc "fn1"}
-      [::a {::b [{:keys [k1 k2 k3]} & [b2]]} & [c & ds]]
-      (apply + a b1 b2 c ds))}
-   ::fn)
-
-  (->form
-   {::ns *ns*
-    ::definition
-    '(^{:fm/doc "variadic increment"}
-      ([::a]
-       (inc a))
-      ([::a ::b]
-       (inc (+ a b))))}
-   ::fn)
-
-  (->form
-   {::ns *ns*
-    ::definition
-    '(^{:fm/doc "variadic increment"}
-      ([::a]
-       (inc a))
-      (^:fm/throw! [x ::b]
-       (inc (+ x b))))}
-   ::fn)
-
-  (s/def ::x any?)
-
-  (->form
-   {::ns *ns*
-    ::definition
-    '(^{:fm/doc "variadic increment"}
-      (^{:fm/ret ::x}
-       [::a :as argv]
-       (inc a))
-      (^{:fm/rel   (fn [{[a b] :args [x] :ret}] (>= x (+ a b)))
-         :fm/trace false}
-       [::a b]
-       [::x]
-       [(inc (+ a b))])
-      ([[::a :b ::c :as x]]
-       [[::x]]
-       {::x (inc (+ a b c))}))}
-   ::fn)
-
-  (s/conform ::specv [[::a]])
 
   '[int? int? & [int? int? int?]]
   (let [[a b & [c d e]] '[a b [c d e] [d e] [e]]]
