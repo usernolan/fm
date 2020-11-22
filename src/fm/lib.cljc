@@ -22,16 +22,6 @@
        (apply f ys)))
    xs))
 
-(defn zipf-indexed
-  [recur? f & xs]
-  (apply
-   map
-   (fn [& ys]
-     (if (every? recur? ys)
-       (apply zipf recur? f ys)
-       (apply f ys)))
-   xs))
-
 (defn zipv
   [recur? & xs]
   (apply
@@ -83,15 +73,25 @@
 (def rreduce
   (comp unreduced -rreduce))
 
-(defn deep-contains?
-  [xs data]
+(defn deep-some
+  [ks xs]
   (rreduce
    (fn recur? [_acc x]
-     (if (contains? xs x)
+     (if (contains? ks x)
        (reduced x)
        (coll? x)))
    (constantly false)
-   data))
+   xs))
+
+(defn deep-get
+  [k xs]
+  (rreduce
+   (fn recur? [_acc x]
+     (if-let [y (and (map? x) (get x k))] ; ALT: set, vec; "gettable"
+       (reduced y)
+       (coll? x)))
+   (constantly nil)
+   xs))
 
 (defn conform-explain
   [spec x]
@@ -107,7 +107,7 @@
       (throw
        (ex-info
         (s/explain-str spec x)
-        #:fm.anomaly{:ident :fm.anomaly/assert
+        #:fm.anomaly{:ident ::s/invalid
                      :args  [x]
                      :data  (s/explain-data spec x)}))
       c)))

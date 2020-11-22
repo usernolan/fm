@@ -389,7 +389,8 @@
        [[::x]]
        {::x (inc (+ a b c))}))
     ::defaults
-    {:fm/trace    nil
+    {:fm/throw!   nil
+     :fm/trace    nil
      :fm/trace-fn `prn
      :fm/handler  `identity}}
    ::fn)
