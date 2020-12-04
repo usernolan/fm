@@ -338,17 +338,27 @@
   (->form
    {::ns *ns*
     ::definition
-    '(^{:fm/doc "fn1"}
-      [a [b1 & [b2]] & [c & ds]]
-      (apply + a b1 b2 c ds))}
+    '(^{:fm/doc "fn1" :fm/handler? true :fm/throw! true}
+      [a [b1 & [b2] :as bs] & [c & ds]]
+      (apply + a b1 b2 c ds))
+    ::defaults
+    {:fm/throw!   nil
+     :fm/trace    nil
+     :fm/trace-fn `prn
+     :fm/handler  `identity}}
    ::fn)
 
   (->form
    {::ns *ns*
     ::definition
-    '(^{:fm/doc "fn1"}
-      [::a {::b [{:keys [k1 k2 k3]} & [b2]]} & [c & ds]]
-      (apply + a b1 b2 c ds))}
+    '(^{:fm/doc "fn1" :fm/handler (fn [a] a)}
+      [::a {::b [{:keys [k1 k2 k3]} & [b2]]} & cs :as xs]
+      (apply + a k1 k2 k3 b2 cs))
+    ::defaults
+    {:fm/throw!   nil
+     :fm/trace    nil
+     :fm/trace-fn `prn
+     :fm/handler  `identity}}
    ::fn)
 
   (->form
@@ -358,7 +368,12 @@
       ([::a]
        (inc a))
       ([::a ::b]
-       (inc (+ a b))))}
+       (inc (+ a b))))
+    ::defaults
+    {:fm/throw!   nil
+     :fm/trace    true
+     :fm/trace-fn `prn
+     :fm/handler  `identity}}
    ::fn)
 
   (->form
@@ -368,24 +383,29 @@
       ([::a]
        (inc a))
       (^:fm/throw! [x ::b]
-       (inc (+ x b))))}
+       (inc (+ x b))))
+    ::defaults
+    {:fm/throw!   nil
+     :fm/trace    nil
+     :fm/trace-fn `prn
+     :fm/handler  `identity}}
    ::fn)
 
-  (s/def ::x any?)
+  (s/def ::x int?)
 
   (->form
    {::ns *ns*
     ::definition
     '(^{:fm/doc "variadic increment"}
       (^{:fm/ret ::x}
-       [::a :as argv]
-       (inc a))
+       [::a ::b :as argv]
+       (inc (+ a b)))
       (^:fm/trace ^:fm/throw! ^{:fm/rel (fn [{[a b] :args [x] :ret}] (>= x (+ a b)))}
-       [::a b]
+       [::a b ::c]
        [::x]
-       [(inc (+ a b))])
-      (^:fm/handler? ^{:fm/trace (fn [t] (prn :flavor))}
-       [[::a :b ::c :as x]]
+       [(inc (+ a b c))])
+      (^{:fm/trace (fn [t] (prn :flavor t)) :fm/rel (fn [{a :args r :ret}] (prn a r) true)}
+       [[::a :b ::c]]
        [[::x]]
        {::x (inc (+ a b c))}))
     ::defaults
@@ -394,6 +414,9 @@
      :fm/trace-fn `prn
      :fm/handler  `identity}}
    ::fn)
+
+  (def f1
+    )
 
   (s/conform ::specv [[::a]])
 
@@ -774,6 +797,25 @@
   (descendants :fm.sequent/ident)
 
   (ns1/macro ^::-> [])
+
+  (ns ns1.core)
+
+  (def hier1
+    (atom
+     (->
+      (make-hierarchy)
+      (derive :a/a :a/default)
+      (derive :a/b :a/default)
+      (derive :a/c :a/default))))
+
+  (defmulti  mm1 identity :hierarchy hier1)
+  (defmethod mm1 :a/default
+    [a]
+    (prn :a/default a))
+
+  (mm1 :a/d)
+  (swap! hier1 derive :a/d :a/default)
+  (mm1 :a/d)
 
   '[int? int? & [int? int? int?]]
   (let [[a b & [c d e]] '[a b [c d e] [d e] [e]]]
