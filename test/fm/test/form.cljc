@@ -361,6 +361,10 @@
      :fm/handler  `identity}}
    ::fn)
 
+  (s/def ::a int?)
+  (s/def ::b int?)
+  (s/def ::c int?)
+
   (->form
    {::ns *ns*
     ::definition
@@ -400,7 +404,7 @@
       (^{:fm/ret ::x}
        [::a ::b :as argv]
        (inc (+ a b)))
-      (^:fm/trace ^:fm/throw! ^{:fm/rel (fn [{[a b] :args [x] :ret}] (>= x (+ a b)))}
+      (^:fm/trace ^:fm/throw! ^{:fm/rel (fn [{[a b c] :args [x] :ret}] (>= x (+ a b c)))}
        [::a b ::c]
        [::x]
        [(inc (+ a b c))])
@@ -414,9 +418,6 @@
      :fm/trace-fn `prn
      :fm/handler  `identity}}
    ::fn)
-
-  (def f1
-    )
 
   (s/conform ::specv [[::a]])
 
