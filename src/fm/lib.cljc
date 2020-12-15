@@ -111,3 +111,29 @@
                      :args  [x]
                      :data  (s/explain-data spec x)}))
       c)))
+
+(def some-first?
+  (comp some? first))
+
+(def nil-next?
+  (comp nil? next))
+
+(s/def ::singular
+  (s/and
+   seqable?
+   some-first?
+   nil-next?))
+
+(def singular?
+  (partial s/valid? ::singular))
+
+(defn ensure-sequential [x]
+  (if (sequential? x) x (vector x)))
+
+(defn positional-combine
+  ([argxs] (into [] (mapcat ensure-sequential) argxs))
+  ([args ret] (into args ret)))
+
+(defn nominal-combine
+  ([argxs] (into {} argxs))
+  ([args ret] (into args ret)))
