@@ -93,24 +93,59 @@
    (constantly nil)
    xs))
 
-(defn conform-explain
-  [spec x]
-  (let [c (s/conform spec x)]
-    (if (s/invalid? c)
-      (s/explain spec x)
-      c)))
+(defn geta
+  ([m k]
+   (let [ks (conj (or (descendants k) (hash-set)) k)]
+     (reduce
+      (fn [_ k]
+        (when-let [v (get m k)]
+          (reduced v)))
+      nil
+      ks)))
+  ([h m k]
+   (let [ks (conj (or (descendants h k) (hash-set)) k)]
+     (reduce
+      (fn [_ k]
+        (when-let [v (get m k)]
+          (reduced v)))
+      nil
+      ks))))
 
-(defn conform-throw
-  [spec x]
-  (let [c (s/conform spec x)]
-    (if (s/invalid? c)
-      (throw
-       (ex-info
-        (s/explain-str spec x)
-        #:fm.anomaly{:ident ::s/invalid
-                     :args  [x]
-                     :data  (s/explain-data spec x)}))
-      c)))
+(defn geta-in
+  ([m ks]
+   (reduce
+    (fn [acc k]
+      (if-let [v (geta acc k)]
+        v
+        (reduced nil)))
+    m
+    ks))
+  ([h m ks]
+   (reduce
+    (fn [acc k]
+      (if-let [v (geta h acc k)]
+        v
+        (reduced nil)))
+    m
+    ks)))
+
+(defn finda
+  ([m k]
+   (let [ks (conj (or (descendants k) (hash-set)) k)]
+     (reduce
+      (fn [_ k]
+        (when-let [e (find m k)]
+          (reduced e)))
+      nil
+      ks)))
+  ([h m k]
+   (let [ks (conj (or (descendants h k) (hash-set)) k)]
+     (reduce
+      (fn [_ k]
+        (when-let [e (find m k)]
+          (reduced e)))
+      nil
+      ks))))
 
 (def some-first?
   (comp some? first))
@@ -137,3 +172,22 @@
 (defn nominal-combine
   ([argxs] (into {} argxs))
   ([args ret] (into args ret)))
+
+(defn conform-explain
+  [spec x]
+  (let [c (s/conform spec x)]
+    (if (s/invalid? c)
+      (s/explain spec x)
+      c)))
+
+(defn conform-throw
+  [spec x]
+  (let [c (s/conform spec x)]
+    (if (s/invalid? c)
+      (throw
+       (ex-info
+        (s/explain-str spec x)
+        #:fm.anomaly{:ident ::s/invalid
+                     :args  [x]
+                     :data  (s/explain-data spec x)}))
+      c)))

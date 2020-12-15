@@ -390,6 +390,55 @@
 
   (->metadata conformed-param-list1 ::conformed-param-list)
 
+  (def h1 prn)
+
+    ;; NOTE: no outer `let`
+  (->form
+   {::ns *ns*
+    ::definition
+    '(^{:fm/handler h1}
+      [a]
+      (inc a))
+    ::defaults
+    {:fm/throw!   nil
+     :fm/trace    nil
+     :fm/trace-fn `prn
+     :fm/handler  `identity}}
+   ::fn)
+
+  (->form
+   {::ns *ns*
+    ::definition
+    '(^{:fm/handler h1}
+      ([a]
+       (inc a))
+      ([a b]
+       (inc (+ a b))))
+    ::defaults
+    {:fm/throw!   nil
+     :fm/trace    nil
+     :fm/trace-fn `prn
+     :fm/handler  `identity}}
+   ::fn)
+
+  (def h2 (constantly :bummer))
+
+  (->form
+   {::ns *ns*
+    ::definition
+    '((^{:fm/handler h1}
+       [a]
+       (inc a))
+      (^{:fm/handler h2}
+       [a b]
+       (inc (+ a b))))
+    ::defaults
+    {:fm/throw!   nil
+     :fm/trace    nil
+     :fm/trace-fn `prn
+     :fm/handler  `identity}}
+   ::fn)
+
   (s/def ::a any?)
   (s/def ::as any?)
   (s/def ::b any?)
@@ -486,10 +535,73 @@
   (->form
    {::ns *ns*
     ::definition
-    '(^:fm/->
+    '(^:fm.sequent/conse
       [[::a]]
       [[::b]]
       (inc a))
+    ::defaults
+    {:fm/throw!   nil
+     :fm/trace    nil
+     :fm/trace-fn `prn
+     :fm/handler  `identity}}
+   ::fn)
+
+  (->form
+   {::ns *ns*
+    ::definition
+    '(^:fm.sequent/conse
+      [::a]
+      [[::b]]
+      (inc a))
+    ::defaults
+    {:fm/throw!   nil
+     :fm/trace    nil
+     :fm/trace-fn `prn
+     :fm/handler  `identity}}
+   ::fn)
+
+  (->form
+   {::ns *ns*
+    ::definition
+    '(^:fm.sequent/nonse
+      [::a]
+      [[::b]]
+      (inc a))
+    ::defaults
+    {:fm/throw!   nil
+     :fm/trace    nil
+     :fm/trace-fn `prn
+     :fm/handler  `identity}}
+   ::fn)
+
+  (->form
+   {::ns *ns*
+    ::definition
+    '(^:fm.sequent/conse
+      ([[::a]]
+       [[::b]]
+       (inc a))
+      ([[::b]]
+       [[::a]]
+       (dec b)))
+    ::defaults
+    {:fm/throw!   nil
+     :fm/trace    nil
+     :fm/trace-fn `prn
+     :fm/handler  `identity}}
+   ::fn)
+
+  (->form
+   {::ns *ns*
+    ::definition
+    '((^:fm.sequent/conse
+       [[::a]]
+       [[::b]]
+       (inc a))
+      (^:fm.sequent/nonse
+       [[::b]]
+       [[::a]]
+       (dec b)))
     ::defaults
     {:fm/throw!   nil
      :fm/trace    nil
