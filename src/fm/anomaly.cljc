@@ -3,6 +3,8 @@
    [clojure.spec.alpha :as s]
    [fm.lib :as lib]))
 
+
+  ;; TODO: refactor hierarchy-atom, `isa?`
 (def ^:dynamic *indicator-keyset*
   "Set of keys whose presence indicates anomality"
   #{::ident})

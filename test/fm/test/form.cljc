@@ -109,53 +109,29 @@
   '[int? [& int?] & [int? [& int?] & int?]]
   '[a [b1 b2 b3] c [d1 d2 d3 d4] e f g]
 
-   (lib/zipv
-    sequential?
-    '[a [& bs] & [c [& ds] & es]]
-    '[a? [& b?] & [c? [& d?] & e?]])
+  (lib/zipv
+   sequential?
+   '[a [& bs] & [c [& ds] & es]]
+   '[a? [& b?] & [c? [& d?] & e?]])
 
-   '[a (b1 b2 b3) c (d1 d2 d3 d4) e1 e2 e3]
+  '[a (b1 b2 b3) c (d1 d2 d3 d4) e1 e2 e3]
 
-   (lib/zipv
-    sequential?
-    '[a [& bs :as bs2] & [c [& ds :as ds2] & es :as cs2]]
-    '[a? [& b?] & [c? [& d?] & e?]])
-
-   (lib/conform-explain
-    ::args
-    '[a? [& b?] & [c? [& d?] & e?]])
-
-   (lib/zipv
-    sequential?
-    '[a [& bs :as bs2] & [c [& ds :as ds2] & es :as cs2]]
-    '[a? [& b?] & [c? [& d?] & e?]])
-
-  '[a bs2 cs2]
-
-  (lib/conform-explain
-   ::arg
-   :ns/kw)
-
-  (lib/conform-explain
-   ::arg
-   [:ns/kw])
-
-  (lib/conform-explain
-   ::arg
-   '[int? [& int?] & [& [int? int? & int?]]])
+  (lib/zipv
+   sequential?
+   '[a [& bs :as bs2] & [c [& ds :as ds2] & es :as cs2]]
+   '[a? [& b?] & [c? [& d?] & e?]])
 
   (lib/conform-explain
    ::args
-   '[int? [& int?] & [& [int? int? & int?]]])
+   '[a? [& b?] & [c? [& d?] & e?]])
 
-  (lib/conform-explain
-   ::args
-   '[& int?])
+  (lib/zipv
+   sequential?
+   '[a [& bs :as bs2] & [c [& ds :as ds2] & es :as cs2]]
+   '[a? [& b?] & [c? [& d?] & e?]])
 
-  (lib/conform-explain
-   ::args
-   '[int? & int?])
-
+     ;; NOTE: "keyword args" often means "keyed variadic args", where keys can
+     ;; be keywords, symbols, or strings
   ((fn [& {:syms [a b c]}]
      [a b c])
    'a 'a 'b 'b 'c 'c)
@@ -164,38 +140,141 @@
      [a b c])
    "a" 'a "b" 'b "c" 'c)
 
-  '[a? [& b?] & [c? [& d?] & e?]]
-  (s/spec
-   (s/cat
-    :p1 a?
-    :p2
-    (s/spec
-     (s/cat
-      :variadic
-      (s/* b?)
-      #_
-      (s/?
-       (s/* b?))))
-    :variadic
-    (s/?
-       ;; NOTE: no `s/spec`
-     (s/cat
-      )
-     )
-    )
-   )
+  ;;;
+  )
 
-  (comment
+(comment
 
     ;; TODO: dynamic `:fm/,,,`
-    (def args1 [int?])
-    (fm ^{:fm/args args1} [x] (+ x 1))
+  (def args1 [int?])
+  (fm ^{:fm/args args1} [x] (+ x 1))
 
     ;; TODO: warnings (log level?), `conform-explain`
-    (fm ^{:fm/args [int?]} [x1 x2])
+  (fm ^{:fm/args [int?]} [x1 x2])
 
-    ;;;
-    )
+  ;;;
+  )
+
+(comment ; NOTE: `->metadata`
+
+  (->metadata
+   (lib/conform-explain
+    ::specv
+    '[])
+   [:fm/arglist ::conformed-specv])
+
+  (->metadata
+   (lib/conform-explain
+    ::specv
+    '[a])
+   [:fm/arglist ::conformed-specv])
+
+  (->metadata
+   (lib/conform-explain
+    ::specv
+    '[::a])
+   [:fm/arglist ::conformed-specv])
+
+  (->metadata
+   (lib/conform-explain
+    ::specv
+    '[::a b])
+   [:fm/arglist ::conformed-specv])
+
+  (->metadata
+   (lib/conform-explain
+    ::specv
+    '[::a b & cs])
+   [:fm/arglist ::conformed-specv])
+
+  (->metadata
+   (lib/conform-explain
+    ::specv
+    '[{::as [a1 a2 a3]} & ::cs])
+   [:fm/arglist ::conformed-specv])
+
+  (->metadata
+   (lib/conform-explain
+    ::specv
+    '[::a b & {::cs [{[[c111 c112 v113] c12 c13] :xs} c2 [x1 x2 x3]]}])
+   [:fm/arglist ::conformed-specv])
+
+  (lib/conform-explain
+   ::specv
+   '[[]])
+
+  (->metadata
+   (lib/conform-explain
+    ::specv
+    '[[::b {:a [a1 a2 a3] ::c c1 ::d {:keys [d1 d2 d3]}}]])
+   [:fm/arglist ::conformed-specv])
+
+  (->metadata
+   (lib/conform-explain
+    ::specv
+    '[[]])
+   [:fm/arglist ::conformed-specv])
+
+  (->metadata
+   (lib/conform-explain
+    ::specv
+    '[[::a ::b {::c {:keys [k1 k2 k3]}}]])
+   [:fm/arglist ::conformed-specv])
+
+  (let [[{a :fm.form/a, b :fm.form/b, {:keys [k1 k2 k3], :as c} :fm.form/c}]]
+    {::a 'a ::b 'b ::c {:k1 'k1 :k2 'k2 :k3 'k3}}
+    [a b c k1 k2 k3])
+
+  (->metadata
+   (lib/conform-explain
+    ::specv
+    '[::a ::b & {::cs {:keys [k1 k2 k3]}}])
+   [:fm/args ::conformed-specv])
+
+    ;; NOTE: would love `unform` to always perfectly reconstruct input to
+    ;; `conform`, but alas
+  (s/unform
+   ::specv
+   '[:fm.context/nominal
+     [{:params
+       [[:keyword :fm.form/b]
+        [:fm.form/nominal-binding-map
+         {:a
+          [:seq-destructure
+           {:forms [[:local-symbol a1] [:local-symbol a2] [:local-symbol a3]]}],
+          :fm.form/c [:local-symbol c1],
+          :fm.form/d [:map-destructure {:keys [d1 d2 d3]}]}]]}]])
+
+  (s/unform
+   ::core.specs/binding-form
+   '[:seq-destructure
+     {:forms
+      [[:local-symbol c1] [:local-symbol c2] [:local-symbol c3]],
+      :as-form {:as :as, :as-sym cs}}])
+
+  (s/unform
+   ::core.specs/binding-form
+   '[:map-destructure {:keys [d1 d2 d3] :as ds}])
+
+  (s/unform
+   ::core.specs/binding-form
+   '[:local-symbol c1]
+   #_'[:map-destructure {:keys [d1 d2 d3]}]
+   #_'[:seq-destructure
+       {:forms [[:local-symbol a1] [:local-symbol a2] [:local-symbol a3]]}])
+
+  (let [conformed (lib/conform-explain
+                   ::definition
+                   '(([a] a)
+                     ([a b] [a b])
+                     ([a b & cs] [a b cs])))
+        ctx       (assoc ctx ::ident ::fn ::conformed-definition conformed)
+        ctx       (assoc ctx ::metadata (->metadata ctx ::metadata))])
+
+  ;;;
+  )
+
+(comment ; NOTE: `->form`
 
   (reset! trace-atom [])
 
@@ -217,23 +296,6 @@
                   :fm/trace-fn `prn
                   :fm/handler  `identity}}
    ::fn)
-
-  (->form
-   {::ns         *ns*
-    ::definition '(#_^{:fm/doc "fn1"}
-                     fn1
-                     #_^{:fm/rel     (fn [{args :args ret :ret}]
-                                       (>= ret (apply + (vals args))))
-                         :fm/trace   true
-                         :fm/conform true
-                         :fm/handler identity}
-                     [[::a :as ctx]]
-                     (prn argv)
-                     (inc a))
-    ::defaults   {:fm/trace    nil
-                  :fm/trace-fn `prn
-                  :fm/handler  `identity}}
-   ::conse)
 
   (lib/conform-explain
    ::specv
@@ -279,38 +341,38 @@
 
   (def conformed-definition1
     #:fm.definition
-    {:rest
-     [:fm.form/signatures
-      [#:fm.signature
-       {:argv
-        [:fm.context/positional
-         {:params
-          [[:clojure.core.specs.alpha/binding-form
-            '[:local-symbol a]]]}],
-        :body '[a]}
-       #:fm.signature
-       {:argv
-        [:fm.context/positional
-         {:params
-          [[:clojure.core.specs.alpha/binding-form
-            '[:local-symbol a]]
-           [:clojure.spec.alpha/registry-keyword
-            :fm.form/b]]}],
-        :body '[[a b]]}
-       #:fm.signature
-       {:argv
-        [:fm.context/positional
-         {:params
-          [[:clojure.core.specs.alpha/binding-form
-            '[:local-symbol a]]
-           [:clojure.spec.alpha/registry-keyword
-            :fm.form/b]],
-          :var-params
-          {:ampersand '&,
-           :var-form
-           [:clojure.spec.alpha/registry-keyword
-            :fm.form/cs]}}],
-        :body '[[a b cs]]}]]})
+     {:rest
+      [:fm.form/signatures
+       [#:fm.signature
+         {:argv
+          [:fm.context/positional
+           {:params
+            [[:clojure.core.specs.alpha/binding-form
+              '[:local-symbol a]]]}],
+          :body '[a]}
+        #:fm.signature
+         {:argv
+          [:fm.context/positional
+           {:params
+            [[:clojure.core.specs.alpha/binding-form
+              '[:local-symbol a]]
+             [:clojure.spec.alpha/registry-keyword
+              :fm.form/b]]}],
+          :body '[[a b]]}
+        #:fm.signature
+         {:argv
+          [:fm.context/positional
+           {:params
+            [[:clojure.core.specs.alpha/binding-form
+              '[:local-symbol a]]
+             [:clojure.spec.alpha/registry-keyword
+              :fm.form/b]],
+            :var-params
+            {:ampersand '&,
+             :var-form
+             [:clojure.spec.alpha/registry-keyword
+              :fm.form/cs]}}],
+          :body '[[a b cs]]}]]})
 
   (def conformed-param-list1
     [:fm.context/positional
@@ -421,120 +483,24 @@
 
   (s/conform ::specv [[::a]])
 
-  (->metadata
-   (lib/conform-explain
-    ::specv
-    '[])
-   [:fm/arglist ::conformed-specv])
+  (->form
+   {::ns *ns*
+    ::definition
+    '(^:fm/->
+      [[::a]]
+      [[::b]]
+      (inc a))
+    ::defaults
+    {:fm/throw!   nil
+     :fm/trace    nil
+     :fm/trace-fn `prn
+     :fm/handler  `identity}}
+   ::fn)
 
-  (->metadata
-   (lib/conform-explain
-    ::specv
-    '[a])
-   [:fm/arglist ::conformed-specv])
+  ;;;
+  )
 
-  (->metadata
-   (lib/conform-explain
-    ::specv
-    '[::a])
-   [:fm/arglist ::conformed-specv])
-
-  (->metadata
-   (lib/conform-explain
-    ::specv
-    '[::a b])
-   [:fm/arglist ::conformed-specv])
-
-  (->metadata
-   (lib/conform-explain
-    ::specv
-    '[::a b & cs])
-   [:fm/arglist ::conformed-specv])
-
-  (->metadata
-   (lib/conform-explain
-    ::specv
-    '[{::as [a1 a2 a3]} & ::cs])
-   [:fm/arglist ::conformed-specv])
-
-  (->metadata
-   (lib/conform-explain
-    ::specv
-    '[::a b & {::cs [{[[c111 c112 v113] c12 c13] :xs} c2 [x1 x2 x3]]}])
-   [:fm/arglist ::conformed-specv])
-
-  (lib/conform-explain
-   ::specv
-   '[[]])
-
-  (->metadata
-   (lib/conform-explain
-    ::specv
-    '[[::b {:a [a1 a2 a3] ::c c1 ::d {:keys [d1 d2 d3]}}]])
-   [:fm/arglist ::conformed-specv])
-
-  (->metadata
-   (lib/conform-explain
-    ::specv
-    '[[]])
-   [:fm/arglist ::conformed-specv])
-
-  (->metadata
-   (lib/conform-explain
-    ::specv
-    '[[::a ::b {::c {:keys [k1 k2 k3]}}]])
-   [:fm/arglist ::conformed-specv])
-
-  (let [[{a :fm.form/a, b :fm.form/b, {:keys [k1 k2 k3], :as c} :fm.form/c}]]
-    {::a 'a ::b 'b ::c {:k1 'k1 :k2 'k2 :k3 'k3}}
-    [a b c k1 k2 k3])
-
-  (->metadata
-   (lib/conform-explain
-    ::specv
-    '[::a ::b & {::cs {:keys [k1 k2 k3]}}])
-   [:fm/args ::conformed-specv])
-
-  (s/unform
-   ::specv
-   '[:fm.context/nominal
-     [{:params
-       [[:keyword :fm.form/b]
-        [:fm.form/nominal-binding-map
-         {:a
-          [:seq-destructure
-           {:forms [[:local-symbol a1] [:local-symbol a2] [:local-symbol a3]]}],
-          :fm.form/c [:local-symbol c1],
-          :fm.form/d [:map-destructure {:keys [d1 d2 d3]}]}]]}]])
-
-  (s/unform
-   ::core.specs/binding-form
-   '[:seq-destructure
-     {:forms
-      [[:local-symbol c1] [:local-symbol c2] [:local-symbol c3]],
-      :as-form {:as :as, :as-sym cs}}])
-
-  (s/unform
-   ::core.specs/binding-form
-   '[:map-destructure {:keys [d1 d2 d3] :as ds}])
-
-  (s/unform
-   ::core.specs/binding-form
-   '[:local-symbol c1]
-   #_
-   '[:map-destructure {:keys [d1 d2 d3]}]
-   #_
-   '[:seq-destructure
-     {:forms [[:local-symbol a1] [:local-symbol a2] [:local-symbol a3]]}])
-
-  (let [conformed (lib/conform-explain
-                   ::definition
-                   '(([a] a)
-                     ([a b] [a b])
-                     ([a b & cs] [a b cs])))
-        ctx       (assoc ctx ::ident ::fn ::conformed-definition conformed)
-        ctx       (assoc ctx ::metadata (->metadata ctx ::metadata))
-        ])
+(comment ; NOTE: sequent experiments
 
   (defn f1
     [& argms]
@@ -599,10 +565,11 @@
 
   (fm/defn f1 [a] [::b] (inc a))
 
+    ;; NOTE: sequents are signature-total in the args context,
+    ;; signature-specific in ident, combine, and ret context
   (fm/defn m1
     ^{:fm/sequent
       {:fm.sequent/ident   :fm.sequent/merge
-       :fm.sequent/unit    (partial into [] ,,,)
        :fm.sequent/combine (partial into [] ,,,)}}
     [:a :b :c]
     [:d :e :f]
@@ -618,9 +585,6 @@
 
   (fm/defn ^:fm/-- m2
     [])
-
-  (fm/defconse conse1 [[::a ::b ::c]] [[::d]]
-    ::d)
 
   (fm/defn f1 [x y z :as v3]
     v3)
@@ -655,9 +619,6 @@
   ;; NOTE: eliminate `seqv` destructuring
   ;; NOTE: change `seqv` specification
   ;; NOTE: try to detect/infer special `:keys` cases
-
-
-  [[a b c]] :: ::keys
 
   (defmergesequent req<<developer
     [::db.developer/conn ::session/data]
@@ -702,7 +663,7 @@
           tx-data       [{:db/id eid ::portal/subscriptions subscriptions}]]
       (d/transact conn {:tx-data tx-data})))
 
-  (fm/defconse req->post-response ^{:fm/handler anomaly-handler}
+  (fm/defn ^:fm/-> req->post-response ^{:fm/handler anomaly-handler}
     []
     [[:status]]
     {:status 204}) ; ALT: respond with developer; EQL
@@ -725,7 +686,7 @@
     (fm/fn ^{:fm/args ::req}
       [{:keys [request-method] ::session/keys [data]}]
       (let [session-tag (first (lib/conform-throw ::session/data data))]
-        [request-method session-tag]))
+        [request-method session-tag])) ; NOTE: `match`?
     :hierarchy #'h1)
 
   (defmulti handler
@@ -734,21 +695,13 @@
 
   (defmethod handler [:post ::session/authenticated]
     [req]
-    ())
+    ,,,)
 
   (defmethod handler :default
     [_req]
     {:status 405})
 
-  (fm/defnonse nonse1
-    ([[::db.developer/conn ::b]]
-     [::c]
-     ::c)
-    ([::c]
-     [::d]
-     ::d))
-
-  (fm/defnonse nonse1
+  (fm/fn ^:fm/-> conse1
     ([::authenticated]
      [::resp]
      {:status 200})
@@ -756,7 +709,7 @@
      [::resp]
      {:status 401}))
 
-  (ns ns1.core)
+  (ns ns1.core) ; NOTE: shorthand experiment
 
   (derive :fm.sequent/conse :fm.sequent/ident)
   (derive :fm.sequent/nonse :fm.sequent/ident)
@@ -799,7 +752,7 @@
 
   (ns1/macro ^::-> [])
 
-  (ns ns1.core)
+  (ns ns1.core) ; NOTE: hierarchy mutation experiment
 
   (def hier1
     (atom
@@ -818,7 +771,6 @@
   (swap! hier1 derive :a/d :a/default)
   (mm1 :a/d)
 
-  '[int? int? & [int? int? int?]]
   (let [[a b & [c d e]] '[a b [c d e] [d e] [e]]]
     [a b c d e])
 
@@ -841,7 +793,7 @@
 
   (lib/conform-explain
    (s/tuple int? int? (s/? (s/cat :c int? :d int? :e int?)))
-   '[1 2 [3]]) ; NOTE: shouldn't fail?
+   '[1 2 [3]])
 
   (lib/conform-explain
    (s/tuple int? int? (s/cat :c int? :d int? :e int?))
@@ -858,195 +810,21 @@
   (let [[a b & [c d e :as cs]] '[a b c d]]
     [a b c d e cs])
 
-  (lib/conform-explain
-   (s/tuple int? int? (s/? (s/cat :c int? :rest (s/? (s/cat :d int? :rest (s/? (s/cat :e int? :rest any?)))))))
-   '[1 2 [3 4 5 6]]) ; NOTE: shouldn't fail?
-
-  (lib/conform-explain
-   (s/tuple
-    int?
-    int?
-    (s/?
-     (s/cat
-      :c int?
-      :rest
-      (s/?
-       (s/cat
-        :d int?
-        :rest
-        (s/?
-         (s/cat
-          :e int?
-          :rest any?)))))))
-   '[1 2 nil])
-
-  (lib/conform-explain
-   (s/cat
-    :0 int?
-    :1 int?
-    :&
-    (s/?
-     (s/cat
-      :0 int?
-      :rest
-      (s/?
-       (s/cat
-        :1 int?
-        :rest
-        (s/?
-         (s/cat
-          :2 int?
-          :rest any?)))))))
-   '[1 2 3])
-
-  (lib/conform-explain
-   (s/tuple
-    int?
-    int?
-    (s/?
-     (s/cat
-      :c int?
-      :rest
-      (s/?
-       (s/cat
-        :d int?
-        :rest
-        (s/?
-         (s/cat
-          :e int?
-          :rest any?)))))))
-   '[1 2 []])
-
-  (lib/conform-explain
-   (s/tuple
-    int?
-    int?
-    (s/?
-     (s/cat
-      :c int?
-      :rest
-      (s/?
-       (s/cat
-        :d int?
-        :rest
-        (s/?
-         (s/cat
-          :e int?
-          :rest any?)))))))
-   '[1 2 ()])
-
-  (lib/conform-explain
-   (s/tuple
-    int?
-    int?
-    (s/?
-     (s/cat
-      :c int?
-      :rest
-      (s/?
-       (s/cat
-        :d int?
-        :rest
-        (s/?
-         (s/cat
-          :e int?
-          :rest any?)))))))
-   '[1 2 (3)])
-
-  (lib/conform-explain
-   (s/tuple
-    int?
-    int?
-    (s/?
-     (s/cat
-      :c int?
-      :rest
-      (s/?
-       (s/cat
-        :d int?
-        :rest
-        (s/?
-         (s/cat
-          :e int?
-          :rest any?)))))))
-   '[1 2 (3 4)])
-
-  (lib/conform-explain
-   (s/tuple
-    int?
-    int?
-    (s/?
-     (s/cat
-      :c int?
-      :rest
-      (s/?
-       (s/cat
-        :d int?
-        :rest
-        (s/?
-         (s/cat
-          :e int?
-          :rest (s/? any?))))))))
-   '[1 2 (3 4 5)])
-
-  (lib/conform-explain
-   (s/tuple
-    int?
-    int?
-    (s/?
-     (s/cat
-      :0 int?
-      :rest
-      (s/?
-       (s/cat
-        :1 int?
-        :rest
-        (s/?
-         (s/cat
-          :2 int?
-          :rest
-          (s/? any?))))))))
-   '[1 2 (3 4 5 6)])
-
-  (lib/conform-explain
-   (s/tuple
-    int?
-    int?
-    (s/?
-     (s/cat
-      :c int?
-      :rest
-      (s/?
-       (s/cat
-        :d int?
-        :rest
-        (s/?
-         (s/cat
-          :e int?
-          :rest
-          (s/? any?))))))))
-   '[1 2 (3 4 5 a)])
-
-  (sequential?)
-  (::fn/arg+ ,,,) #_=> `(s/? (s/cat ,,,))
-  (::fn/arg ,,,) #_=> `(s/* ,,,)
-
   (->form
-   ::fn
-   (->context
-    {::ident ::fn
-     ::ns    *ns*
-     ::definition
-     '(^{:fm/doc             "fn1"
-         :fm/args            [int? int? & [int? int? int?]]
-         :fm/ret             int?
-         :fm/rel             (fn [{args :args ret :ret}]
-                               (>= ret (apply + args)))
-         :fm/trace           #{:fm/args :fm/ret}
-         :fm/conform         #{:fm/args}
-         :fm.anomaly/handler (fn [a] a)}
-       [a b & [c d e :as cs]]
-       (apply + a b cs))}))
+   {::ident ::fn
+    ::ns    *ns*
+    ::definition
+    '(^{:fm/doc             "fn1"
+        :fm/args            [int? int? & [int? int? int?]]
+        :fm/ret             int?
+        :fm/rel             (fn [{args :args ret :ret}]
+                              (>= ret (apply + args)))
+        :fm/trace           #{:fm/args :fm/ret}
+        :fm/conform         #{:fm/args}
+        :fm.anomaly/handler (fn [a] a)}
+      [a b & [c d e :as cs]]
+      (apply + a b cs))}
+   ::fn)
 
   (let [[a b & [c d e & [f g]]] '[a b c d e f g]]
     [a b c d e f g])
@@ -1067,42 +845,38 @@
      [a b c cs d e f g fs])
    'a nil)
 
-  '[int? int? & [int? int? ::m1 & int?]]
-
   (def trace-idents #{:fm/args :fm/ret})
   (def conform-idents #{:fm/args})
 
   (->form
-   ::fn
-   (->context
-    {::ident ::fn
-     ::ns    *ns*
-     ::definition
-     '(^{:fm/doc             "fn1"
-         :fm/args            [int? int?]
-         :fm/ret             int?
-         :fm/rel             (fn [{args :args ret :ret}]
-                               (>= ret (apply + args)))
-         :fm/trace           #{:fm/args :fm/ret}
-         :fm/conform         #{:fm/args}
-         :fm.anomaly/handler (fn [a] a)}
-       ([a b] (+ a b)))}))
+   {::ident ::fn
+    ::ns    *ns*
+    ::definition
+    '(^{:fm/doc             "fn1"
+        :fm/args            [int? int?]
+        :fm/ret             int?
+        :fm/rel             (fn [{args :args ret :ret}]
+                              (>= ret (apply + args)))
+        :fm/trace           #{:fm/args :fm/ret}
+        :fm/conform         #{:fm/args}
+        :fm.anomaly/handler (fn [a] a)}
+      ([a b] (+ a b)))}
+   ::fn)
 
   (->form
-   ::fn
-   (->context
-    {::ident ::fn
-     ::ns    *ns*
-     ::definition
-     '(^{:fm/doc             "fn1"
-         :fm/args            [int? int?]
-         :fm/ret             int?
-         :fm/rel             (fn [{args :args ret :ret}]
-                               (>= ret (apply + args)))
-         :fm/trace           #{:fm/args :fm/ret}
-         :fm/conform         #{:fm/args}
-         :fm.anomaly/handler (fn [a] a)}
-       [a b] (+ a b))}))
+   {::ident ::fn
+    ::ns    *ns*
+    ::definition
+    '(^{:fm/doc             "fn1"
+        :fm/args            [int? int?]
+        :fm/ret             int?
+        :fm/rel             (fn [{args :args ret :ret}]
+                              (>= ret (apply + args)))
+        :fm/trace           #{:fm/args :fm/ret}
+        :fm/conform         #{:fm/args}
+        :fm.anomaly/handler (fn [a] a)}
+      [a b] (+ a b))}
+   ::fn)
 
   ((fn [a b & [c d e]] [a b c d e]) 'a 'b 'c 'd)
 
@@ -1119,24 +893,10 @@
   (def args1 '[int? [int? [int?]] ::m1 & int?])
   (def argv1 '[a [b [c :as cs] :as bs] {:keys [d] :as e} & fs])
 
-  (def conformed-args1 (lib/conform-explain ::fn/args args1))
-
-  (def bindings1
-    {:fm/k1 [{::symbol 's1 ::form 'f1}
-             {::symbol 's2 ::form 'f2}
-             {::symbol 's3 ::form 'f3}]
-     :fm/k2 [{::symbol 's3 ::form 'f3}
-             {::symbol 's3 ::form 'f3}
-             {::symbol 's4 ::form 'f4}]})
-
-  (->form
-   ::fn/context-bindings
-   {::bindings bindings1})
-
   ;;;
   )
 
-(comment
+(comment ; NOTE: dynamic var experiment
 
   (ns ns1.core)
 
@@ -1184,24 +944,7 @@
   ;;;
   )
 
-(comment
-
-  (lib/conform-explain
-   ::argv
-   '[a b c & ds :as asv]
-   #_'[:as argv]
-   #_'[ctx tag]
-   #_'[[::a ::b ::c :as xs]]
-   #_'[{::keys [a b c] :as xs} :as as]
-   )
-
-  (lib/conform-explain ::argv '[{:keys [a b c]}])
-  (fm/fn [& as :as argv] )
-  (fm/fn [:as argv])
-
-  (fm/fn '(::a ::b ::c)
-    )
-
+(comment ; NOTE: real world examples, sketches
 
   (defm -wrap-session ^{:fm/args    [router.lib/fn? ::opts]
                         :fm/handler -anomaly-handler}
@@ -1229,7 +972,7 @@
   [::handler opts]
   [{::handler h} _opts]
   [{::router.lib/fn handler} opts]
-  [{::router.lib/keys [a b c]} opts] ; potentially confusing
+  [{::router.lib/keys [a b c]} opts] ; potentially ambiguous
   [{::router.lib/keys [a b c] :as handler} opts]
   [{::handler {::router.lib/keys [a b c]}} opts]
   [{::router.lib/fn handler} opts]
@@ -1240,40 +983,6 @@
   [{::router.lib/fn [h1 h2 h3]} {::opts {:keys [k1 k2 k3]}} & xs]
   [{::router.lib/fn [h1 h2 h3]} {::opts {:keys [k1 k2 k3]}} & ::xs]
   [{::router.lib/fn [h1 h2 h3]} {::opts {:keys [k1 k2 k3]}} & {::xs [x y z]}]
-
-  [[:a {::b {:nu/keys [id]} ::c [c1 c2 c3]}]]
-
-  (fn/defn ^:fm/throw! -wrap-session
-    [{:as k}] #_=> [k] #_=> 
-    [{:keys [k]}] #_=> [[k :as keys]]
-    [{:keys [k] :as ks}] #_=> [{:keys [k] :as ks}]
-    (fn [{:keys [uri] :as req}]
-      (let [route (router/match-route uri)
-            req   (into req #::session{:handler handler :opts opts :route route})]
-        (session/req->res req))))
-
-  [::a _b ::c & ::ds :as xs]
-
-  [_]
-  [_a]
-  [::a]
-  [{::a ,,,}]
-
-  (fm/defn ^:fm/-- f1
-    ([[::a ::b]]
-     [[::c]]
-     (inc a b))
-    ([[::d ::e]]
-     [[::f]]
-     )
-    )
-
-  [[:a]]
-  [[::a]]
-  [[{:a ,,,}]]
-  [[{::a ,,,}]]
-  [[{,,, :a}]]
-  [[{,,, ::a}]]
 
   (s/def ::email->recently-delivered?_args
     (s/keys
@@ -1296,4 +1005,5 @@
         (or 0)
         (> 0)))
 
+  ;;;
   )
