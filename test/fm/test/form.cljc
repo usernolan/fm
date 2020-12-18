@@ -281,7 +281,7 @@
   (->form
    {::ns         *ns*
     ::definition '(^{:fm/doc "fn1"}
-                   fn1
+                   f1
                    ^{:fm/args    [int?]
                      :fm/ret     int?
                      :fm/rel     (fn [{args :args ret :ret}]
@@ -292,6 +292,25 @@
                    [a :as argv]
                    (prn argv)
                    (inc a))
+    ::defaults   {:fm/trace    nil
+                  :fm/trace-fn `prn
+                  :fm/handler  `identity}}
+   ::fn)
+
+  (->form
+   {::ns         *ns*
+    ::definition '(^{:fm/doc "fn1"}
+                   f1
+                   ^{:fm/args    [int?]
+                     :fm/ret     int?
+                     :fm/rel     (fn [{args :args ret :ret}]
+                                   (>= ret (apply + (vals args))))
+                     :fm/trace   true
+                     :fm/conform true
+                     :fm/handler identity}
+                   [a :as argv]
+                   (prn argv)
+                   (inc (get argv :0)))
     ::defaults   {:fm/trace    nil
                   :fm/trace-fn `prn
                   :fm/handler  `identity}}
@@ -388,7 +407,9 @@
         :fm.form/cs]}
       :as-form {:as :as :as-sym 'specv1}}])
 
-  (->metadata conformed-param-list1 ::conformed-param-list)
+  (->metadata
+   conformed-param-list1
+   ::conformed-param-list)
 
   (def h1 prn)
 
@@ -446,6 +467,8 @@
   (s/def ::c any?)
   (s/def ::cs any?)
 
+    ;; TODO: shrink, isolate test cases
+    ;; TODO: eliminate redundancy in `fn-args`
   (->form
    {::ns *ns*
     ::definition
@@ -530,8 +553,6 @@
      :fm/handler  `identity}}
    ::fn)
 
-  (s/conform ::specv [[::a]])
-
   (->form
    {::ns *ns*
     ::definition
@@ -591,6 +612,7 @@
      :fm/handler  `identity}}
    ::fn)
 
+    ;; NOTE: local spec form deduplication
   (->form
    {::ns *ns*
     ::definition

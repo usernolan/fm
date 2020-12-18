@@ -42,6 +42,7 @@
        (apply f ys)))
    xs))
 
+  ;; TODO: eliminate redundancy
 (defn -rreduce
   ([recur? rf xs]         (-rreduce recur? (fn initf [acc _] acc) rf (fn cf [_ r] r) (rf) xs))
   ([recur? rf init xs]    (-rreduce recur? (fn initf [acc _] acc) rf (fn cf [_ r] r) init xs))
@@ -74,10 +75,10 @@
   (comp unreduced -rreduce))
 
 (defn deep-some
-  [ks xs]
+  [pred xs]
   (rreduce
    (fn recur? [_acc x]
-     (if (contains? ks x)
+     (if (pred x)
        (reduced x)
        (coll? x)))
    (constantly false)
