@@ -7,26 +7,25 @@
    [fm.lib :as lib]))
 
 
-  ;; NOTE: `spec2` requires symbolic specs; no inline (fn ,,,), `comp`, etc..
+  ;; NOTE: `spec2` requires symbolic specs, otherwise wrap `s/spec`
   ;; TODO: revisit tags; top-level `::ident`, `::fn`/`::sequent`
-  ;; TODO: revisit `lib/conform-throw`, application
+  ;; TODO: revisit `lib/conform-throw!`, application
   ;; TODO: runtime `*ignore*`, `s/*compile-asserts*`, etc.; config
-  ;; TODO: clarify contextual dependencies?
-  ;; TODO: "cut elimination"
-  ;; TODO: name lambdas
   ;; TODO: infer `:fm/handler?`
   ;; TODO: global spec form sharing; `registry`
-  ;; TODO: `:fm/memoize`; (comp memoize select-keys ,,,)
+  ;; TODO: `:fm/memoize`; c. (comp memoize select-keys ,,,)
+  ;; TODO: positional sequent variadic kwargs
   ;; ALT: reader literals; (vector ,,,) vs. [,,,], `into`
   ;; ALT: qualify positional tags e.g. (s/cat :fm.signature/0 ,,,)
+  ;; ALT: core.match; [tag x]
 
 
-(comment ; NOTE: tmp
+   ;;;
+   ;;; NOTE: tmp
+   ;;;
 
-  (def trace-atom (atom []))
 
-  ;;;
-  )
+(def trace-atom (atom []))
 
 
    ;;;
@@ -68,7 +67,7 @@
   (comp symbol? first))
 
 (def first-resolves?
-  (comp resolve first))
+  (comp resolve first)) ; ALT: boolean
 
 (def first-spec-namespace?
   (comp
@@ -77,7 +76,7 @@
    namespace
    symbol
    resolve
-   first))
+   first)) ; TODO: revisit
 
 (s/def ::spec-form
   (s/and
@@ -91,12 +90,13 @@
   (partial s/valid? ::spec-form))
 
 (def ^:dynamic *regex-op-symbol-set*
-  #{`s/cat
-    `s/alt
-    `s/*
-    `s/+
-    `s/?
-    `s/&})
+  (hash-set
+   `s/cat
+   `s/alt
+   `s/*
+   `s/+
+   `s/?
+   `s/&))
 
   ;; NOTE: `comp` evaluates set, breaks rebinding
 (defn first-regex-op-symbol?
@@ -451,7 +451,7 @@
 (defn conformed-definition [ctx]
   (swap! trace-atom conj ["conformed-definition" ctx])
   (try
-    (lib/conform-throw ::definition (get ctx ::definition))
+    (lib/conform-throw! ::definition (get ctx ::definition))
     (catch Throwable t
       (let [msg  (str "Are all positional spec params in the registry?\n\n"
                       (ex-message t))
@@ -865,7 +865,7 @@
   [ctx [meta-tag _]]
   (let [metadata (get-in ctx [::outer-metadata meta-tag])
         _        (when (s/get-spec meta-tag)
-                   (lib/conform-throw meta-tag metadata))]
+                   (lib/conform-throw! meta-tag metadata))]
     (vector metadata))) ; NOTE: vector for signature indexing
 
 (defmethod ->form [:fm.metadata/fallback ::signatures]
@@ -874,7 +874,7 @@
         inners (map meta-tag (get ctx ::inner-metadatas))
         _      (when (s/get-spec meta-tag)
                  (doseq [data (remove nil? (cons outer inners))]
-                   (lib/conform-throw meta-tag data)))
+                   (lib/conform-throw! meta-tag data)))
         metas  (map (fn fallback [inner] (or inner outer)) inners)]
     (vec metas)))
 
@@ -884,7 +884,7 @@
   (let [tag  (get ctx ::tag)
         form (get-in ctx [::outer-metadata tag])
         _    (when (s/get-spec tag)
-               (lib/conform-throw tag form))]
+               (lib/conform-throw! tag form))]
     form))
 
 (defmethod ->form [:fm/metadata :default ::signatures]
@@ -894,7 +894,7 @@
         inners (map tag (get ctx ::inner-metadatas))
         _      (when (s/get-spec tag)
                  (doseq [data (remove nil? (cons outer inners))]
-                   (lib/conform-throw tag data)))
+                   (lib/conform-throw! tag data)))
         form   (cond
                  (every? nil? inners) outer
                  (nil? outer)         (vec inners) ; NOTE: at least one
@@ -982,7 +982,7 @@
   (let [outer      (get-in ctx [::outer-metadata :fm/args])
         inners     (map :fm/args (get ctx ::inner-metadatas))
         _          (map
-                    (partial lib/conform-throw :fm/args)
+                    (partial lib/conform-throw! :fm/args)
                     (remove nil? (cons outer inners)))
         signatures (get-in ctx [::conformed-definition :fm.definition/rest 1])
         ->arglist  (fn [argv] (->form argv [:fm/arglist ::conformed-specv]))
@@ -1030,7 +1030,7 @@
     (or
      (get-in ctx [::bindings tag index ::symbol])
      (when-let [data (get-in ctx [::metadata tag index])]
-       (let [[t _] (lib/conform-throw :fm/spec data)
+       (let [[t _] (lib/conform-throw! :fm/spec data)
              ctx   (if (= t :fm/specv) (assoc ctx tag data) data)]
          (->form ctx [::s/form tag t]))))))
 
@@ -1040,7 +1040,7 @@
 (defmethod ->form [::s/form :fm/spec :fm/specv]
   [ctx [_ spec-tag _ :as tag]]
   (let [specv       (get ctx spec-tag)
-        [context _] (lib/conform-throw :fm/specv specv)
+        [context _] (lib/conform-throw! :fm/specv specv)
         ctx         (case context
                       :fm.context/positional specv
                       :fm.context/nominal    ctx)]
@@ -1420,7 +1420,7 @@
                  (->form ctx [sequent-tag ::signature-index])
                  data)
           _    (when (s/get-spec sequent-tag)
-                 (lib/conform-throw sequent-tag form))]
+                 (lib/conform-throw! sequent-tag form))]
       (vector form)))
 
   (defmethod ->form [:fm/sequent ::signatures]
@@ -1440,7 +1440,7 @@
           _      (doseq [form forms]
                    (let [tag (get form :fm.sequent/ident)]
                      (when (s/get-spec tag)
-                       (lib/conform-throw tag form))))]
+                       (lib/conform-throw! tag form))))]
       (vec forms)))
 
     ;; TODO: warn unspecified mismatch ret context in `:fm.sequent/merge`

@@ -2,6 +2,56 @@
   (:require
    [clojure.spec.alpha :as s]))
 
+
+   ;;;
+   ;;; NOTE: predicates
+   ;;;
+
+
+(def some-first?
+  (comp some? first))
+
+(def nil-next?
+  (comp nil? next))
+
+(s/def :fm.core/singular
+  (s/and
+   seqable?
+   some-first?
+   nil-next?))
+
+(def singular?
+  (partial s/valid? :fm.core/singular))
+
+
+   ;;;
+   ;;; NOTE: compound spec operations
+   ;;;
+
+
+(defn conform-explain
+  [spec x]
+  (let [c (s/conform spec x)]
+    (if (s/invalid? c)
+      (s/explain spec x)
+      c)))
+
+(defn conform-throw!
+  [spec x]
+  (let [c (s/conform spec x)]
+    (if (s/invalid? c)
+      (throw
+       (ex-info
+        (s/explain-str spec x)
+        (s/explain-data spec x)))
+      c)))
+
+
+   ;;;
+   ;;; NOTE: data transformations
+   ;;;
+
+
 (defn zip
   [recur? & xs]
   (apply
@@ -9,6 +59,16 @@
    (fn [& ys]
      (if (every? recur? ys)
        (apply zip recur? ys)
+       ys))
+   xs))
+
+(defn zipv
+  [recur? & xs]
+  (apply
+   mapv
+   (fn [& ys]
+     (if (every? recur? ys)
+       (apply zipv recur? ys)
        ys))
    xs))
 
@@ -20,16 +80,6 @@
      (if (every? recur? ys)
        (apply zipf recur? f ys)
        (apply f ys)))
-   xs))
-
-(defn zipv
-  [recur? & xs]
-  (apply
-   mapv
-   (fn [& ys]
-     (if (every? recur? ys)
-       (apply zipv recur? ys)
-       ys))
    xs))
 
 (defn zipvf
@@ -94,6 +144,15 @@
    (constantly nil)
    xs))
 
+(defn ensure-sequential [x]
+  (if (sequential? x) x (vector x)))
+
+
+   ;;;
+   ;;; NOTE: hierarchical retrieval
+   ;;;
+
+
 (defn geta
   ([m k]
    (let [ks (conj (or (descendants k) (hash-set)) k)]
@@ -148,47 +207,16 @@
       nil
       ks))))
 
-(def some-first?
-  (comp some? first))
 
-(def nil-next?
-  (comp nil? next))
+   ;;;
+   ;;; NOTE: default sequent combinators
+   ;;;
 
-(s/def ::singular
-  (s/and
-   seqable?
-   some-first?
-   nil-next?))
-
-(def singular?
-  (partial s/valid? ::singular))
-
-(defn ensure-sequential [x]
-  (if (sequential? x) x (vector x)))
 
 (defn positional-combine
-  ([argxs] (into [] (mapcat ensure-sequential) argxs))
+  ([argxs] (into (vector) (mapcat ensure-sequential) argxs))
   ([args ret] (into args ret)))
 
 (defn nominal-combine
-  ([argxs] (into {} argxs))
+  ([argxs] (into (hash-map) argxs))
   ([args ret] (into args ret)))
-
-(defn conform-explain
-  [spec x]
-  (let [c (s/conform spec x)]
-    (if (s/invalid? c)
-      (s/explain spec x)
-      c)))
-
-(defn conform-throw
-  [spec x]
-  (let [c (s/conform spec x)]
-    (if (s/invalid? c)
-      (throw
-       (ex-info
-        (s/explain-str spec x)
-        #:fm.anomaly{:ident ::s/invalid
-                     :args  [x]
-                     :data  (s/explain-data spec x)}))
-      c)))

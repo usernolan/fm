@@ -7,10 +7,9 @@
   ;; TODO: refactor hierarchy-atom, `isa?`
 (def ^:dynamic *indicator-keyset*
   "Set of keys whose presence indicates anomality"
-  #{::ident})
+  (hash-set ::ident))
 
-(defn contains-indicator?
-  [x]
+(defn contains-indicator? [x]
   (and
    (or (set? x) (map? x))
    (some
