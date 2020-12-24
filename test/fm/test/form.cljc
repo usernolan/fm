@@ -595,6 +595,8 @@
      :fm/handler  `identity}}
    ::fn)
 
+    ;; NOTE: locally deduplicated spec forms
+    ;; NOTE: essentially `:fm.sequent/iso`
   (->form
    {::ns *ns*
     ::definition
@@ -612,7 +614,6 @@
      :fm/handler  `identity}}
    ::fn)
 
-    ;; NOTE: local spec form deduplication
   (->form
    {::ns *ns*
     ::definition
@@ -634,7 +635,7 @@
   ;;;
   )
 
-(comment ; NOTE: sequent experiments
+(comment ; NOTE: sequent experiments, sketches
 
   (defn f1
     [& argms]

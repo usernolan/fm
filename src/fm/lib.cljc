@@ -8,17 +8,11 @@
    ;;;
 
 
-(def some-first?
-  (comp some? first))
-
-(def nil-next?
-  (comp nil? next))
-
 (def singular?
   (every-pred
    seqable?
-   some-first?
-   nil-next?))
+   (comp some? first)
+   (comp nil? next)))
 
 
    ;;;
@@ -215,7 +209,7 @@
   ([args ret] (into args ret))
   ([argxs]
    (if (and (singular? argxs) (sequential? (first argxs)))
-     (if (vector? (first args))
+     (if (vector? (first argxs))
        (first argxs)
        (vec (first argxs)))
      (into (vector) (mapcat ensure-sequential) argxs))))

@@ -3,6 +3,7 @@
   (:require
    [fm.anomaly :as anomaly]
    [fm.form :as form]
+   [fm.form.fn :as fn]
    [fm.lib :as lib]))
 
 
@@ -22,8 +23,6 @@
    ;;;
 
 
-(def some-first? lib/some-first?)
-(def nil-next? lib/nil-next?)
 (def singular? lib/singular?)
 
 
@@ -93,22 +92,20 @@
 
 (defmacro fn [& definition]
   (form/->form
-   {::form/definition definition
-    ::form/ns         *ns*
-    ::form/defaults
-    {:fm/throw!   *throw!*
-     :fm/trace    *trace*
-     :fm/trace-fn *trace-fn*
-     :fm/handler  *anomaly-handler*}}
+   {::fn/definition definition
+    ::fn/defaults   {:fm/throw!   *throw!*
+                     :fm/trace    *trace*
+                     :fm/trace-fn *trace-fn*
+                     :fm/handler  *anomaly-handler*}
+    ::form/ns       *ns*}
    ::form/fn))
 
 (defmacro defn [& definition]
   (form/->def
-   {::form/definition definition
-    ::form/ns         *ns*
-    ::form/defaults
-    {:fm/throw!   *throw!*
-     :fm/trace    *trace*
-     :fm/trace-fn *trace-fn*
-     :fm/handler  *anomaly-handler*}}
+   {::fn/definition definition
+    ::fn/defaults   {:fm/throw!   *throw!*
+                     :fm/trace    *trace*
+                     :fm/trace-fn *trace-fn*
+                     :fm/handler  *anomaly-handler*}
+    ::form/ns       *ns*}
    ::form/fn))
