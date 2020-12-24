@@ -553,6 +553,51 @@
      :fm/handler  `identity}}
    ::fn)
 
+  (s/def ::a #{::a})
+  (s/def ::b #{::b})
+  (s/def ::m1 (s/keys :req [::a ::b]))
+  (s/def ::xs (s/* (s/alt
+                    :any any?
+                    :anys (s/spec (s/* any?))
+                    :m1s (s/spec (s/* (s/alt
+                                       :any any?
+                                       :xs any?
+                                       :ys any?
+                                       :zs any?
+                                       :ps any?
+                                       :qs any?
+                                       :rs any?
+                                       :ws any?
+                                       :ss any?
+                                       :ts any?
+                                       :m1 ::m1))))))
+
+  (gen/generate (s/gen ::xs))
+
+  (def r1
+    (partial
+     lib/rreduce
+     (fn recur? [_acc x]
+       (if (s/valid? ::m1 x)
+         (reduced x)
+         (coll? x)))
+     (constantly false)))
+
+  (def r2
+    (partial
+     rreduce2
+     (fn recur? [_acc x]
+       (if (s/valid? ::m1 x)
+         (reduced x)
+         (coll? x)))
+     (constantly false)))
+
+  (def g1 (s/gen ::xs))
+  (def sample1 (gen/sample g1 100))
+
+  (crit/bench (doall (map r1 sample1)))
+  (crit/bench (doall (map r2 sample1)))
+
   (->form
    {::ns *ns*
     ::definition
