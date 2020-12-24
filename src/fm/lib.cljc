@@ -118,7 +118,7 @@
 
 (defn deep-some [pred xs]
   (rreduce
-   (fn recur? [_acc x]
+   (fn recur? [_ x]
      (if (pred x)
        (reduced x)
        (coll? x)))
@@ -127,7 +127,7 @@
 
 (defn deep-get [k xs]
   (rreduce
-   (fn recur? [_acc x]
+   (fn recur? [_ x]
      (if-let [y (and (map? x) (get x k))] ; ALT: set, vec; "gettable"
        (reduced y)
        (coll? x)))
@@ -136,7 +136,7 @@
 
 (defn find-val [m x]
   (reduce
-   (fn [_acc [_k v :as kv]]
+   (fn [_ [_ v :as kv]]
      (when (= x v)
        (reduced kv)))
    nil
