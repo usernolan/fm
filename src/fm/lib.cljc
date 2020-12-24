@@ -4,7 +4,7 @@
 
 
    ;;;
-   ;;; NOTE: predicates
+   ;;; NOTE: predicates, specs
    ;;;
 
 
@@ -52,8 +52,7 @@
    ;;;
 
 
-(defn zip
-  [recur? & xs]
+(defn zip [recur? & xs]
   (apply
    map
    (fn [& ys]
@@ -62,8 +61,7 @@
        ys))
    xs))
 
-(defn zipv
-  [recur? & xs]
+(defn zipv [recur? & xs]
   (apply
    mapv
    (fn [& ys]
@@ -72,8 +70,7 @@
        ys))
    xs))
 
-(defn zipf
-  [recur? f & xs]
+(defn zipf [recur? f & xs]
   (apply
    map
    (fn [& ys]
@@ -82,8 +79,7 @@
        (apply f ys)))
    xs))
 
-(defn zipvf
-  [recur? f & xs]
+(defn zipvf [recur? f & xs]
   (apply
    mapv
    (fn [& ys]
@@ -92,7 +88,6 @@
        (apply f ys)))
    xs))
 
-  ;; TODO: eliminate redundancy
 (defn -rreduce
   ([recur? rf xs]         (-rreduce recur? (fn initf [acc _] acc) rf (fn cf [_ r] r) (rf) xs))
   ([recur? rf init xs]    (-rreduce recur? (fn initf [acc _] acc) rf (fn cf [_ r] r) init xs))
@@ -124,8 +119,7 @@
 (def rreduce
   (comp unreduced -rreduce))
 
-(defn deep-some
-  [pred xs]
+(defn deep-some [pred xs]
   (rreduce
    (fn recur? [_acc x]
      (if (pred x)
@@ -134,8 +128,7 @@
    (constantly false)
    xs))
 
-(defn deep-get
-  [k xs]
+(defn deep-get [k xs]
   (rreduce
    (fn recur? [_acc x]
      (if-let [y (and (map? x) (get x k))] ; ALT: set, vec; "gettable"
@@ -143,6 +136,14 @@
        (coll? x)))
    (constantly nil)
    xs))
+
+(defn find-val [m x]
+  (reduce
+   (fn [_acc [_k v :as kv]]
+     (when (= x v)
+       (reduced kv)))
+   nil
+   m))
 
 (defn ensure-sequential [x]
   (if (sequential? x) x (vector x)))

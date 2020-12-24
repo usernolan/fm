@@ -95,18 +95,20 @@
   (form/->form
    {::form/definition definition
     ::form/ns         *ns*
-    ::form/defaults   {:fm/throw!   *throw!*
-                       :fm/trace    *trace*
-                       :fm/trace-fn *trace-fn*
-                       :fm/handler  *anomaly-handler*}}
+    ::form/defaults
+    {:fm/throw!   *throw!*
+     :fm/trace    *trace*
+     :fm/trace-fn *trace-fn*
+     :fm/handler  *anomaly-handler*}}
    ::form/fn))
 
 (defmacro defn [& definition]
   (form/->def
    {::form/definition definition
     ::form/ns         *ns*
-    ::form/defaults   {:fm/throw!   *throw!*
-                       :fm/trace    *trace*
-                       :fm/trace-fn *trace-fn*
-                       :fm/handler  *anomaly-handler*}}
+    ::form/defaults
+    {:fm/throw!   *throw!*
+     :fm/trace    *trace*
+     :fm/trace-fn *trace-fn*
+     :fm/handler  *anomaly-handler*}}
    ::form/fn))

@@ -4,7 +4,7 @@
    [fm.lib :as lib]))
 
 
-  ;; TODO: refactor hierarchy-atom, `isa?`
+  ;; TODO: refactor hierarchy-atom, `isa?`, `geta`
 (def ^:dynamic *indicator-keyset*
   "Set of keys whose presence indicates anomality"
   (hash-set ::ident))
