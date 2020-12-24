@@ -4,7 +4,7 @@
 
 
    ;;;
-   ;;; NOTE: predicates, specs
+   ;;; NOTE: predicates
    ;;;
 
 
@@ -14,14 +14,11 @@
 (def nil-next?
   (comp nil? next))
 
-(s/def :fm.core/singular
-  (s/and
+(def singular?
+  (every-pred
    seqable?
    some-first?
    nil-next?))
-
-(def singular?
-  (partial s/valid? :fm.core/singular))
 
 
    ;;;
@@ -215,9 +212,17 @@
 
 
 (defn positional-combine
-  ([argxs] (into (vector) (mapcat ensure-sequential) argxs))
-  ([args ret] (into args ret)))
+  ([args ret] (into args ret))
+  ([argxs]
+   (if (and (singular? argxs) (sequential? (first argxs)))
+     (if (vector? (first args))
+       (first argxs)
+       (vec (first argxs)))
+     (into (vector) (mapcat ensure-sequential) argxs))))
 
 (defn nominal-combine
-  ([argxs] (into (hash-map) argxs))
-  ([args ret] (into args ret)))
+  ([args ret] (into args ret))
+  ([argxs]
+   (if (and (singular? argxs) (map? (first argxs)))
+     (first argxs)
+     (into (hash-map) argxs))))
