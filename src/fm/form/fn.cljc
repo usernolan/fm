@@ -218,10 +218,10 @@
       (derive :fm.sequent/merge              :fm/sequent)
       (derive :fm.sequent/iso                :fm/sequent)
       (derive :fm.sequent/combine            :fm.metadata/signature-indexed)
-      (derive ::args                         :fm.trace/default)
-      (derive ::ret                          :fm.trace/default)
-      (derive ::conformed-args               :fm.trace/default)
-      (derive ::conformed-ret                :fm.trace/default)))))
+      (derive ::args                         :fm.binding/default)
+      (derive ::ret                          :fm.binding/default)
+      (derive ::conformed-args               :fm.binding/default)
+      (derive ::conformed-ret                :fm.binding/default)))))
 
 
    ;;;
@@ -415,7 +415,7 @@
   [ctx [form-tag _]]
   (let [sym  (or (get-in ctx [::conformed-signature ::argv 1 :as-form :as-sym])
                  (gensym (name form-tag)))
-        form (form/->form ctx form-tag)]
+        form (form/->form ctx [::form/binding ::form/fn form-tag])]
     (hash-map ::form/destructure sym ::form/form form)))
 
 (defmethod form/->binding [::args :fm.context/nominal]
@@ -446,10 +446,10 @@
 
 (defn dispatch-kv
   ([f [k v]]
-   (swap! form/trace-atom conj ["-dispatch-kv" [f k v]])
+   (swap! form/trace-atom conj ["dispatch-kv" [f k v]])
    (f v k))
   ([f t [k v]]
-   (swap! form/trace-atom conj ["-dispatch-kv" [f t k v]])
+   (swap! form/trace-atom conj ["dispatch-kv" [f t k v]])
    (let [tag (lib/positional-combine [t k])]
      (f v tag))))
 
@@ -494,6 +494,7 @@
    ;;;
 
 
+  ;; INTRO: everything in this file is demand-driven by this method
 (defmethod form/->form ::form/fn
   [ctx tag]
   (let [ctx        (assoc ctx ::form/ident tag)
@@ -530,7 +531,7 @@
 
 (defmethod form/->form ::try
   [ctx _]
-  (let [args    (form/->form ctx ::args)
+  (let [args    (form/->form ctx [::form/binding ::form/fn ::args])
         args?   (or (symbol? args) (and (sequential? args) (seq args)))
         body    (if args?
                   (form/->form ctx [::bind ::args])
@@ -548,9 +549,8 @@
 
 (defmethod form/->form ::args
   [ctx _]
-  (or (get-in ctx [::form/bindings ::args ::form/destructure])
-      (let [context (get-in ctx [::conformed-signature ::argv 0])]
-        (form/->form ctx [::args context]))))
+  (let [context (get-in ctx [::conformed-signature ::argv 0])]
+    (form/->form ctx [::args context])))
 
 (defmethod form/->form [::args :fm.context/positional]
   [ctx _]
@@ -582,15 +582,16 @@
                    :else          body)]
     form))
 
+  ;; TODO: `:fm.anomaly/deep-detect`
 (defmethod form/->form [::validate ::received]
   [ctx _]
-  (let [args    (form/->form ctx ::args)
+  (let [ident   (form/->form ctx [::form/metadata ::form/fn :fm/ident])
         handler (form/->form ctx [::form/binding ::form/fn :fm/handler])
-        ident   (form/->form ctx [::form/metadata ::form/fn :fm/ident])
+        args    (form/->form ctx [::form/binding ::form/fn ::args])
         body    (if (metadata? ctx :fm/args)
                   (form/->form ctx [::validate ::args])
                   (form/->form ctx [::bind ::ret]))]
-    `(if (anomaly/anomalous? ~args)
+    `(if (some anomaly/anomaly? ~args)
        (~handler
         {:fm/ident       ~ident
          ::anomaly/ident ::anomaly/received
@@ -603,11 +604,11 @@
         bindings  (form/bindings ctx [::conformed-args])
         trace     (when (and (trace? ctx :fm/args) (conform? ctx :fm/args))
                     (form/->forms ctx [::trace ::conformed-args]))
-        conformed (form/->form ctx ::conformed-args)
-        handler   (form/->form ctx [::form/binding ::form/fn :fm/handler])
         ident     (form/->form ctx [::form/metadata ::form/fn :fm/ident])
-        args-spec (form/->form ctx [::s/form :fm/args])
-        args      (form/->form ctx ::args)
+        handler   (form/->form ctx [::form/binding ::form/fn :fm/handler])
+        args-spec (form/->form ctx [::form/binding ::form/fn :fm/args])
+        args      (form/->form ctx [::form/binding ::form/fn ::args])
+        conformed (form/->form ctx [::form/binding ::form/fn ::conformed-args])
         body      (if (conform? ctx :fm/args)
                     (form/->form ctx [::bind ::conformed-args])
                     (form/->form ctx [::bind ::ret]))]
@@ -622,29 +623,26 @@
 
 (defmethod form/->form ::conformed-args
   [ctx _]
-  (or (get-in ctx [::form/bindings ::conformed-args ::form/destructure])
-      (let [spec (form/->form ctx [::s/form :fm/args])
-            args (form/->form ctx ::args)]
-        `(s/conform ~spec ~args))))
+  (let [spec (form/->form ctx [::form/binding ::form/fn :fm/args])
+        args (form/->form ctx [::form/binding ::form/fn ::args])]
+    `(s/conform ~spec ~args)))
 
 (defmethod form/->form [::bind ::conformed-args]
   [ctx _]
-  (let [args      (get-in ctx [::form/bindings ::args ::form/destructure])
-        conformed (form/->form ctx ::conformed-args)
+  (let [args      (form/->form ctx [::form/binding ::form/fn ::args])
+        conformed (form/->form ctx [::form/binding ::form/fn ::conformed-args])
         body      (form/->form ctx [::bind ::ret])]
     `(let [~args ~conformed]
        ~body)))
 
-  ;; TODO: `:fm.anomaly/deep-detect?`, `:fm/ignore`
+  ;; TODO: `:fm.anomaly/deep-detect`, `:fm/ignore`
 (defmethod form/->form [::bind ::ret]
   [ctx _]
   (let [ctx      (form/bind ctx [::ret])
         bindings (form/bindings ctx [::ret])
         trace    (when (trace? ctx :fm/ret) (form/->forms ctx [::trace ::ret]))
-        ret      (form/->form ctx ::ret)
         handler  (form/->form ctx [::form/binding ::form/fn :fm/handler])
-        ident    (form/->form ctx [::form/metadata ::form/fn :fm/ident])
-        args     (form/->form ctx ::args)
+        ret      (form/->form ctx [::form/binding ::form/fn ::ret])
         body     (cond
                    (metadata? ctx :fm/ret) (form/->form ctx [::validate ::ret])
                    (metadata? ctx :fm/rel) (form/->form ctx [::validate ::rel])
@@ -657,20 +655,8 @@
 
 (defmethod form/->form ::ret
   [ctx _]
-  (or (get-in ctx [::form/bindings ::ret ::form/destructure])
-      (form/->form ctx [::ret (signature-tag ctx)])))
-
-(defmethod form/->form [::ret :fm.signature/singular]
-  [ctx _]
-  (let [body (get-in ctx [::conformed-definition :fm.definition/rest 1 ::body])
+  (let [body (get-in ctx [::conformed-signature ::body])
         form (if (lib/singular? body) (first body) `(do ~@body))]
-    form))
-
-(defmethod form/->form [::ret :fm.signature/plural]
-  [ctx _]
-  (let [index (signature-index ctx)
-        body  (get-in ctx [::conformed-definition :fm.definition/rest 1 index ::body])
-        form  (if (lib/singular? body) (first body) `(do ~@body))]
     form))
 
 (defmethod form/->form [::validate ::ret]
@@ -679,12 +665,12 @@
         bindings  (form/bindings ctx [::conformed-ret])
         trace     (when (and (trace? ctx :fm/ret) (conform? ctx :fm/ret))
                     (form/->forms ctx [::trace ::conformed-ret]))
-        conformed (form/->form ctx ::conformed-ret)
-        handler   (form/->form ctx [::form/binding ::form/fn :fm/handler])
         ident     (form/->form ctx [::form/metadata ::form/fn :fm/ident])
-        args      (form/->form ctx ::args)
-        ret-spec  (form/->form ctx [::s/form :fm/ret])
-        ret       (form/->form ctx ::ret)
+        handler   (form/->form ctx [::form/binding ::form/fn :fm/handler])
+        ret-spec  (form/->form ctx [::form/binding ::form/fn :fm/ret])
+        args      (form/->form ctx [::form/binding ::form/fn ::args])
+        ret       (form/->form ctx [::form/binding ::form/fn ::ret])
+        conformed (form/->form ctx [::form/binding ::form/fn ::conformed-ret])
         body      (cond
                     (conform? ctx :fm/ret)  (form/->form ctx [::bind ::conformed-ret])
                     (metadata? ctx :fm/rel) (form/->form ctx [::validate ::rel])
@@ -701,15 +687,14 @@
 
 (defmethod form/->form ::conformed-ret
   [ctx _]
-  (or (get-in ctx [::form/bindings ::conformed-ret ::form/destructure])
-      (let [spec (form/->form ctx [::s/form :fm/ret])
-            ret  (form/->form ctx ::ret)]
-        `(s/conform ~spec ~ret))))
+  (let [spec (form/->form ctx [::form/binding ::form/fn :fm/ret])
+        ret  (form/->form ctx [::form/binding ::form/fn ::ret])]
+    `(s/conform ~spec ~ret)))
 
 (defmethod form/->form [::bind ::conformed-ret]
   [ctx _]
-  (let [ret       (form/->form ctx ::ret)
-        conformed (form/->form ctx ::conformed-ret)
+  (let [ret       (form/->form ctx [::form/bidning ::form/fn ::ret])
+        conformed (form/->form ctx [::form/bidning ::form/fn ::conformed-ret])
         body      (if (metadata? ctx :fm/rel)
                     (form/->form ctx [::validate ::rel])
                     ret)]
@@ -718,10 +703,10 @@
 
 (defmethod form/->form [::validate ::rel]
   [ctx _]
-  (let [rel   (form/->form ctx [::s/form :fm/rel])
-        args  (form/->form ctx ::args)
-        ret   (form/->form ctx ::ret)
-        ident (form/->form ctx [::form/metadata ::form/fn :fm/ident])]
+  (let [ident (form/->form ctx [::form/metadata ::form/fn :fm/ident])]
+        rel   (form/->form ctx [::form/binding ::form/fn :fm/rel])
+        args  (form/->form ctx [::form/binding ::form/fn ::args])
+        ret   (form/->form ctx [::form/binding ::form/fn ::ret])
     `(if (s/valid? ~rel {:args ~args :ret ~ret})
        ~ret
        {:fm/ident        ~ident
@@ -839,7 +824,8 @@
 
 (defmethod form/->form [::form/binding ::form/fn :fm/spec]
   [ctx [_ _ spec-tag]]
-  (form/->form ctx [::s/form spec-tag]))
+  (or (get-in ctx [::form/bindings spec-tag (signature-index ctx) ::form/destructure])
+      (form/->form ctx [::s/form spec-tag])))
 
 (defmethod form/->form [::form/binding ::form/fn :fm/trace]
   [ctx _]
@@ -866,21 +852,10 @@
             (fn? form) form
             :else      (get-in ctx [::defaults :fm/handler])))))) ; TODO: nil handler case
 
-  ;;
-  ;; NOTE: `form/->binding` `::args`
-  ;;
-
-(defmethod form/->form [::form/binding ::form/fn ::conformed-args]
-  [ctx _]
-  (form/->form ctx ::conformed-args))
-
-(defmethod form/->form [::form/binding ::form/fn ::ret]
-  [ctx _]
-  (form/->form ctx ::ret))
-
-(defmethod form/->form [::form/binding ::form/fn ::conformed-ret]
-  [ctx _]
-  (form/->form ctx ::conformed-ret))
+(defmethod form/->form [::form/binding ::form/fn :fm.binding/default]
+  [ctx [_ _ form-tag]]
+  (or (get-in ctx [::form/bindings form-tag ::form/destructure])
+      (form/->form ctx form-tag)))
 
 
   ;;
@@ -1008,12 +983,10 @@
 
 (defmethod form/->form [::s/form :fm/spec]
   [ctx [_ spec-tag :as tag]]
-  (let [index (signature-index ctx)]
-    (or (get-in ctx [::form/bindings spec-tag index ::form/destructure])
-        (when-let [data (get-in ctx [::metadata spec-tag index])]
-          (let [[t _] (lib/conform-throw! ::metadata-spec-form data)
-                ctx   (if (= t ::metadata-specv-form) (assoc ctx spec-tag data) data)]
-            (form/->form ctx (conj tag t)))))))
+  (when-let [data (get-in ctx [::metadata spec-tag (signature-index ctx)])]
+    (let [[t _] (lib/conform-throw! ::metadata-spec-form data)
+          ctx   (if (= t ::metadata-specv-form) (assoc ctx spec-tag data) data)]
+      (form/->form ctx (conj tag t)))))
 
 (defmethod form/->form [::s/form :fm/spec ::s/registry-keyword] [k _] k)
 (defmethod form/->form [::s/form :fm/spec ::form/spec-form] [form _] form)
@@ -1132,11 +1105,11 @@
     `(:& (s/* ~var-params))
     `(:& ~var-params)))
 
-(defmethod form/->forms [::trace :fm.trace/default]
+(defmethod form/->forms [::trace :fm.binding/default]
   [ctx [_ form-tag]]
-  (let [trace (form/->form ctx [::form/binding ::form/fn :fm/trace])
-        ident (form/->form ctx [::form/metadata ::form/fn :fm/ident])
-        form  (form/->form ctx form-tag)
+  (let [ident (form/->form ctx [::form/metadata ::form/fn :fm/ident])
+        trace (form/->form ctx [::form/binding ::form/fn :fm/trace])
+        form  (form/->form ctx [::form/binding ::form/fn form-tag])
         data  (hash-map :fm/ident ident form-tag form)
         form  (list trace data)
         forms (list form)]

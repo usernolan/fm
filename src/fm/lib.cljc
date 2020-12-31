@@ -1,4 +1,5 @@
 (ns fm.lib
+  (:refer-clojure :exclude [fn?])
   (:require
    [clojure.spec.alpha :as s]))
 
@@ -8,7 +9,13 @@
    ;;;
 
 
-(def singular?
+(def multi?
+  (partial instance? clojure.lang.MultiFn))
+
+(def fn?
+  (some-fn clojure.core/fn? multi?))
+
+(def singular? ; ALT: `singleton?`
   (every-pred
    seqable?
    (comp some? first)
@@ -119,26 +126,6 @@
    (constantly false)
    xs))
 
-(defn deep-get [k xs]
-  (rreduce
-   (fn recur? [_ x]
-     (if-let [y (and (map? x) (get x k))] ; ALT: set, vec; "gettable"
-       (reduced y)
-       (coll? x)))
-   (constantly nil)
-   xs))
-
-(defn find-val [m x]
-  (reduce
-   (fn [_ [_ v :as kv]]
-     (when (= x v)
-       (reduced kv)))
-   nil
-   m))
-
-(defn ensure-sequential [x]
-  (if (sequential? x) x (vector x)))
-
 
    ;;;
    ;;; NOTE: hierarchical retrieval
@@ -204,6 +191,9 @@
    ;;; NOTE: default sequent combinators
    ;;;
 
+
+(defn ensure-sequential [x]
+  (if (sequential? x) x (vector x)))
 
 (defn positional-combine
   ([args ret] (into args ret))
