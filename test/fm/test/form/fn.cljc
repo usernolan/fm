@@ -1,5 +1,44 @@
 (comment
 
+  (s/def ::a int?)
+
+  (form/->form
+   {::form/ns *ns*
+    ::definition
+    '([::a] (inc a))
+    ::defaults
+    {:fm/throw!   nil
+     :fm/trace    nil
+     :fm/trace-fn `prn
+     :fm/handler  `identity}}
+   ::form/fn)
+
+  (form/->form
+   {::form/ns *ns*
+    ::definition
+    '([:fm/anomaly]
+      (:fm.anomaly/ident anomaly))
+    ::defaults
+    {:fm/throw!   nil
+     :fm/trace    nil
+     :fm/trace-fn `prn
+     :fm/handler  `identity}}
+   ::form/fn)
+
+  (s/def ::anom1 :fm/anomaly)
+
+  (form/->form
+   {::form/ns *ns*
+    ::definition
+    '([::anom1]
+      (:fm.anomaly/ident anom1))
+    ::defaults
+    {:fm/throw!   nil
+     :fm/trace    nil
+     :fm/trace-fn `prn
+     :fm/handler  `identity}}
+   ::form/fn)
+
   (def h1 prn)
 
     ;; NOTE: no outer `let`
@@ -49,19 +88,18 @@
      :fm/handler  `identity}}
    ::form/fn)
 
-  (s/def ::a any?)
   (s/def ::as any?)
-  (s/def ::b any?)
+  (s/def ::b int?)
   (s/def ::bs any?)
-  (s/def ::c any?)
-  (s/def ::cs any?)
+  (s/def ::c int?)
+  (s/def ::cs (s/* int?))
 
     ;; TODO: shrink, isolate test cases
-    ;; TODO: eliminate redundancy in `fn-args`
+    ;; TODO: eliminate redundancy in `args`
   (form/->form
    {::form/ns *ns*
     ::definition
-    '(^{:fm/doc "fn1" :fm/handler? true :fm/throw! true}
+    '(^{:fm/doc "fn1" :fm/throw! true}
       [a [b1 & [b2] :as bs] & [c & ds]]
       (apply + a b1 b2 c ds))
     ::defaults
@@ -83,11 +121,6 @@
      :fm/trace-fn `prn
      :fm/handler  `identity}}
    ::form/fn)
-
-  (s/def ::a int?)
-  (s/def ::b int?)
-  (s/def ::c int?)
-  (s/def ::cs (s/* int?))
 
   (form/->form
    {::form/ns *ns*
@@ -163,7 +196,7 @@
       [[::b]]
       (inc a))
     ::defaults
-    {:fm/throw!   nil
+    {:fm/throw!   true
      :fm/trace    nil
      :fm/trace-fn `prn
      :fm/handler  `identity}}

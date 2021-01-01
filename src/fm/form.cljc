@@ -32,6 +32,8 @@
    ;;; NOTE: predicates, specs
    ;;;
 
+  ;; TODO: revisit pred/spec
+
 
 (def fn-symbol?
   (comp lib/fn? deref resolve))
@@ -243,6 +245,9 @@
   (swap! trace-atom conj ["invalid-definition!" msg])
   (let [msg (str "\n:: Invalid definition ::\n\n" msg)]
     (throw (ex-info msg data))))
+
+(def warn!
+  (comp prn (partial str ":: Warning ::\n\n"))) ; TODO: tools.logging, etc.
 
 (defn geta [m k]
   (lib/geta @form-hierarchy-atom m k))
