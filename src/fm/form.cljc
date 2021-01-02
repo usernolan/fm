@@ -339,7 +339,8 @@
     (cond
       (some? extant) (hash-map ::destructure (get extant ::destructure))
       (ident? form)  (hash-map ::destructure form)
-      :else          (hash-map ::destructure (gensym (name tag)) ::form form))))
+      :else          (let [sym (gensym (name (first (lib/ensure-sequential tag))))]
+                       (hash-map ::destructure sym ::form form)))))
 
 
    ;;;

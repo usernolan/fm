@@ -1,5 +1,5 @@
 (ns fm.core
-  (:refer-clojure :exclude [fn defn])
+  (:refer-clojure :exclude [fn? fn defn])
   (:require
    [fm.anomaly :as anomaly]
    [fm.form :as form]
@@ -23,6 +23,8 @@
    ;;;
 
 
+(def multifn? lib/multifn?)
+(def fn? lib/fn?)
 (def singular? lib/singular?)
 
 
@@ -46,8 +48,6 @@
 (def zipvf lib/zipvf)
 (def rreduce lib/rreduce)
 (def deep-some lib/deep-some)
-(def deep-get lib/deep-get)
-(def ensure-sequential lib/ensure-sequential)
 
 
    ;;;
@@ -65,6 +65,7 @@
    ;;;
 
 
+(def ensure-sequential lib/ensure-sequential)
 (def positional-combine lib/positional-combine)
 (def nominal-combine lib/nominal-combine)
 

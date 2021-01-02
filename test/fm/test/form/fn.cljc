@@ -42,6 +42,8 @@
   (def h1 prn)
 
     ;; NOTE: no outer `let`
+    ;; TODO: eliminate redundant args binding
+    ;; ALT: phased analysis, rewrite
   (form/->form
    {::form/ns *ns*
     ::definition
@@ -137,6 +139,17 @@
   (form/->form
    {::form/ns *ns*
     ::definition
+    '([[::a]] (inc a))
+    ::defaults
+    {:fm/throw!   nil
+     :fm/trace    nil
+     :fm/trace-fn `prn
+     :fm/handler  `identity}}
+   ::form/fn)
+
+ (form/->form
+   {::form/ns *ns*
+    ::definition
     '(^{:fm/doc "variadic increment"}
       ([::a]
        (inc a))
@@ -164,6 +177,8 @@
      :fm/handler  `identity}}
    ::form/fn)
 
+    ;; TODO: analyze case where `::x` is in the registry in the following
+    ;; `form/->form` invocation
   (s/def ::x int?)
 
   (form/->form
@@ -181,6 +196,37 @@
        [[::a :b ::c]]
        [[::x]]
        {::x (inc (+ a b c))}))
+    ::defaults
+    {:fm/throw!   nil
+     :fm/trace    nil
+     :fm/trace-fn `prn
+     :fm/handler  `identity}}
+   ::form/fn)
+
+  (form/->form
+   {::form/ns *ns*
+    ::definition
+    '(^:fm.sequent/conse
+      [a]
+      [b]
+      [(inc a)])
+    ::defaults
+    {:fm/throw!   nil
+     :fm/trace    nil
+     :fm/trace-fn `prn
+     :fm/handler  `identity}}
+   ::form/fn)
+
+    ;; NOTE: sequent metadata fallback/fill
+  (form/->form
+   {::form/ns *ns*
+    ::definition
+    '(^{:fm/doc "variadic increment"}
+      (^:fm.sequent/conse
+       [::a]
+       (inc a))
+      ([::a ::b]
+       (inc (+ a b))))
     ::defaults
     {:fm/throw!   nil
      :fm/trace    nil

@@ -9,11 +9,11 @@
    ;;;
 
 
-(def multi?
+(def multifn?
   (partial instance? clojure.lang.MultiFn))
 
 (def fn?
-  (some-fn clojure.core/fn? multi?))
+  (some-fn clojure.core/fn? multifn?))
 
 (def singular? ; ALT: `singleton?`
   (every-pred
