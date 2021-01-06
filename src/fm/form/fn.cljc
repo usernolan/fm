@@ -329,8 +329,8 @@
 
 (defn total-throw? [ctx]
   (swap! form/trace-atom conj "total-throw?")
-  (or (every? boolean (get-in ctx [::metadata :fm/throw!]))
-      (boolean (get-in ctx [::defaults :fm/throw!])))) ; ALT: `signature-total-throw?`
+  (or (some->> ctx ::metadata :fm/throw! (every? boolean))
+      (some->> ctx ::defaults :fm/throw! boolean))) ; ALT: `signature-total-throw?`
 
 (defn sequent? [ctx]
   (swap! form/trace-atom conj "sequent?")
@@ -579,18 +579,51 @@
     `(try
        ~body
        (catch Throwable thrown#
-         (let [data#  (ex-data thrown#)
-               index# (get data# ::signature-index)]
-           (if (get ~throws? index# ~(first throws?))
-             (throw (get data# ::anomaly/thrown thrown#))
-             (let [handler# (get ~handlers index# ~(first handlers))]
+         (let [ex-data#         (ex-data thrown#)
+               signature-index# (get data# ::signature-index)]
+           (if (get ~throws? signature-index# ~(first throws?)) ; TODO: (when (seq throws?))
+             (throw (get ex-data# ::anomaly/thrown thrown#))
+             (let [handler# (get ~handlers signature-index# ~(first handlers))]
                (handler#
-                (if (anomaly/anomaly? data#)
-                  data#
+                (if (anomaly/anomaly? ex-data#)
+                  ex-data#
                   {:fm/ident        ~ident
                    ::anomaly/ident  ::anomaly/thrown
                    ::anomaly/args   (vec ~argxs)
-                   ::anomaly/thrown thrown#})))))))))
+                   ::anomaly/thrown thrown#}))))))))) ; TODO: `:fm.signature/singular`
+
+#_(try
+    'body
+    (catch Throwable ~thrown
+      (let [~ex-data (ex-data ~thrown)]
+        (~handler
+         (if (anomaly/anomaly? ~ex-data)
+           ~ex-data
+           ::anomaly/thrown))
+        ,
+        (let [~signature-index (get ~ex-data ::signature-index)
+              ~handler         (get ~handlers ~signature-index
+                                    ~(first
+                                      (remove
+                                       nil?
+                                       (map
+                                        ::form/destructure
+                                        (get-in ctx [::bindings :fm/handler])))))]
+          (~handler
+           ::anomaly/thrown))
+        ,
+        (let [~signature-index (get ~ex-data ::signature-index)]
+          (if (get ~throws? ~signature-index false)
+            (throw (get ~ex-data ::anomaly/thrown))
+            (let [~handler (get ~handlers ~signature-index
+                                ~(first
+                                  (remove
+                                   nil?
+                                   (map
+                                    ::form/destructure
+                                    (get-in ctx [::bindings :fm/handler])))))]
+              (~handler
+               ::anomaly/thrown)))))))
 
 (defmethod form/->form [::bind :fm.form.fn/argx]
   [ctx [_ form-tag]]
@@ -629,7 +662,9 @@
   [ctx _]
   (get-in ctx [::arglist-symbols (signature-index ctx)]))
 
-#_(defmethod form/->form ::combined-argxs [ctx _])
+(defmethod form/->form ::combined-argxs
+  [ctx _]
+  ::combined-argxs)
 
 (defmethod form/->form [::validate :fm.form.fn/argx]
   [ctx [_ form-tag]]
@@ -748,7 +783,9 @@
         ::anomaly/ident  ::anomaly/rel
         ::s/explain-data (s/explain-data ~rel {:args ~args :ret ~ret})})))
 
-#_(defmethod form/->form [::dispatch :fm.form.fn/argx])
+(defmethod form/->form [::dispatch :fm.form.fn/argx]
+  [ctx _]
+  [::dispatch ::argx])
 
 
   ;;
@@ -1136,8 +1173,6 @@
     (form/->forms ctx [tag :fm/sequent])
     (form/->forms ctx [tag (signature-tag ctx)])))
 
-  ;; TODO: revisit
-  ;; ALT: optional `::body`; NOTE: currently `s/+`
 (defmethod form/->forms [::definition :fm.signature/singular]
   [ctx _]
   (let [norm  (get-in ctx [::normalized-arglists 0])
@@ -1160,7 +1195,7 @@
   [ctx _]
   (let [ctx   (form/bind ctx [::argxs])
         argxs (form/->form ctx [::form/binding ::form/fn ::argxs])
-        body  [::body :fm/sequent] #_(form/->form ctx [::body :fm/sequent])]
+        body  (form/->form ctx [::body :fm/sequent])]
     `([& ~argxs] ~body)))
 
 (defmethod form/->forms [::metadata :fm/arglist ::form/conformed-param-list
