@@ -16,6 +16,32 @@
   (form/->form
    {::form/ns *ns*
     ::definition
+    '(^:fm/conform
+      [::a :as argv]
+      (inc a))
+    ::defaults
+    {:fm/throw!   nil
+     :fm/trace    nil
+     :fm/trace-fn `prn
+     :fm/handler  `identity}}
+   ::form/fn)
+
+  (form/->form
+   {::form/ns *ns*
+    ::definition
+    '(^{:fm/ret int?}
+      [::a :as argv]
+      'a)
+    ::defaults
+    {:fm/throw!   nil
+     :fm/trace    nil
+     :fm/trace-fn `prn
+     :fm/handler  `identity}}
+   ::form/fn)
+
+  (form/->form
+   {::form/ns *ns*
+    ::definition
     '([:fm/anomaly]
       (:fm.anomaly/ident anomaly))
     ::defaults
@@ -111,6 +137,12 @@
      :fm/handler  `identity}}
    ::form/fn)
 
+  (comment ; NOTE:
+    (apply + nil)
+    (apply + 0 nil)
+    (apply + nil nil)
+    (apply + 0 nil nil))
+
   (form/->form
    {::form/ns *ns*
     ::definition
@@ -196,6 +228,21 @@
        [[::a :b ::c]]
        [[::x]]
        {::x (inc (+ a b c))}))
+    ::defaults
+    {:fm/throw!   nil
+     :fm/trace    nil
+     :fm/trace-fn `prn
+     :fm/handler  `identity}}
+   ::form/fn)
+
+    ;; NOTE: irreconcilable nominal context ambiguity
+  (form/->form
+   {::form/ns *ns*
+    ::definition
+    '(^{:fm/doc "variadic increment"}
+      ([[::a]] (inc a))
+      ([[::a ::b]] (inc (+ a b)))
+      ([[::a ::b ::c]] (inc (+ a b c))))
     ::defaults
     {:fm/throw!   nil
      :fm/trace    nil
@@ -312,6 +359,26 @@
      :fm/trace-fn `prn
      :fm/handler  `identity}}
    ::form/fn)
+
+    ;; NOTE: nominal context disambiguation; most specific first
+  (form/->form
+   {::form/ns *ns*
+    ::definition
+    '(^:fm.sequent/merge
+      ([[::a ::b ::c]]
+       [[::d]]
+       {::d (inc (+ a b c))})
+      ([[::a ::b]]
+       [[::c]]
+       {::c (inc (+ a b))})
+      ([[::a]]
+       [[::b]]
+       {::b (inc a)}))
+    ::defaults
+    {:fm/throw!   nil
+     :fm/trace    nil
+     :fm/trace-fn `prn
+     :fm/handler  `identity}})
 
   ;;;
   )

@@ -12,7 +12,6 @@
    ;;;
 
 
-  ;; NOTE: empty-body `fm.core/fn` is invalid at current
 (s/def ::signature
   (s/cat
    ::argv ::form/specv
@@ -37,10 +36,9 @@
    ;;;
 
 
-  ;;  ALT: `fm../sum` spec-op; `s/or-of` spec2 wiki example
 (s/def ::metadata-fn-form
   (s/or ::form/bound-fn ::form/bound-fn
-        ::form/fn-form ::form/fn-form))
+        ::form/fn-form ::form/fn-form)) ; ALT: `fm../sum` spec-op; `s/or-of` spec2 wiki example
 
 (s/def ::metadata-specv-form
   (s/or :fm.context/nominal (s/tuple vector?)
@@ -329,10 +327,10 @@
         throw? (boolean form)]
     throw?))
 
-(defn total-throw? [ctx] ; ALT: `signature-total-throw?`
+(defn total-throw? [ctx]
   (swap! form/trace-atom conj "total-throw?")
   (or (every? boolean (get-in ctx [::metadata :fm/throw!]))
-      (boolean (get-in ctx [::defaults :fm/throw!]))))
+      (boolean (get-in ctx [::defaults :fm/throw!])))) ; ALT: `signature-total-throw?`
 
 (defn sequent? [ctx]
   (swap! form/trace-atom conj "sequent?")
@@ -383,7 +381,6 @@
    ;;;
 
 
-  ;; TODO: include `retv`
 (defmethod form/->metadata [::form/fn :fm.signature/singular]
   [ctx _]
   (let [definition (get ctx ::definition)
@@ -397,7 +394,7 @@
         ctx        (assoc ctx ::outer-metadata outer)
         tags       (into (hash-set :fm/ident :fm/arglists) (keys outer))
         metadata   (into (hash-map) (map (partial form/->metadata ctx)) tags)]
-    metadata))
+    metadata)) ; TODO: include `retv`
 
 (defmethod form/->metadata [::form/fn :fm.signature/plural]
   [ctx _]
@@ -460,9 +457,9 @@
   (let [sym (get-in ctx [::arglist-symbols (signature-index ctx)])]
     (hash-map ::form/destructure sym)))
 
-(defmethod form/->binding ::argxs ; ALT: `:fm.binding/implicitly-bound`
+(defmethod form/->binding ::argxs
   [ctx tag]
-  (hash-map ::form/destructure (gensym (name tag))))
+  (hash-map ::form/destructure (gensym (name tag)))) ; ALT: `:fm.binding/implicitly-bound`
 
 (defmethod form/->binding :fm.metadata/signature-indexed
   [ctx tag]
@@ -731,8 +728,8 @@
 
 (defmethod form/->form [::bind ::ret ::s/conformed]
   [ctx _]
-  (let [ret       (form/->form ctx [::form/bidning ::form/fn ::ret])
-        conformed (form/->form ctx [::form/bidning ::form/fn ::ret ::s/conformed])
+  (let [ret       (form/->form ctx [::form/binding ::form/fn ::ret])
+        conformed (form/->form ctx [::form/binding ::form/fn ::ret ::s/conformed])
         body      (if (metadata? ctx :fm/rel)
                     (form/->form ctx [::validate ::rel])
                     ret)]
@@ -751,7 +748,7 @@
         ::anomaly/ident  ::anomaly/rel
         ::s/explain-data (s/explain-data ~rel {:args ~args :ret ~ret})})))
 
-(defmethod form/->form [::dispatch :fm.form.fn/argx])
+#_(defmethod form/->form [::dispatch :fm.form.fn/argx])
 
 
   ;;
@@ -831,7 +828,7 @@
                 (fn [metadata] (form/finda metadata :fm/sequent))
                 (get ctx ::inner-metadatas))
         forms  (map-indexed
-                (fn fallback [i inner] ; TODO: `warn!` unspecified sequent signature
+                (fn fallback [i inner]
                   (let [[k data] (or inner outer (rand-nth (filter some? inners)))]
                     (if (true? data)
                       (let [ctx (assoc ctx ::signature-index i)
@@ -843,7 +840,7 @@
                  (let [tag (get form :fm.sequent/ident)]
                    (when (s/get-spec tag)
                      (lib/conform-throw! tag form))))]
-    (vec forms)))
+    (vec forms))) ; TODO: `warn!` unspecified sequent signature
 
     ;; TODO: warn unspecified mismatch ret context in `:fm.sequent/merge`
     ;; TODO: `normalized-sequent-ident`
@@ -877,10 +874,9 @@
         metas  (map (fn fallback [inner] (or inner outer)) inners)]
     (vec metas)))
 
-  ;; NOTE: default for unrecognized tags and `:fm/doc`
 (defmethod form/->form [::form/metadata ::form/fn :default]
   [ctx tag]
-  (form/->form ctx (conj tag (signature-tag ctx))))
+  (form/->form ctx (conj tag (signature-tag ctx)))) ; NOTE: default for unrecognized tags and `:fm/doc`
 
 (defmethod form/->form [::form/metadata ::form/fn :default
                         :fm.signature/singular]
@@ -1151,20 +1147,20 @@
 
 (defmethod form/->forms [::definition :fm.signature/plural]
   [ctx _]
-  (let [forms (map
-               (fn [index]
-                 (let [norm (get-in ctx [::normalized-arglists index])
-                       ctx  (assoc ctx ::signature-index index)
-                       body (form/->form ctx ::body)]
-                   (list norm body)))
-               (range (count-signatures ctx)))]
-    forms))
+  (map
+   (fn [index]
+     (let [norm (get-in ctx [::normalized-arglists index])
+           ctx  (assoc ctx ::signature-index index)
+           body (form/->form ctx ::body)]
+       (list norm body)))
+   (range
+    (count-signatures ctx))))
 
 (defmethod form/->forms [::definition :fm/sequent]
   [ctx _]
   (let [ctx   (form/bind ctx [::argxs])
         argxs (form/->form ctx [::form/binding ::form/fn ::argxs])
-        body  [::body :fm/sequent] #_ (form/->form ctx [::body :fm/sequent])]
+        body  [::body :fm/sequent] #_(form/->form ctx [::body :fm/sequent])]
     `([& ~argxs] ~body)))
 
 (defmethod form/->forms [::metadata :fm/arglist ::form/conformed-param-list
@@ -1192,12 +1188,13 @@
 (defmethod form/->forms [::s/form :fm/spec ::metadata-specv-form
                          :fm.context/positional :params]
   [params _]
-  (into
-   (vector)
-   (comp
-    (map-indexed (fn [i param] (vector (keyword (str i)) param)))
-    (mapcat identity))
-   params))
+  (let [ixf (fn [i param] (vector (keyword (str i)) param))]
+    #_(map-indexed [(comp vector keyword str) identity]) ; ALT: "fm/positional-evolve"
+    #_(map-indexed (evolve [f identity]))
+    (into
+     (vector)
+     (comp (map-indexed ixf) cat)
+     params)))
 
 (defmethod form/->forms [::s/form :fm/spec ::metadata-specv-form
                          :fm.context/positional :var-params]
