@@ -268,6 +268,20 @@
    {::form/ns *ns*
     ::definition
     '(^:fm.sequent/conse
+      [::a]
+      [::b]
+      [(inc a)])
+    ::defaults
+    {:fm/throw!   nil
+     :fm/trace    nil
+     :fm/trace-fn `prn
+     :fm/handler  `identity}}
+   ::form/fn)
+
+  (form/->form
+   {::form/ns *ns*
+    ::definition
+    '(^:fm.sequent/conse
       ([a]
        [b]
        [(inc a)])
@@ -332,7 +346,7 @@
        [(inc (+ a b))]))
     ::defaults
     {:fm/throw!   true
-     :fm/trace    true
+     :fm/trace    nil
      :fm/trace-fn `prn
      :fm/handler  `identity}}
    ::form/fn)
@@ -360,7 +374,7 @@
     '(^:fm.sequent/conse
       [[::a]]
       [[::b]]
-      (inc a))
+      {::b (inc a)})
     ::defaults
     {:fm/throw!   true
      :fm/trace    nil
@@ -374,7 +388,7 @@
     '(^:fm.sequent/conse
       [::a]
       [[::b]]
-      (inc a))
+      {::b (inc a)})
     ::defaults
     {:fm/throw!   nil
      :fm/trace    nil
@@ -388,7 +402,7 @@
     '(^:fm.sequent/nonse
       [::a]
       [[::b]]
-      (inc a))
+      {::b (inc a)})
     ::defaults
     {:fm/throw!   nil
      :fm/trace    nil
@@ -421,11 +435,11 @@
     '((^:fm.sequent/conse
        [[::a]]
        [[::b]]
-       (inc a))
+       {::b (inc a)})
       (^:fm.sequent/nonse
        [[::b]]
        [[::a]]
-       (dec b)))
+       {::a (dec b)}))
     ::defaults
     {:fm/throw!   nil
      :fm/trace    nil

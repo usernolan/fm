@@ -247,7 +247,7 @@
     (throw (ex-info msg data))))
 
 (def warn!
-  (comp prn (partial str ":: Warning ::\n\n"))) ; TODO: tools.logging, etc.
+  (comp prn (partial str "\n:: Warning ::\n\n"))) ; TODO: `tools.logging`
 
 (defn geta [m k]
   (lib/geta @form-hierarchy-atom m k))

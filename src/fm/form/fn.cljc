@@ -526,6 +526,12 @@
     (map? arg)    (:as arg)
     :else         arg))
 
+(def multiple-combine-warning
+  (str
+   "Multiple `:fm.sequent/combine` forms specified; "
+   "all `:fm.sequent/combine` single-arities must be compatible."
+   "\n\nChoosing one at random..."))
+
 
    ;;;
    ;;; NOTE: `form/->form` implementations
@@ -551,7 +557,7 @@
 
 (defmethod form/->form [::body :fm/sequent]
   [ctx _]
-  (let [throws (form/->form ctx ::throws)]
+  (let [throws (form/->form ctx ::indexed-throw!-booleans)]
     (if (every? boolean throws)
       (form/->form ctx [::bind ::combined-argxs])
       (form/->form ctx [::try :fm/sequent]))))
@@ -585,88 +591,6 @@
        (catch Throwable ~thrown
          ~catch-body))))
 
-(defmethod form/->form [::catch-body :fm/sequent]
-  [ctx tag]
-  (let [handlers          (form/->form ctx ::handlers)
-        throws            (form/->form ctx ::throws)
-        none-throw?       (every? (complement boolean) throws)
-        handler-singular? (lib/singular? (set handlers))
-        t                 (vector
-                           (if none-throw? :fm.throw/none :fm.throw/plural)
-                           (if handler-singular? :fm.handler/singular :fm.handler/plural))
-        tag               (lib/positional-combine [tag t])]
-    (form/->form ctx tag)))
-
-(defmethod form/->form [::catch-body :fm/sequent :fm.throw/none :fm.handler/singular]
-  [ctx tag]
-  (let [handler  (form/->form ctx [::form/binding ::form/fn :fm/handler])
-        ctx      (form/bind ctx [::ex-data])
-        bindings (form/bindings ctx [::ex-data])
-        tag      (lib/positional-combine [tag ::anomaly ::anomaly/thrown])
-        anomaly  (form/->form ctx tag)]
-    `(let [~@bindings]
-       (~handler ~anomaly))))
-
-(defmethod form/->form [::catch-body :fm/sequent :fm.throw/none :fm.handler/plural]
-  [ctx tag]
-  (let [tags     (vector ::ex-data ::ex-signature-index ::ex-handler)
-        ctx      (form/bind ctx tags)
-        bindings (form/bindings ctx tags)
-        handler  (form/->form ctx [::form/binding ::form/fn ::ex-handler])
-        tag      (lib/positional-combine [tag ::anomaly ::anomaly/thrown])
-        anomaly  (form/->form ctx tag)]
-    `(let [~@bindings]
-       (~handler ~anomaly))))
-
-(defmethod form/->form [::catch-body :fm/sequent :fm.throw/plural :fm.handler/singular]
-  [ctx tag]
-  (let [tags     (vector ::ex-data ::ex-signature-index)
-        ctx      (form/bind ctx tags)
-        bindings (form/bindings ctx tags)
-        handler  (form/->form ctx [::form/binding ::form/fn :fm/handler])
-        thrown   (form/->form ctx [::form/binding ::form/fn ::thrown])
-        data     (form/->form ctx [::form/binding ::form/fn ::ex-data])
-        index    (form/->form ctx [::form/binding ::form/fn ::ex-signature-index])
-        throws   (form/->form ctx ::throws)
-        tag      (lib/positional-combine [tag ::anomaly ::anomaly/thrown])
-        anomaly  (form/->form ctx tag)]
-    `(let [~@bindings]
-       (if (get ~throws ~index false)
-         (throw (get ~data ::anomaly/thrown ~thrown))
-         (~handler ~anomaly)))))
-
-(defmethod form/->form [::catch-body :fm/sequent :fm.throw/plural :fm.handler/plural]
-  [ctx tag]
-  (let [ctx       (form/bind ctx [::ex-data ::ex-signature-index ::ex-handler])
-        bindings1 (form/bindings ctx [::ex-data ::ex-signature-index])
-        thrown    (form/->form ctx [::form/binding ::form/fn ::thrown])
-        data      (form/->form ctx [::form/binding ::form/fn ::ex-data])
-        index     (form/->form ctx [::form/binding ::form/fn ::ex-signature-index])
-        throws    (form/->form ctx ::throws)
-        bindings2 (form/bindings ctx [::ex-handler])
-        handler   (form/->form ctx [::form/binding ::form/fn ::ex-handler])
-        tag       (lib/positional-combine [tag ::anomaly ::anomaly/thrown])
-        anomaly   (form/->form ctx tag)]
-    `(let [~@bindings1]
-       (if (get ~throws ~index false)
-         (throw (get ~data ::anomaly/thrown ~thrown))
-         (let [~@bindings2]
-           (~handler ~anomaly))))))
-
-(defmethod form/->form [::catch-body :fm/sequent :fm.throw/default :fm.handler/default
-                        ::anomaly ::anomaly/thrown]
-  [ctx _]
-  (let [ident  (form/->form ctx [::form/metadata ::form/fn :fm/ident])
-        argxs  (form/->form ctx [::form/binding ::form/fn ::argxs])
-        thrown (form/->form ctx [::form/binding ::form/fn ::thrown])
-        data   (form/->form ctx [::form/binding ::form/fn ::ex-data])]
-    `(if (anomaly/anomaly? ~data)
-       ~data
-       {:fm/ident        ~ident
-        ::anomaly/ident  ::anomaly/thrown
-        ::anomaly/args   (vec ~argxs)
-        ::anomaly/thrown ~thrown})))
-
 (defmethod form/->form [::bind :fm.form.fn/argx]
   [ctx [_ form-tag]]
   (let [ctx      (form/bind ctx [form-tag])
@@ -683,30 +607,6 @@
                    (some? trace)  `(do ~@trace ~body)
                    :else          body)]
     form))
-
-(defmethod form/->form ::args
-  [ctx _]
-  (let [context (get-in ctx [::signature-contexts (signature-index ctx) :fm/args])]
-    (form/->form ctx [::args context])))
-
-(defmethod form/->form [::args :fm.context/positional]
-  [ctx _]
-  (let [arglist (get-in ctx [::normalized-arglists (signature-index ctx)])
-        form    (if (some #{'&} arglist)
-                  (let [xf   (comp (take-while (complement #{'&})) (map arg-symbol))
-                        args (into (vector) xf arglist)
-                        var  (arg-symbol (last arglist))]
-                    `(into ~args ~var))
-                  (into (vector) (map arg-symbol) arglist))]
-    form))
-
-(defmethod form/->form [::args :fm.context/nominal]
-  [ctx _]
-  (get-in ctx [::arglist-symbols (signature-index ctx)]))
-
-(defmethod form/->form ::combined-argxs
-  [ctx _]
-  ::combined-argxs)
 
 (defmethod form/->form [::validate :fm.form.fn/argx]
   [ctx [_ form-tag]]
@@ -732,12 +632,6 @@
            ::anomaly/ident  ::anomaly/args
            ::s/explain-data (s/explain-data ~args-spec ~args)})
          ~body))))
-
-(defmethod form/->form [:fm.form.fn/argx ::s/conformed]
-  [ctx [form-tag _]]
-  (let [spec (form/->form ctx [::form/binding ::form/fn :fm/args])
-        args (form/->form ctx [::form/binding ::form/fn form-tag])]
-    `(s/conform ~spec ~args)))
 
 (defmethod form/->form [::bind :fm.form.fn/argx ::s/conformed]
   [ctx [_ form-tag _]]
@@ -765,12 +659,6 @@
          (~handler ~ret)
          ~body))))
 
-(defmethod form/->form ::ret
-  [ctx _]
-  (let [body (get-in ctx [::conformed-signatures (signature-index ctx) ::body])
-        form (if (lib/singular? body) (first body) `(do ~@body))]
-    form))
-
 (defmethod form/->form [::validate ::ret]
   [ctx _]
   (let [ctx       (form/bind ctx [[::ret ::s/conformed]])
@@ -796,12 +684,6 @@
            ::anomaly/args   ~args
            ::s/explain-data (s/explain-data ~ret-spec ~ret)})
          ~body))))
-
-(defmethod form/->form [::ret ::s/conformed]
-  [ctx _]
-  (let [spec (form/->form ctx [::form/binding ::form/fn :fm/ret])
-        ret  (form/->form ctx [::form/binding ::form/fn ::ret])]
-    `(s/conform ~spec ~ret)))
 
 (defmethod form/->form [::bind ::ret ::s/conformed]
   [ctx _]
@@ -921,7 +803,7 @@
                      (lib/conform-throw! tag form))))]
     (vec forms))) ; TODO: `warn!` unspecified sequent signature
 
-    ;; TODO: warn unspecified mismatch ret context in `:fm.sequent/merge`
+  ;; TODO: warn unspecified mismatch ret context in `:fm.sequent/merge`
     ;; TODO: `normalized-sequent-ident`
 (defmethod form/->form [::form/metadata ::form/fn :fm/sequent
                         ::signature]
@@ -1140,19 +1022,152 @@
                    (form/->forms var-params (conj tag :var-params)))]
     `[~@params ~@var-form]))
 
-(defmethod form/->form ::handlers
+(defmethod form/->form ::args
+  [ctx _]
+  (let [context (get-in ctx [::signature-contexts (signature-index ctx) :fm/args])]
+    (form/->form ctx [::args context])))
+
+(defmethod form/->form [::args :fm.context/positional]
+  [ctx _]
+  (let [arglist (get-in ctx [::normalized-arglists (signature-index ctx)])
+        form    (if (some #{'&} arglist)
+                  (let [xf   (comp (take-while (complement #{'&})) (map arg-symbol))
+                        args (into (vector) xf arglist)
+                        var  (arg-symbol (last arglist))]
+                    `(into ~args ~var))
+                  (into (vector) (map arg-symbol) arglist))]
+    form))
+
+(defmethod form/->form [::args :fm.context/nominal]
+  [ctx _]
+  (get-in ctx [::arglist-symbols (signature-index ctx)]))
+
+(defmethod form/->form ::combined-argxs
+  [ctx _]
+  (let [bindings (get-in ctx [::form/bindings :fm.sequent/combine])
+        bindings (map ::form/destructure bindings)
+        _        (when-not (lib/singular? (set bindings))
+                   (form/warn! multiple-combine-warning))
+        combine  (rand-nth bindings)
+        argxs    (form/->form ctx [::form/binding ::form/fn ::argxs])]
+    `(~combine ~argxs)))
+
+(defmethod form/->form [:fm.form.fn/argx ::s/conformed]
+  [ctx [form-tag _]]
+  (let [spec (form/->form ctx [::form/binding ::form/fn :fm/args])
+        args (form/->form ctx [::form/binding ::form/fn form-tag])]
+    `(s/conform ~spec ~args)))
+
+(defmethod form/->form ::ret
+  [ctx _]
+  (let [body (get-in ctx [::conformed-signatures (signature-index ctx) ::body])
+        form (if (lib/singular? body) (first body) `(do ~@body))]
+    form))
+
+(defmethod form/->form [::ret ::s/conformed]
+  [ctx _]
+  (let [spec (form/->form ctx [::form/binding ::form/fn :fm/ret])
+        ret  (form/->form ctx [::form/binding ::form/fn ::ret])]
+    `(s/conform ~spec ~ret)))
+
+(defmethod form/->form [::catch-body :fm/sequent]
+  [ctx tag]
+  (let [handlers          (form/->form ctx ::indexed-handler-symbols)
+        throws            (form/->form ctx ::indexed-throw!-booleans)
+        none-throw?       (every? (complement boolean) throws)
+        handler-singular? (lib/singular? (set handlers))
+        t                 (vector
+                           (if none-throw? :fm.throw/none :fm.throw/plural)
+                           (if handler-singular? :fm.handler/singular :fm.handler/plural))
+        tag               (lib/positional-combine [tag t])]
+    (form/->form ctx tag)))
+
+(defmethod form/->form [::catch-body :fm/sequent :fm.throw/none :fm.handler/singular]
+  [ctx tag]
+  (let [handler  (form/->form ctx [::form/binding ::form/fn :fm/handler])
+        ctx      (form/bind ctx [::ex-data])
+        bindings (form/bindings ctx [::ex-data])
+        tag      (lib/positional-combine [tag ::anomaly ::anomaly/thrown])
+        anomaly  (form/->form ctx tag)]
+    `(let [~@bindings]
+       (~handler ~anomaly))))
+
+(defmethod form/->form [::catch-body :fm/sequent :fm.throw/none :fm.handler/plural]
+  [ctx tag]
+  (let [tags     (vector ::ex-data ::ex-signature-index ::ex-handler)
+        ctx      (form/bind ctx tags)
+        bindings (form/bindings ctx tags)
+        handler  (form/->form ctx [::form/binding ::form/fn ::ex-handler])
+        tag      (lib/positional-combine [tag ::anomaly ::anomaly/thrown])
+        anomaly  (form/->form ctx tag)]
+    `(let [~@bindings]
+       (~handler ~anomaly))))
+
+(defmethod form/->form [::catch-body :fm/sequent :fm.throw/plural :fm.handler/singular]
+  [ctx tag]
+  (let [tags     (vector ::ex-data ::ex-signature-index)
+        ctx      (form/bind ctx tags)
+        bindings (form/bindings ctx tags)
+        handler  (form/->form ctx [::form/binding ::form/fn :fm/handler])
+        thrown   (form/->form ctx [::form/binding ::form/fn ::thrown])
+        data     (form/->form ctx [::form/binding ::form/fn ::ex-data])
+        index    (form/->form ctx [::form/binding ::form/fn ::ex-signature-index])
+        throws   (form/->form ctx ::indexed-throw!-booleans)
+        tag      (lib/positional-combine [tag ::anomaly ::anomaly/thrown])
+        anomaly  (form/->form ctx tag)]
+    `(let [~@bindings]
+       (if (get ~throws ~index false)
+         (throw (get ~data ::anomaly/thrown ~thrown))
+         (~handler ~anomaly)))))
+
+(defmethod form/->form [::catch-body :fm/sequent :fm.throw/plural :fm.handler/plural]
+  [ctx tag]
+  (let [ctx       (form/bind ctx [::ex-data ::ex-signature-index ::ex-handler])
+        bindings1 (form/bindings ctx [::ex-data ::ex-signature-index])
+        thrown    (form/->form ctx [::form/binding ::form/fn ::thrown])
+        data      (form/->form ctx [::form/binding ::form/fn ::ex-data])
+        index     (form/->form ctx [::form/binding ::form/fn ::ex-signature-index])
+        throws    (form/->form ctx ::indexed-throw!-booleans)
+        bindings2 (form/bindings ctx [::ex-handler])
+        handler   (form/->form ctx [::form/binding ::form/fn ::ex-handler])
+        tag       (lib/positional-combine [tag ::anomaly ::anomaly/thrown])
+        anomaly   (form/->form ctx tag)]
+    `(let [~@bindings1]
+       (if (get ~throws ~index false)
+         (throw (get ~data ::anomaly/thrown ~thrown))
+         (let [~@bindings2]
+           (~handler ~anomaly))))))
+
+(defmethod form/->form [::catch-body :fm/sequent :fm.throw/default :fm.handler/default
+                        ::anomaly ::anomaly/thrown]
+  [ctx _]
+  (let [ident  (form/->form ctx [::form/metadata ::form/fn :fm/ident])
+        argxs  (form/->form ctx [::form/binding ::form/fn ::argxs])
+        thrown (form/->form ctx [::form/binding ::form/fn ::thrown])
+        data   (form/->form ctx [::form/binding ::form/fn ::ex-data])]
+    `(if (anomaly/anomaly? ~data)
+       ~data
+       {:fm/ident        ~ident
+        ::anomaly/ident  ::anomaly/thrown
+        ::anomaly/args   (vec ~argxs)
+        ::anomaly/thrown ~thrown})))
+
+(defmethod form/->form ::indexed-handler-symbols
   [ctx _]
   (into
    (vector)
    (map ::form/destructure)
-   (get-in ctx [::form/bindings :fm/handler])))
+   (get-in ctx [::form/bindings :fm/handler]))) ; TODO: `::form/symbol`; `form/destructure->symbol`
 
-(defmethod form/->form ::throws
+(defmethod form/->form ::indexed-throw!-booleans
   [ctx _]
-  (if-let [throws (seq (get-in ctx [::metadata :fm/throw!]))]
-    (into (vector) (map boolean) throws)
-    (let [b (boolean (get-in ctx [::defaults :fm/throw!] false))]
-      (into (vector) (map (constantly b)) (range (count-signatures ctx))))))
+  (if-let [forms (seq (get-in ctx [::metadata :fm/throw!]))]
+    (into (vector) (map boolean) forms)
+    (let [b (boolean (get-in ctx [::defaults :fm/throw!]))]
+      (into
+       (vector)
+       (map (constantly b))
+       (range (count-signatures ctx))))))
 
 (defmethod form/->form ::ex-data
   [ctx _]
@@ -1166,7 +1181,7 @@
 
 (defmethod form/->form ::ex-handler
   [ctx _]
-  (let [handlers (form/->form ctx ::handlers)
+  (let [handlers (form/->form ctx ::indexed-handler-symbols)
         index    (form/->form ctx [::form/binding ::form/fn ::ex-signature-index])
         fallback (first (remove nil? handlers))]
     `(get ~handlers ~index ~fallback)))
@@ -1353,12 +1368,6 @@
                           ))
                       (catch ,,,))))))
        (catch ,,,)))
-
-  (def multiple-combine-warning
-    (str
-     "Multiple `:fm.sequent/combine` forms specified; "
-     "all `:fm.sequent/combine` single-arities must be compatible."
-     "\n\nChoosing one at random..."))
 
   (defmethod form/->form [::form/binding ::form/fn ::combined-argxs]
     [ctx _]
