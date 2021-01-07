@@ -264,6 +264,79 @@
      :fm/handler  `identity}}
    ::form/fn)
 
+  (form/->form
+   {::form/ns *ns*
+    ::definition
+    '(^:fm.sequent/conse
+      ([a]
+       [b]
+       [(inc a)])
+      ([a b]
+       [c]
+       [(inc (+ a b))]))
+    ::defaults
+    {:fm/throw!   nil
+     :fm/trace    nil
+     :fm/trace-fn `prn
+     :fm/handler  `identity}}
+   ::form/fn)
+
+  (form/->form
+   {::form/ns *ns*
+    ::definition
+    '(^:fm.sequent/conse
+      (^:fm/throw!
+       [a]
+       [b]
+       [(inc a)])
+      ([a b]
+       [c]
+       [(inc (+ a b))]))
+    ::defaults
+    {:fm/throw!   nil
+     :fm/trace    nil
+     :fm/trace-fn `prn
+     :fm/handler  `identity}}
+   ::form/fn)
+
+  (form/->form
+   {::form/ns *ns*
+    ::definition
+    '(^:fm.sequent/conse
+      (^:fm/throw!
+       [a]
+       [b]
+       [(inc a)])
+      (^{:fm/handler (fn [x] (prn x))}
+       [a b]
+       [c]
+       [(inc (+ a b))]))
+    ::defaults
+    {:fm/throw!   nil
+     :fm/trace    nil
+     :fm/trace-fn `prn
+     :fm/handler  `identity}}
+   ::form/fn)
+
+    ;; TODO: capture default
+  (form/->form
+   {::form/ns *ns*
+    ::definition
+    '(^:fm.sequent/conse
+      ([a]
+       [b]
+       [(inc a)])
+      (^{:fm/handler (fn [x] (prn x))}
+       [a b]
+       [c]
+       [(inc (+ a b))]))
+    ::defaults
+    {:fm/throw!   true
+     :fm/trace    true
+     :fm/trace-fn `prn
+     :fm/handler  `identity}}
+   ::form/fn)
+
     ;; NOTE: sequent metadata fallback/fill
   (form/->form
    {::form/ns *ns*
