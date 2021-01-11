@@ -521,21 +521,6 @@
   (form/->form
    {::form/ns *ns*
     ::definition
-    '(^:fm.sequent/iso
-      [[::a]]
-      [[::b]]
-      {::b (inc a)}
-      {::a (dec b)})
-    ::defaults
-    {:fm/throw!   nil
-     :fm/trace    nil
-     :fm/trace-fn `prn
-     :fm/handler  `identity}}
-   ::form/fn)
-
-  (form/->form
-   {::form/ns *ns*
-    ::definition
     '((^:fm.sequent/conse
        [[::a]]
        [[::b]]

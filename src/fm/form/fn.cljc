@@ -210,7 +210,6 @@
       (derive :fm.sequent/conse              :fm/sequent)
       (derive :fm.sequent/nonse              :fm/sequent)
       (derive :fm.sequent/merge              :fm/sequent)
-      (derive :fm.sequent/iso                :fm/conse)
       (derive ::args                         :fm.form.fn/argx)
       (derive ::combined-argxs               :fm.form.fn/argx)
       (derive ::argxs                        :fm.binding/implicitly-bound)
@@ -675,8 +674,6 @@
                   :fm.signature/singular
                   :fm.signature/plural)] ; NOTE: ignore syntactical distinction
     (form/->form ctx (conj tag sig-tag))))
-
-  ;; HOLD: TODO: `:fm.sequent/iso`
 
 (defmethod form/->form [::dispatch :fm.form.fn/argx :fm.signature/singular]
   [ctx [_ form-tag _]]
@@ -1499,59 +1496,6 @@
 
 
 (comment
-
-  #_([& argxs]
-     (try
-       (let [argx# (combine argxs)]
-         (trace argx#)
-         (let [conformed-argx (s/conform ,,, argx#)]
-           (trace conformed-argx)
-           (if (s/invalid? conformed-argx)
-             ::anomaly/args
-             try/no try
-             conform/no conform
-             dispatch
-             (let [norm args])
-             (let [norm args
-                   ~(when (conform? ctx :fm/args)
-                      [norm-sym (second conformed-args)])
-                   ret  'body])
-             , (case (first args-dispatch)
-                 :0 (try
-                      (let [norm args
-                            ~(when (conform? ctx :fm/args)
-                               [norm-sym (second conformed-args)])
-                            ret  'body0]
-                        (if (anomaly/anomaly? ret)
-                          ::anomaly/ret
-                          rel ,,,
-                          ))
-                      (catch ,,,))))))
-       (catch ,,,)))
-
-  (defmethod form/->form [::form/binding ::form/fn ::combined-argxs]
-    [ctx _]
-    (let [bindings     (get-in ctx [::form/bindings :fm.sequent/combine])
-          unique-forms (set (map ::form/destructure bindings))
-          _            (when-not (lib/singular? unique-forms)
-                         (form/warn! multiple-combine-warning))
-          combine      (rand-nth unique-forms)
-          argxs        (form/->form ctx [::form/bindings ::form/fn ::argxs])]
-      `(~combine ~argxs)))
-
-  ;; NOTE: empty arglists sequents are probably misspoken. a sequent that takes
-  ;; nothing and returns something is typically either an `s/gen` if the
-  ;; something is randomized, or a literal if not. even stateful effects usually
-  ;; have implicit dependencies that should be provided as proofs to the
-  ;; stateful invocation. fully randomized, perfectly idempotent effects are
-  ;; pretty rare outside of testing use-cases
-
-  (defmethod form/->form [:fm.sequent/iso :fm.signature/index]
-    [ctx [sequent-tag _]]
-    (let [combine (hash-map :fm/args args-combine :fm/ret ret-combine)]
-      (hash-map
-       :fm.sequent/ident sequent-tag
-       :fm.sequent/combine combine)))
 
   #_(defmethod form/->form ::var-symbol
       [_ ctx]
