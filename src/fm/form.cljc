@@ -244,7 +244,7 @@
 (defn invalid-definition! [msg data]
   (swap! trace-atom conj ["invalid-definition!" msg])
   (let [msg (str "\n:: Invalid definition ::\n\n" msg)]
-    (throw (ex-info msg data))))
+    (throw (ex-info msg data)))) ; TODO: `tools.logging`
 
 (def warn!
   (comp prn (partial str "\n:: Warning ::\n\n"))) ; TODO: `tools.logging`
@@ -290,7 +290,7 @@
    ctx
    tags))
 
-  ;; ALT: revisit, keep `::symbol`, `destructure->symbol`
+  ;; TODO: `::symbol`, factor `fm.form.fn/arg-symbol`
 (def binding-data?
   (every-pred map? ::destructure ::form))
 
