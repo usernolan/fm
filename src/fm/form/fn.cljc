@@ -458,12 +458,12 @@
   [ctx _]
   (let [sym  (get-in ctx [::arglist-symbols (signature-index ctx)])
         form (form/->form ctx [::form/binding ::form/fn ::args])]
-    (hash-map ::form/destructure sym ::form/form form)))
+    (hash-map ::form/destructure sym ::form/symbol sym ::form/form form)))
 
 (defmethod form/->binding [::args :fm.context/nominal]
   [ctx _]
   (let [sym (get-in ctx [::arglist-symbols (signature-index ctx)])]
-    (hash-map ::form/destructure sym)))
+    (hash-map ::form/destructure sym ::form/symbol sym)))
 
 (defmethod form/->binding ::destructured-argx
   [ctx _]
@@ -476,23 +476,24 @@
         sym         (get-in ctx [::arglist-symbols (signature-index ctx)])
         destructure (lib/positional-combine [arglist :as sym])
         form        (form/->form ctx [::form/binding ::form/fn ::combined-argxs])]
-    (hash-map ::form/destructure destructure ::form/form form)))
+    (hash-map ::form/destructure destructure ::form/symbol sym ::form/form form)))
 
 (defmethod form/->binding [::destructured-argx :fm.context/nominal]
   [ctx _]
   (let [destructure (first (get-in ctx [::normalized-arglists (signature-index ctx)]))
+        sym         (form/destructure->symbol destructure)
         form        (form/->form ctx [::form/binding ::form/fn ::combined-argxs])]
-    (hash-map ::form/destructure destructure ::form/form form)))
+    (hash-map ::form/destructure destructure ::form/symbol sym ::form/form form)))
 
 (defmethod form/->binding :fm.metadata/signature-indexed
   [ctx tag]
   (get-in
    (reduce
     (fn deduplicate [acc i]
-      (let [acc (assoc acc ::signature-index i)
-            f   (fnil conj (vector))
-            b   (form/default-binding acc tag)]
-        (update-in acc [::form/bindings tag] f b)))
+      (let [acc     (assoc acc ::signature-index i)
+            f       (fnil conj (vector))
+            binding (form/default-binding acc tag)]
+        (update-in acc [::form/bindings tag] f binding)))
     ctx
     (range
      (count-signatures ctx)))
@@ -500,7 +501,8 @@
 
 (defmethod form/->binding :fm.binding/implicitly-bound
   [ctx tag]
-  (hash-map ::form/destructure (gensym (name tag))))
+  (let [sym (gensym (name tag))]
+    (hash-map ::form/destructure sym ::form/symbol sym)))
 
 
    ;;;
@@ -546,15 +548,8 @@
   (lib/zipvf vector? (fn [_ a] a) shape args))
 
 (def mapv-any?
-  (let [f (fn [x] (if ((hash-set '&) x) x `any?))]
+  (let [f (fn [x] (if (= x '&) x `any?))]
     (partial mapv f)))
-
-(defn arg-symbol [arg]
-  (swap! form/trace-atom conj ["arg-symbol" [arg]])
-  (cond
-    (vector? arg) (when (some #{:as} arg) (last arg))
-    (map? arg)    (:as arg)
-    :else         arg))
 
 (def plural-combine-warning
   (str
@@ -681,16 +676,16 @@
         bindings  (form/bindings ctx [::destructured-argx])
         args      (form/->form ctx [::form/binding ::form/fn ::destructured-argx])
         conformed (form/->form ctx [::form/binding ::form/fn form-tag ::s/conformed])
-        conformed (when (conform? ctx :fm/args) (list (arg-symbol args) conformed)) ; TODO: `form/->form` `,, ::s/conformed`
+        conformed (when (conform? ctx :fm/args) (list args conformed))
         trace     (when (and (trace? ctx :fm/args) (conform? ctx :fm/args))
                     (form/->forms ctx [::trace form-tag ::s/conformed]))
         ctx       (assoc-in ctx [::form/bindings ::args]
-                            (get-in ctx [::form/bindings ::destructured-argx])) ; ALT: `(derive ::destructured-argx ::args)`, `form/geta`
+                            (get-in ctx [::form/bindings ::destructured-argx]))
         body      (form/->form ctx [::bind ::ret])]
     `(let [~@bindings
            ~@conformed]
        ~@trace
-       ~body)))
+       ~body))) ; ALT: `(derive ::destructured-argx ::args)`, `form/geta`
 
 (defmethod form/->form [::dispatch :fm.form.fn/argx :fm.signature/plural]
   [ctx [_ form-tag _]]
@@ -765,7 +760,6 @@
         handler   (form/->form ctx [::form/binding ::form/fn :fm/handler])
         ret-spec  (form/->form ctx [::form/binding ::form/fn :fm/ret])
         args      (form/->form ctx [::form/binding ::form/fn ::args])
-        args      (arg-symbol args) ; ALT: `::form/symbol`
         ret       (form/->form ctx [::form/binding ::form/fn ::ret])
         conformed (form/->form ctx [::form/binding ::form/fn ::ret ::s/conformed])
         body      (cond
@@ -797,7 +791,6 @@
   (let [ident (form/->form ctx [::form/metadata ::form/fn :fm/ident])
         rel   (form/->form ctx [::form/binding ::form/fn :fm/rel])
         args  (form/->form ctx [::form/binding ::form/fn ::args])
-        args  (arg-symbol args) ; ALT: `::form/symbol`
         ret   (form/->form ctx [::form/binding ::form/fn ::ret])
         retx  (form/->form ctx ::retx)]
     `(if (s/valid? ~rel {:args ~args :ret ~ret})
@@ -884,7 +877,7 @@
                   (let [[k data] (or inner outer (rand-nth (filter some? inners)))]
                     (if (true? data)
                       (let [ctx (assoc ctx ::signature-index i)
-                            tag (assoc tag (dec (count tag)) ::signature)]
+                            tag [::form/metadata ::form/fn k ::signature]]
                         (form/->form ctx tag))
                       data)))
                 inners)]
@@ -948,7 +941,7 @@
 
 (defmethod form/->form [::form/binding ::form/fn :fm/spec]
   [ctx [_ _ spec-tag]]
-  (or (get-in ctx [::form/bindings spec-tag (signature-index ctx) ::form/destructure])
+  (or (get-in ctx [::form/bindings spec-tag (signature-index ctx) ::form/symbol])
       (if (sequent? ctx)
         (form/->form ctx [::s/form spec-tag :fm/sequent])
         (form/->form ctx [::s/form spec-tag]))))
@@ -956,7 +949,7 @@
 (defmethod form/->form [::form/binding ::form/fn :fm/trace]
   [ctx _]
   (let [index (signature-index ctx)]
-    (or (get-in ctx [::form/bindings :fm/trace index ::form/destructure])
+    (or (get-in ctx [::form/bindings :fm/trace index ::form/symbol])
         (when-let [form (or (get-in ctx [::metadata :fm/trace index])
                             (get-in ctx [::defaults :fm/trace]))]
           (let [pred? (some-fn true? set?)
@@ -971,7 +964,7 @@
 (defmethod form/->form [::form/binding ::form/fn :fm/handler]
   [ctx _]
   (let [index (signature-index ctx)]
-    (or (get-in ctx [::form/bindings :fm/handler index ::form/destructure])
+    (or (get-in ctx [::form/bindings :fm/handler index ::form/symbol])
         (let [form (get-in ctx [::metadata :fm/handler index])
               fn?  (some-fn form/fn-form? form/bound-fn?)]
           (cond
@@ -981,18 +974,18 @@
 (defmethod form/->form [::form/binding ::form/fn :fm.sequent/combine]
   [ctx _]
   (let [index (signature-index ctx)]
-    (or (get-in ctx [::form/bindings :fm.sequent/combine index ::form/destructure])
+    (or (get-in ctx [::form/bindings :fm.sequent/combine index ::form/symbol])
         (get-in ctx [::metadata :fm/sequent index :fm.sequent/combine]))))
 
 (defmethod form/->form [::form/binding ::form/fn :fm.binding/default]
   [ctx [_ _ form-tag]]
-  (or (get-in ctx [::form/bindings form-tag ::form/destructure])
+  (or (get-in ctx [::form/bindings form-tag ::form/symbol])
       (form/->form ctx form-tag)))
 
 (defmethod form/->form [::form/binding ::form/fn :fm.binding/default ::s/conformed]
   [ctx tag]
   (let [tag (vec (take-last 2 tag))]
-    (or (get-in ctx [::form/bindings tag ::form/destructure])
+    (or (get-in ctx [::form/bindings tag ::form/symbol])
         (form/->form ctx tag))))
 
 
@@ -1109,13 +1102,13 @@
 (defmethod form/->form [::args :fm.context/positional]
   [ctx _]
   (let [arglist (get-in ctx [::normalized-arglists (signature-index ctx)])
+        xf      (map form/destructure->symbol)
         form    (if (some #{'&} arglist)
-                  (let [xf   (comp (take-while (complement #{'&}))
-                                   (map arg-symbol))
+                  (let [xf   (comp (take-while (complement #{'&})) xf)
                         args (into (vector) xf arglist)
-                        var  (arg-symbol (last arglist))]
+                        var  (form/destructure->symbol (last arglist))]
                     `(into ~args ~var))
-                  (into (vector) (map arg-symbol) arglist))]
+                  (into (vector) xf arglist))]
     form))
 
 (defmethod form/->form [::args :fm.context/nominal]
@@ -1125,7 +1118,7 @@
 (defmethod form/->form ::combined-argxs
   [ctx _]
   (let [bindings (get-in ctx [::form/bindings :fm.sequent/combine])
-        bindings (map ::form/destructure bindings)
+        bindings (map ::form/symbol bindings)
         _        (when-not (lib/singular? (set bindings))
                    (form/warn! plural-combine-warning))
         combine  (rand-nth bindings)
@@ -1161,13 +1154,11 @@
 
 (defmethod form/->form [::retx :fm.sequent/nonse]
   [ctx _]
-  (arg-symbol ; ALT: `::form/symbol`
-   (form/->form ctx [::form/binding ::form/fn ::args])))
+  (form/->form ctx [::form/binding ::form/fn ::args]))
 
 (defmethod form/->form [::retx :fm.sequent/merge]
   [ctx _]
   (let [args    (form/->form ctx [::form/binding ::form/fn ::args])
-        args    (arg-symbol args) ; ALT: `::form/symbol`
         ret     (form/->form ctx [::form/binding ::form/fn ::ret])
         combine (get-in ctx [::metadata :fm/sequent (signature-index ctx)
                              :fm.sequent/combine])]
@@ -1270,8 +1261,7 @@
                         ::anomaly ::anomaly/thrown]
   [ctx _]
   (let [ident  (form/->form ctx [::form/metadata ::form/fn :fm/ident])
-        args   (form/->form ctx [::form/binding ::form/fn ::args])
-        args   (arg-symbol args) ; ALT: `::form/symbol`
+        args   (form/->form ctx [::form/binding ::form/fn ::combined-argxs])
         thrown (form/->form ctx [::form/binding ::form/fn ::thrown])
         index  (signature-index ctx)]
     {:fm/ident         ident
@@ -1284,7 +1274,7 @@
   [ctx _]
   (into
    (vector)
-   (map (comp arg-symbol ::form/destructure)) ; ALT: `::form/symbol`
+   (map ::form/symbol)
    (get-in ctx [::form/bindings :fm/handler])))
 
 (defmethod form/->form ::indexed-throw!-booleans

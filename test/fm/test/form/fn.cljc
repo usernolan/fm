@@ -5,8 +5,7 @@
   (s/def ::c int?)
   (s/def ::as any?)
   (s/def ::bs any?)
-  (s/def ::cs
-    (s/keys* :opt-un [::a ::b]))
+  (s/def ::cs (s/* int?))
 
   (lib/conform-explain
    ::definition
@@ -14,15 +13,13 @@
 
   (lib/conform-explain
    ::definition
-   '(^:fm/conform [a ::b & ::cs] [a b cs]))
+   '([a ::b & ::cs] [a b cs]))
 
   (lib/conform-explain
    ::definition
    '(([a] a)
      ([a ::b] [a b])
      ([a ::b & ::cs] [a b cs])))
-
-  (s/def ::cs (s/* int?))
 
     ;; NOTE: eliminate redundant argv binding
   (form/->form
@@ -50,8 +47,7 @@
   (form/->form
    {::form/ns *ns*
     ::definition
-    '(([a] (inc a))
-      ([a b] (inc (+ a b))))
+    '([::a] (inc a))
     ::defaults
     {:fm/throw!   nil
      :fm/trace    nil
@@ -62,7 +58,8 @@
   (form/->form
    {::form/ns *ns*
     ::definition
-    '([::a] (inc a))
+    '(([a] (inc a))
+      ([a b] (inc (+ a b))))
     ::defaults
     {:fm/throw!   nil
      :fm/trace    nil
@@ -136,7 +133,7 @@
    {::form/ns *ns*
     ::definition
     '([:fm/anomaly]
-      (:fm.anomaly/ident anomaly))
+      (anomaly/geta anomaly ::anomaly/ident))
     ::defaults
     {:fm/throw!   nil
      :fm/trace    nil
@@ -150,7 +147,7 @@
    {::form/ns *ns*
     ::definition
     '([::anom1]
-      (:fm.anomaly/ident anom1))
+      (anomaly/geta anomaly ::anomaly/ident))
     ::defaults
     {:fm/throw!   nil
      :fm/trace    nil
@@ -259,27 +256,16 @@
   (form/->form
    {::form/ns *ns*
     ::definition
-    '([[::a]] (inc a))
+    '(^{:fm/doc "variadic increment"}
+      ([::a]
+       (inc a))
+      ([::a ::b]
+       (inc (+ a b))))
     ::defaults
     {:fm/throw!   nil
-     :fm/trace    nil
+     :fm/trace    true
      :fm/trace-fn `prn
      :fm/handler  `identity}}
-   ::form/fn)
-
- (form/->form
-  {::form/ns *ns*
-   ::definition
-   '(^{:fm/doc "variadic increment"}
-     ([::a]
-      (inc a))
-     ([::a ::b]
-      (inc (+ a b))))
-   ::defaults
-   {:fm/throw!   nil
-    :fm/trace    true
-    :fm/trace-fn `prn
-    :fm/handler  `identity}}
    ::form/fn)
 
   (form/->form
@@ -308,14 +294,28 @@
       (^{:fm/ret ::x}
        [::a ::b :as argv]
        (inc (+ a b)))
-      (^:fm/trace ^:fm/throw! ^{:fm/rel (fn [{[a b c] :args [x] :ret}] (>= x (+ a b c)))}
+      (^:fm/throw!
+       ^:fm/trace
+       ^{:fm/rel (fn [{[a b c] :args [x] :ret}] (>= x (+ a b c)))}
        [::a b ::c]
        [::x]
        [(inc (+ a b c))])
-      (^{:fm/trace (fn [t] (prn :flavor t)) :fm/rel (fn [{a :args r :ret}] (prn a r) true)}
+      (^{:fm/trace (fn [t] (prn :flavor t))
+         :fm/rel   (fn [{a :args r :ret}] (prn a r) true)}
        [[::a :b ::c]]
        [[::x]]
        {::x (inc (+ a b c))}))
+    ::defaults
+    {:fm/throw!   nil
+     :fm/trace    nil
+     :fm/trace-fn `prn
+     :fm/handler  `identity}}
+   ::form/fn)
+
+  (form/->form
+   {::form/ns *ns*
+    ::definition
+    '([[::a]] (inc a))
     ::defaults
     {:fm/throw!   nil
      :fm/trace    nil
@@ -331,6 +331,19 @@
       ([[::a]] (inc a))
       ([[::a ::b]] (inc (+ a b)))
       ([[::a ::b ::c]] (inc (+ a b c))))
+    ::defaults
+    {:fm/throw!   nil
+     :fm/trace    nil
+     :fm/trace-fn `prn
+     :fm/handler  `identity}}
+   ::form/fn)
+
+    ;; NOTE: locally unhandleable arity exception
+  (form/->form
+   {::form/ns *ns*
+    ::definition
+    '(^{:fm/doc "variadic increment"}
+      ([::a] (inc a)))
     ::defaults
     {:fm/throw!   nil
      :fm/trace    nil
@@ -366,16 +379,15 @@
      :fm/handler  `identity}}
    ::form/fn)
 
+    ;; NOTE: arity immunity
   (form/->form
    {::form/ns *ns*
     ::definition
     '(^:fm.sequent/conse
-      (^{:fm/handler (fn [x] (prn x))}
-       [a]
+      ([a]
        [b]
        [(inc a)])
-      (^{:fm/throw! true}
-       [a b]
+      ([a b]
        [c]
        [(inc (+ a b))]))
     ::defaults
@@ -389,11 +401,12 @@
    {::form/ns *ns*
     ::definition
     '(^:fm.sequent/conse
-      (^:fm/throw!
+      (^{:fm/handler h1}
        [::a]
        [b]
        [(inc a)])
-      ([a b]
+      (^{:fm/handler h2}
+       [a b]
        [c]
        [(inc (+ a b))]))
     ::defaults
@@ -461,12 +474,26 @@
   (form/->form
    {::form/ns *ns*
     ::definition
+    '(^{:fm/doc "variadic increment"}
+      ^:fm.sequent/conse
+      ([::a] (inc a))
+      ([::a ::b] (inc (+ a b))))
+    ::defaults
+    {:fm/throw!   nil
+     :fm/trace    nil
+     :fm/trace-fn `prn
+     :fm/handler  `identity}}
+   ::form/fn)
+
+  (form/->form
+   {::form/ns *ns*
+    ::definition
     '(^:fm.sequent/conse
       [[::a]]
       [[::b]]
       {::b (inc a)})
     ::defaults
-    {:fm/throw!   true
+    {:fm/throw!   nil
      :fm/trace    nil
      :fm/trace-fn `prn
      :fm/handler  `identity}}
@@ -505,6 +532,34 @@
     ::definition
     '(^:fm.sequent/nonse
       [::a]
+      [[::b]]
+      {::b (inc a)})
+    ::defaults
+    {:fm/throw!   nil
+     :fm/trace    nil
+     :fm/trace-fn `prn
+     :fm/handler  `identity}}
+   ::form/fn)
+
+  (form/->form
+   {::form/ns *ns*
+    ::definition
+    '(^:fm.sequent/merge
+      [::a]
+      [::b]
+      [(inc a)])
+    ::defaults
+    {:fm/throw!   nil
+     :fm/trace    nil
+     :fm/trace-fn `prn
+     :fm/handler  `identity}}
+   ::form/fn)
+
+  (form/->form
+   {::form/ns *ns*
+    ::definition
+    '(^:fm.sequent/merge
+      [[::a]]
       [[::b]]
       {::b (inc a)})
     ::defaults
@@ -569,7 +624,8 @@
     {:fm/throw!   nil
      :fm/trace    nil
      :fm/trace-fn `prn
-     :fm/handler  `identity}})
+     :fm/handler  `identity}}
+   ::form/fn)
 
   ;;;
   )

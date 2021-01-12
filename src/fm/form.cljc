@@ -290,9 +290,8 @@
    ctx
    tags))
 
-  ;; TODO: `::symbol`, factor `fm.form.fn/arg-symbol`
 (def binding-data?
-  (every-pred map? ::destructure ::form))
+  (every-pred map? ::destructure ::form)) ; ALT: include `::symbol`
 
 (def binding-data->tuple
   (juxt ::destructure ::form))
@@ -332,15 +331,24 @@
    nil
    (get ctx ::bindings)))
 
+(defn destructure->symbol [destructure]
+  (cond
+    (vector? destructure) (when (some #{:as} destructure) (last destructure))
+    (map? destructure)    (:as destructure)
+    :else                 destructure))
+
 (defn default-binding [ctx tag]
-  (let [form-tag (lib/positional-combine [::binding (get ctx ::ident) tag])
-        form     (->form ctx form-tag)
-        extant   (form->binding-data ctx form)]
-    (cond
-      (some? extant) (hash-map ::destructure (get extant ::destructure))
-      (ident? form)  (hash-map ::destructure form)
-      :else          (let [sym (gensym (name (first (lib/ensure-sequential tag))))]
-                       (hash-map ::destructure sym ::form form)))))
+  (let [form-tag    (lib/positional-combine [::binding (get ctx ::ident) tag])
+        form        (->form ctx form-tag)
+        extant      (form->binding-data ctx form)
+        destructure (cond
+                      (some? extant) (get extant ::symbol)
+                      (ident? form)  form
+                      :else          (gensym (name (first (lib/ensure-sequential tag)))))
+        sym         (destructure->symbol destructure)]
+    (if (or (some? extant) (ident? form))
+      (hash-map ::destructure destructure ::symbol sym)
+      (hash-map ::destructure destructure ::symbol sym ::form form)))) ; ALT: `::core.specs/local-name`, `:local-name`, etc.
 
 
    ;;;
