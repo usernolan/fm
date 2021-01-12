@@ -713,17 +713,6 @@
        (catch Throwable ~thrown
          ~catch-body))))
 
-(defmethod form/->form [::catch-body :fm/sequent ::signature]
-  [ctx tag]
-  (let [handler (form/->form ctx [::form/binding ::form/fn :fm/handler])
-        throws  (form/->form ctx ::indexed-throw!-booleans)
-        tag     (lib/positional-combine [tag ::anomaly ::anomaly/thrown])
-        anomaly (form/->form ctx tag)
-        form    (if (get throws (signature-index ctx))
-                  `(throw (ex-info (str ::anomaly/thrown) ~anomaly))
-                  `(~handler ~anomaly))]
-    form))
-
 (defmethod form/->form [::bind :fm.form.fn/argx ::s/conformed]
   [ctx [_ form-tag _]]
   (let [args      (form/->form ctx [::form/binding ::form/fn form-tag])
@@ -1158,10 +1147,10 @@
 
 (defmethod form/->form [::retx :fm.sequent/merge]
   [ctx _]
-  (let [args    (form/->form ctx [::form/binding ::form/fn ::args])
-        ret     (form/->form ctx [::form/binding ::form/fn ::ret])
-        combine (get-in ctx [::metadata :fm/sequent (signature-index ctx)
-                             :fm.sequent/combine])]
+  (let [combine (get-in ctx [::metadata :fm/sequent (signature-index ctx)
+                             :fm.sequent/combine])
+        args    (form/->form ctx [::form/binding ::form/fn ::args])
+        ret     (form/->form ctx [::form/binding ::form/fn ::ret])]
     `(~combine ~args ~ret)))
 
 (defmethod form/->form [::catch-body :fm/sequent]
@@ -1357,10 +1346,6 @@
   [ctx tag]
   (form/->form ctx (conj tag (signature-tag ctx))))
 
-(defmethod form/->form [::s/form :fm/spec :fm/sequent]
-  [ctx [_ spec-tag _ _]]
-  (form/->form ctx [::s/form spec-tag]))
-
 (defmethod form/->form [::s/form :fm/args :fm/sequent :fm.signature/singular]
   [ctx [_ spec-tag _ _]]
   (form/->form ctx [::s/form spec-tag]))
@@ -1381,6 +1366,10 @@
                 (juxt ->tag ->form)
                 (range (count-signatures ctx)))]
     `(s/or ~@tagged))) ; ALT: `fm../sum` spec-op; `s/or-of` spec2 wiki example
+
+(defmethod form/->form [::s/form :fm/spec :fm/sequent]
+  [ctx [_ spec-tag _ _]]
+  (form/->form ctx [::s/form spec-tag]))
 
 
    ;;;
@@ -1441,24 +1430,6 @@
   (let [var-form (args-metadata (get var-params :var-form))]
     `(& ~var-form)))
 
-(defmethod form/->forms [::s/form :fm/spec ::metadata-specv-form
-                         :fm.context/positional :params]
-  [params _]
-  (let [ixf (fn [i param] (vector (keyword (str i)) param))]
-    #_(map-indexed [(comp vector keyword str) identity]) ; ALT: "fm/positional-evolve"
-    #_(map-indexed (evolve [f identity]))
-    (into
-     (vector)
-     (comp (map-indexed ixf) cat)
-     params)))
-
-(defmethod form/->forms [::s/form :fm/spec ::metadata-specv-form
-                         :fm.context/positional :var-params]
-  [var-params _]
-  (if (= var-params `any?)
-    `(:& (s/* ~var-params))
-    `(:& ~var-params)))
-
 (defmethod form/->forms [::trace :fm.binding/default]
   [ctx [_ form-tag]]
   (let [ident (form/->form ctx [::form/metadata ::form/fn :fm/ident])
@@ -1479,6 +1450,24 @@
         forms (list form)]
     forms))
 
+(defmethod form/->forms [::s/form :fm/spec ::metadata-specv-form
+                         :fm.context/positional :params]
+  [params _]
+  (let [ixf (fn [i param] (vector (keyword (str i)) param))]
+    #_(map-indexed [(comp vector keyword str) identity]) ; ALT: "fm/positional-evolve"
+    #_(map-indexed (evolve [f identity]))
+    (into
+     (vector)
+     (comp (map-indexed ixf) cat)
+     params)))
+
+(defmethod form/->forms [::s/form :fm/spec ::metadata-specv-form
+                         :fm.context/positional :var-params]
+  [var-params _]
+  (if (= var-params `any?)
+    `(:& (s/* ~var-params))
+    `(:& ~var-params)))
+
 
    ;;;
    ;;; NOTE: WIP, sketch
@@ -1490,8 +1479,8 @@
   #_(defmethod form/->form ::var-symbol
       [_ ctx]
       (with-meta
-        (form/->form ::fn-symbol ctx)
-        (form/->form ::fn-var-metadata ctx)))
+        (form/->form ::simple-symbol ctx)
+        (form/->form ::var-metadata ctx)))
 
   #_(defmethod form/->form ::var-metadata
       [_ ctx]
@@ -1501,11 +1490,10 @@
        (hash-set :fm/doc :fm/arglists)))
 
   #_(defmethod form/->form ::defn
-      [parameters]
-      (let [params (assoc parameters ::ident ::fn)
-            ctx    (->context params)
-            sym    (form/->form ::fn-var-symbol ctx)
-            form   (form/->form ::fn ctx)]
+      [ctx]
+      (let [ctx  (assoc ctx ::form/ident ::form/fn)
+            sym  (form/->form ctx ::var-symbol)
+            form (form/->form ctx ::form/fn)]
         `(def ~sym ~form)))
 
   ;;;

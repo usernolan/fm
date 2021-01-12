@@ -250,7 +250,7 @@
   (comp prn (partial str "\n:: Warning ::\n\n"))) ; TODO: `tools.logging`
 
 (defn geta [m k]
-  (lib/geta @form-hierarchy-atom m k))
+  (lib/geta @form-hierarchy-atom m k)) ; ALT: partial apply
 
 (defn geta-in [m path]
   (lib/geta-in @form-hierarchy-atom m path))

@@ -53,7 +53,7 @@
 
 
 (defn geta [m k]
-  (lib/geta @indicator-hierarchy-atom m k))
+  (lib/geta @indicator-hierarchy-atom m k)) ; ALT: partial apply
 
 (defn geta-in [m path]
   (lib/geta-in @indicator-hierarchy-atom m path))
