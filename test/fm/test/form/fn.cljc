@@ -1,5 +1,29 @@
 (comment
 
+  (s/def ::a int?)
+  (s/def ::b int?)
+  (s/def ::c int?)
+  (s/def ::as any?)
+  (s/def ::bs any?)
+  (s/def ::cs
+    (s/keys* :opt-un [::a ::b]))
+
+  (lib/conform-explain
+   ::definition
+   '([a ::b & cs] [a b cs]))
+
+  (lib/conform-explain
+   ::definition
+   '(^:fm/conform [a ::b & ::cs] [a b cs]))
+
+  (lib/conform-explain
+   ::definition
+   '(([a] a)
+     ([a ::b] [a b])
+     ([a ::b & ::cs] [a b cs])))
+
+  (s/def ::cs (s/* int?))
+
     ;; NOTE: eliminate redundant argv binding
   (form/->form
    {::form/ns *ns*
@@ -34,9 +58,6 @@
      :fm/trace-fn `prn
      :fm/handler  `identity}}
    ::form/fn)
-
-  (s/def ::a int?)
-  (s/def ::b int?)
 
   (form/->form
    {::form/ns *ns*
@@ -188,12 +209,6 @@
      :fm/trace-fn `prn
      :fm/handler  `identity}}
    ::form/fn)
-
-  (s/def ::as any?)
-  (s/def ::b int?)
-  (s/def ::bs any?)
-  (s/def ::c int?)
-  (s/def ::cs (s/* int?))
 
     ;; TODO: shrink, isolate test cases
     ;; TODO: eliminate redundancy in `args`

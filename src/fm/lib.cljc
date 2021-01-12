@@ -148,7 +148,7 @@
         (when-let [v (get m k)]
           (reduced v)))
       nil
-      ks))))
+      ks)))) ; ALT: O(n) vs. O(m); use min(n, m), `isa?`
 
 (defn geta-in
   ([m ks]
