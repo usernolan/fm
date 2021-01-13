@@ -687,5 +687,33 @@
      :fm/handler  `identity}}
    ::form/fn)
 
+  (form/->form
+   {::form/ns *ns*
+    ::definition
+    '(^:fm/throw!
+      ^{:fm/doc "inc"}
+      [a]
+      (inc a))
+    ::defaults
+    {:fm/throw!   nil
+     :fm/trace    nil
+     :fm/trace-fn `prn
+     :fm/handler  `identity}}
+   ::form/defn)
+
+  (form/->form
+   {::form/ns *ns*
+    ::definition
+    '(^:fm/throw!
+      ([a] (inc a))
+      (^{:fm/doc "2-arity"}
+       [a b] (inc (+ a b))))
+    ::defaults
+    {:fm/throw!   nil
+     :fm/trace    nil
+     :fm/trace-fn `prn
+     :fm/handler  `identity}}
+   ::form/defn)
+
   ;;;
   )

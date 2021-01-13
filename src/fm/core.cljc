@@ -88,8 +88,6 @@
    ;;; NOTE: macros
    ;;;
 
-  ;; TODO: `defaults`; NOTE: dynvars
-
 
 (defmacro fn [& definition]
   (form/->form
@@ -99,14 +97,14 @@
                      :fm/trace-fn *trace-fn*
                      :fm/handler  *anomaly-handler*}
     ::form/ns       *ns*}
-   ::form/fn))
+   ::form/fn)) ; TODO: `defaults`; NOTE: dynvars
 
 (defmacro defn [& definition]
-  (form/->def
+  (form/->form
    {::fn/definition definition
     ::fn/defaults   {:fm/throw!   *throw!*
                      :fm/trace    *trace*
                      :fm/trace-fn *trace-fn*
                      :fm/handler  *anomaly-handler*}
     ::form/ns       *ns*}
-   ::form/fn))
+   ::form/defn))

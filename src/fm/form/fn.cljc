@@ -191,8 +191,8 @@
       hierarchy
       (derive :fm/ident                      :fm.metadata/default)
       (derive :fm.metadata/signature-indexed :fm.metadata/default)
+      (derive :fm.metadata/var-metadata      :fm.metadata/default)
       (derive :fm/arglists                   :fm.metadata/signature-indexed)
-      #_(derive :fm/doc                        :default)
       (derive :fm/throw!                     :fm.metadata/signature-indexed)
       (derive :fm/args                       :fm.metadata/signature-indexed)
       (derive :fm/ret                        :fm.metadata/signature-indexed)
@@ -267,6 +267,11 @@
         contexts   (into (vector) (map f) signatures)]
     contexts))
 
+(defn metadata [ctx]
+  (swap! form/trace-atom conj ["metadata" ctx])
+  (let [tag [(get ctx ::form/ident) (signature-tag ctx)]]
+    (form/->metadata ctx tag)))
+
 (defn normalized-arglist [arglist]
   (into
    (vector)
@@ -295,10 +300,14 @@
         syms     (into (vector) (map-indexed ixf) contexts)]
     syms))
 
-(defn metadata [ctx]
-  (swap! form/trace-atom conj ["metadata" ctx])
-  (let [tag [(get ctx ::form/ident) (signature-tag ctx)]]
-    (form/->metadata ctx tag)))
+(defn ensure-ctx [ctx]
+  (let [ctx (if (get ctx ::conformed-definition) ctx (assoc ctx ::conformed-definition (conformed-definition ctx)))
+        ctx (if (get ctx ::conformed-signatures) ctx (assoc ctx ::conformed-signatures (conformed-signatures ctx)))
+        ctx (if (get ctx ::signature-contexts) ctx (assoc ctx ::signature-contexts (signature-contexts ctx)))
+        ctx (if (get ctx ::metadata) ctx (assoc ctx ::metadata (metadata ctx)))
+        ctx (if (get ctx ::normalized-arglists) ctx (assoc ctx ::normalized-arglists (normalized-arglists ctx)))
+        ctx (if (get ctx ::arglist-symbols) ctx (assoc ctx ::arglist-symbols (arglist-symbols ctx)))]
+    ctx))
 
 (defn signature-index [ctx]
   (get ctx ::signature-index 0)) ; ALT: `rand`
@@ -355,13 +364,7 @@
 
 (defmethod form/->form ::form/fn
   [ctx tag]
-  (let [ctx        (assoc ctx ::form/ident tag)
-        ctx        (assoc ctx ::conformed-definition (conformed-definition ctx))
-        ctx        (assoc ctx ::conformed-signatures (conformed-signatures ctx))
-        ctx        (assoc ctx ::signature-contexts (signature-contexts ctx))
-        ctx        (assoc ctx ::metadata (metadata ctx))
-        ctx        (assoc ctx ::normalized-arglists (normalized-arglists ctx))
-        ctx        (assoc ctx ::arglist-symbols (arglist-symbols ctx))
+  (let [ctx        (ensure-ctx (assoc ctx ::form/ident tag))
         tags       (vector :fm/args :fm/ret :fm/rel :fm/trace :fm/handler
                            :fm.sequent/combine)
         ctx        (form/bind ctx tags)
@@ -372,6 +375,13 @@
         body       `(with-meta (fn ~sym ~@definition) ~metadata)
         form       (if (seq bindings) `(let [~@bindings] ~body) body)]
     form))
+
+(defmethod form/->form ::form/defn
+  [ctx _]
+  (let [ctx  (ensure-ctx (assoc ctx ::form/ident ::form/fn))
+        sym  (form/->form ctx ::var-symbol)
+        form (form/->form ctx ::form/fn)]
+    `(def ~sym ~form)))
 
 
    ;;;
@@ -391,21 +401,21 @@
    ;;;
 
 
-(defmethod form/->metadata :fm/sequent
-  [ctx tag]
-  (let [form (form/->form ctx [::metadata tag])]
+(defmethod form/->metadata [::form/fn :fm/sequent]
+  [ctx [_ sequent-tag]]
+  (let [form (form/->form ctx [::metadata sequent-tag])]
     (hash-map :fm/sequent form))) ; NOTE: normalize tag
 
 (defmethod form/->metadata [::form/fn :fm.metadata/default]
-  [ctx [_ meta-tag]]
-  (let [form (form/->form ctx [::metadata meta-tag])]
-    (hash-map meta-tag form)))
+  [ctx [_ tag]]
+  (let [form (form/->form ctx [::metadata tag])]
+    (hash-map tag form)))
 
 (defmethod form/->metadata [::form/fn :default]
   [ctx _]
-  (let [meta-tag (first (lib/ensure-sequential (get ctx ::form/tag)))
-        form     (form/->form ctx [::metadata :default])]
-    (hash-map meta-tag form)))
+  (let [tag  (get ctx ::form/tag)
+        form (form/->form ctx [::metadata :default])]
+    (hash-map tag form)))
 
 (defmethod form/->metadata [::form/fn :fm.signature/singular]
   [ctx _]
@@ -456,17 +466,23 @@
              form (form/->form retv tag)]
          (hash-map :fm/ret form))))))
 
-(defmethod form/->metadata [::form/defn :fm.metadata/var-metadata]
+(defmethod form/->metadata [::var-metadata :fm/arglists]
+  [ctx [_ meta-tag]]
+  (let [tag  (keyword (name meta-tag))
+        form (get-in ctx [::metadata meta-tag])]
+    (hash-map tag `(quote ~(seq form)))))
+
+(defmethod form/->metadata [::var-metadata :fm.metadata/var-metadata]
   [ctx [_ meta-tag]]
   (let [tag  (keyword (name meta-tag))
         form (get-in ctx [::metadata meta-tag])]
     (hash-map tag form)))
 
-(defmethod form/->metadata [::form/defn :fm.metadata/default]
+(defmethod form/->metadata [::var-metadata :fm.metadata/default]
   [ctx _]
   nil) ; NOTE: exclude recognized metadata tags on var by default
 
-(defmethod form/->metadata [::form/defn :default]
+(defmethod form/->metadata [::var-metadata :default]
   [ctx _]
   (let [tag  (get ctx ::form/tag)
         form (get-in ctx [::metadata tag])]
@@ -600,6 +616,14 @@
   [ctx _]
   (let [metadata (get ctx ::metadata)]
     `(quote ~metadata)))
+
+(defmethod form/->form ::var-metadata
+  [ctx tag]
+  (let [ctx (assoc ctx ::form/ident tag)]
+    (into
+     (hash-map)
+     (map (partial form/->metadata ctx))
+     (keys (get ctx ::metadata)))))
 
 (defmethod form/->form ::body
   [ctx _]
@@ -1017,6 +1041,11 @@
                    (form/->forms var-params (conj tag :var-params)))]
     `[~@params ~@var-form]))
 
+(defmethod form/->form [::metadata :fm/doc]
+  [ctx [_ meta-tag]]
+  (let [ctx (assoc ctx ::form/tag :fm/doc)]
+    (form/->form ctx [::metadata :default])))
+
 (defmethod form/->form [::metadata :fm/sequent]
   [ctx tag]
   (form/->form ctx (conj tag (signature-tag ctx))))
@@ -1306,6 +1335,12 @@
         fallback (first (remove nil? handlers))]
     `(get ~handlers ~index ~fallback)))
 
+(defmethod form/->form ::var-symbol
+  [ctx _]
+  (with-meta
+    (form/->form ctx ::simple-symbol)
+    (form/->form ctx ::var-metadata)))
+
 
   ;;
   ;; NOTE: spec forms
@@ -1476,34 +1511,3 @@
   (if (= var-params `any?)
     `(:& (s/* ~var-params))
     `(:& ~var-params)))
-
-
-   ;;;
-   ;;; NOTE: WIP, sketch
-   ;;;
-
-
-(comment
-
-  #_(defmethod form/->form ::var-symbol
-      [_ ctx]
-      (with-meta
-        (form/->form ::simple-symbol ctx)
-        (form/->form ::var-metadata ctx)))
-
-  #_(defmethod form/->form ::var-metadata
-      [_ ctx]
-      (into
-       (hash-map)
-       (map (fn [k] [k (form/->form [::fn-var-metadata k] ctx)]))
-       (hash-set :fm/doc :fm/arglists)))
-
-  #_(defmethod form/->form ::defn
-      [ctx]
-      (let [ctx  (assoc ctx ::form/ident ::form/fn)
-            sym  (form/->form ctx ::var-symbol)
-            form (form/->form ctx ::form/fn)]
-        `(def ~sym ~form)))
-
-  ;;;
-  )
