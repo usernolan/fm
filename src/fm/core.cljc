@@ -48,6 +48,7 @@
 (def zipvf lib/zipvf)
 (def rreduce lib/rreduce)
 (def deep-some lib/deep-some)
+(def evolve lib/evolve)
 
 
    ;;;

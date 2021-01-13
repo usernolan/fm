@@ -126,6 +126,19 @@
    (constantly false)
    xs))
 
+(defn evolve [xf x]
+  (cond
+    (fn? xf)         (xf x)
+    (vector? xf)     (zipvf sequential? evolve xf x)
+    (sequential? xf) (zipf sequential? evolve xf x)
+    (map? xf)        (reduce
+                      (fn [acc [k xf]]
+                        (if (and (map? acc) (contains? acc k))
+                          (update acc k (partial evolve xf))
+                          acc))
+                      x
+                      xf))) ; ALT: `extend-protocol`
+
 
    ;;;
    ;;; NOTE: hierarchical retrieval
