@@ -71,8 +71,13 @@
 
 
    ;;;
-   ;;; TODO: add `anomaly`
+   ;;; NOTE: `fm.anomaly` api
    ;;;
+
+
+(def anomaly? anomaly/anomaly?)
+(def deep-anomaly? anomaly/deep-anomaly?)
+(def anomalous? anomaly/anomalous?)
 
 
    ;;;
@@ -92,19 +97,19 @@
 (defmacro fn [& definition]
   (form/->form
    {::fn/definition definition
+    ::form/ns       *ns*
     ::fn/defaults   {:fm/throw!   *throw!*
                      :fm/trace    *trace*
                      :fm/trace-fn *trace-fn*
-                     :fm/handler  *anomaly-handler*}
-    ::form/ns       *ns*}
+                     :fm/handler  *anomaly-handler*}}
    ::form/fn)) ; TODO: `defaults`; NOTE: dynvars
 
 (defmacro defn [& definition]
   (form/->form
    {::fn/definition definition
+    ::form/ns       *ns*
     ::fn/defaults   {:fm/throw!   *throw!*
                      :fm/trace    *trace*
                      :fm/trace-fn *trace-fn*
-                     :fm/handler  *anomaly-handler*}
-    ::form/ns       *ns*}
+                     :fm/handler  *anomaly-handler*}}
    ::form/defn))
