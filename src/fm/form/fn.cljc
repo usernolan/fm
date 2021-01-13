@@ -235,7 +235,6 @@
 
 
 (defn conformed-definition [ctx]
-  (swap! form/trace-atom conj ["conformed-definition" ctx])
   (try
     (lib/conform-throw! ::definition (get ctx ::definition))
     (catch Throwable t
@@ -245,11 +244,9 @@
         (form/invalid-definition! msg data)))))
 
 (defn signature-tag [ctx]
-  (swap! form/trace-atom conj ["signature-tag" ctx])
   (get-in ctx [::conformed-definition :fm.definition/rest 0]))
 
 (defn conformed-signatures [ctx]
-  (swap! form/trace-atom conj ["conformed-signatures" ctx])
   (let [conformed  (get-in ctx [::conformed-definition :fm.definition/rest 1])
         signatures (vec (lib/ensure-sequential conformed))]
     signatures))
@@ -258,7 +255,6 @@
   (comp count conformed-signatures))
 
 (defn signature-contexts [ctx]
-  (swap! form/trace-atom conj ["signature-contexts" ctx])
   (let [signatures (conformed-signatures ctx)
         f          (fn [signature]
                      (hash-map
@@ -268,7 +264,6 @@
     contexts))
 
 (defn metadata [ctx]
-  (swap! form/trace-atom conj ["metadata" ctx])
   (let [tag [(get ctx ::form/ident) (signature-tag ctx)]]
     (form/->metadata ctx tag)))
 
@@ -313,7 +308,6 @@
   (get ctx ::signature-index 0)) ; ALT: `rand`
 
 (defn metadata? [ctx tag]
-  (swap! form/trace-atom conj ["metadata?" tag])
   (let [form      (get-in ctx [::metadata tag (signature-index ctx)])
         metadata? (if (sequential? form)
                     (seq form)
@@ -321,7 +315,6 @@
     metadata?))
 
 (defn trace? [ctx tag]
-  (swap! form/trace-atom conj ["trace?" tag])
   (let [form   (or (get-in ctx [::metadata :fm/trace (signature-index ctx)])
                    (get-in ctx [::defaults :fm/trace]))
         trace? (cond
@@ -331,7 +324,6 @@
     (trace? tag))) ; TODO: revisit defaults
 
 (defn conform? [ctx tag]
-  (swap! form/trace-atom conj ["conform?" tag])
   (let [form     (or (get-in ctx [::metadata :fm/conform (signature-index ctx)])
                      (get-in ctx [::defaults :fm/conform]))
         conform? (cond
@@ -341,14 +333,12 @@
     (conform? tag)))
 
 (defn throw? [ctx]
-  (swap! form/trace-atom conj "throw?")
   (let [form   (or (get-in ctx [::metadata :fm/throw! (signature-index ctx)])
                    (get-in ctx [::defaults :fm/throw!]))
         throw? (boolean form)]
     throw?))
 
 (defn sequent? [ctx]
-  (swap! form/trace-atom conj "sequent?")
   (or (get-in ctx [::metadata :fm/sequent])
       (get-in ctx [::defaults :fm/sequent])))
 
@@ -556,13 +546,10 @@
 
 
 (defn dispatch-kv
-  ([f [k v]]
-   (swap! form/trace-atom conj ["dispatch-kv" [f k v]])
-   (f v k))
+  ([f [k v]] (f v k))
   ([f t [k v]]
-   (swap! form/trace-atom conj ["dispatch-kv" [f t k v]])
-   (let [tag (lib/positional-combine [t k])]
-     (f v tag))))
+   (let [k (lib/positional-combine [t k])]
+     (f v k))))
 
 (def dispatch-form-kv
   (partial dispatch-kv form/->form))
@@ -574,7 +561,6 @@
   (partial dispatch-form-kv [::metadata :fm/args]))
 
 (defn normalized-binding-tuple [[k [tag conformed]]]
-  (swap! form/trace-atom conj ["normalized-binding-tuple" [k [tag conformed]]])
   (let [norm (case tag
                :local-symbol    conformed
                :map-destructure (update conformed :as (fnil identity (symbol (name k))))
@@ -589,7 +575,6 @@
 (defn zipv-args
   "Zip `:fm/args` to match a target `shape`, e.g. an inner `arglist`"
   [shape args]
-  (swap! form/trace-atom conj ["zipv-args" [shape args]])
   (lib/zipvf vector? (fn [_ a] a) shape args))
 
 (def mapv-any?

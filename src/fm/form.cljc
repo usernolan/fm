@@ -7,32 +7,22 @@
 
 
   ;; NOTE: `spec2` requires symbolic specs, otherwise wrap `s/spec`
-  ;; TODO: revisit tags; top-level `::ident`, `::fn`/`::sequent`
-  ;; TODO: revisit `lib/conform-throw!`, application
-  ;; TODO: runtime `*ignore*`, `s/*compile-asserts*`, etc.; config
-  ;; TODO: infer `:fm/handler?`
+  ;; NOTE: `spec2` may alter symbolic predicate style preferences
+  ;; TODO: revisit `lib/conform-throw!`
+  ;; TODO: revisit `ctx` identifier
+  ;; TODO: revisit `::defaults`
+  ;; TODO: revisit tags
+  ;; TODO: `:fm/ignore`, runtime `*ignore*`, `s/*compile-asserts*`, etc.
+  ;; TODO: `:fm/memoize`
   ;; TODO: global spec form deduplication; `registry`, `bind!`
-  ;; TODO: `:fm/memoize`; c. (comp memoize select-keys ,,,)
-  ;; TODO: `ctx` is a suboptimal identifier; revisit
-  ;; TODO: revive `fm.form.fn`; (swap! form-hierarchy-atom (fn [h] (-> h (derive ,,,))))
   ;; ALT: reader literals; (vector ,,,) vs. [,,,], `into`
   ;; ALT: qualify positional tags e.g. (s/cat :fm.signature/0 ,,,)
   ;; ALT: `core.match`; [tag x]
 
 
    ;;;
-   ;;; NOTE: tmp
-   ;;;
-
-
-(def trace-atom (atom []))
-
-
-   ;;;
    ;;; NOTE: predicates, specs
    ;;;
-
-  ;; TODO: revisit pred/spec
 
 
 (def fn-symbol?
@@ -209,30 +199,22 @@
 
 (defmulti ->form
   "Produces a form to be evaluated as with `eval` or combined with other forms"
-  (fn [_ctx tag]
-    (swap! trace-atom conj ["->form" tag])
-    tag)
+  (fn [_ctx tag] tag)
   :hierarchy form-hierarchy-atom)
 
 (defmulti ->forms
   "Produces a sequence of forms to be spliced as with `~@`"
-  (fn [_ctx tag]
-    (swap! trace-atom conj ["->forms" tag])
-    tag)
+  (fn [_ctx tag] tag)
   :hierarchy form-hierarchy-atom)
 
 (defmulti ->metadata
   "Normalizes and combines metadata forms"
-  (fn [_ctx tag]
-    (swap! trace-atom conj ["->metadata" tag])
-    tag)
+  (fn [_ctx tag] tag)
   :hierarchy form-hierarchy-atom)
 
 (defmulti ->binding
   "Produces binding data to be associated into the context"
-  (fn [_ctx tag]
-    (swap! trace-atom conj ["->binding" tag])
-    tag)
+  (fn [_ctx tag] tag)
   :hierarchy form-hierarchy-atom)
 
 
@@ -242,7 +224,6 @@
 
 
 (defn invalid-definition! [msg data]
-  (swap! trace-atom conj ["invalid-definition!" msg])
   (let [msg (str "\n:: Invalid definition ::\n\n" msg)]
     (throw (ex-info msg data)))) ; TODO: `tools.logging`
 
@@ -280,7 +261,6 @@
 
 
 (defn bind [ctx tags]
-  (swap! trace-atom conj ["bind" tags])
   (reduce
    (fn [ctx tag]
      (let [binding (->binding ctx tag)]
@@ -308,7 +288,6 @@
    (vector)))
 
 (defn bindings [ctx tags]
-  (swap! trace-atom conj ["bindings" tags])
   (mapcat
    (fn [tag]
      (when-let [b (get-in ctx [::bindings tag])]
@@ -318,7 +297,6 @@
    tags))
 
 (defn form->binding-data [ctx form]
-  (swap! trace-atom conj ["form->bindings-data" ctx form])
   (lib/rreduce
    (fn recur? [_acc x]
      (if (and (binding-data? x)
