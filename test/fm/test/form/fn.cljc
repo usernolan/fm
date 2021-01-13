@@ -21,7 +21,7 @@
      ([a ::b] [a b])
      ([a ::b & ::cs] [a b cs])))
 
-    ;; NOTE: eliminate redundant argv binding
+    ;; TODO: eliminate redundant argv binding
   (form/->form
    {::form/ns *ns*
     ::definition
@@ -120,7 +120,7 @@
    {::form/ns *ns*
     ::definition
     '(^{:fm/ret int?}
-      [::a :as argv]
+      [::a]
       'a)
     ::defaults
     {:fm/throw!   nil
@@ -147,7 +147,7 @@
    {::form/ns *ns*
     ::definition
     '([::anom1]
-      (anomaly/geta anomaly ::anomaly/ident))
+      (anomaly/geta anom1 ::anomaly/ident))
     ::defaults
     {:fm/throw!   nil
      :fm/trace    nil
@@ -299,7 +299,7 @@
        ^{:fm/rel (fn [{[a b c] :args [x] :ret}] (>= x (+ a b c)))}
        [::a b ::c]
        [::x]
-       [(inc (+ a b c))])
+       [(inc (- a b c))]) ; NOTE: rel
       (^{:fm/trace (fn [t] (prn :flavor t))
          :fm/rel   (fn [{a :args r :ret}] (prn a r) true)}
        [[::a :b ::c]]
@@ -351,6 +351,7 @@
      :fm/handler  `identity}}
    ::form/fn)
 
+    ;; TODO: fallback ret spec
   (form/->form
    {::form/ns *ns*
     ::definition
@@ -474,6 +475,23 @@
   (form/->form
    {::form/ns *ns*
     ::definition
+    '(^:fm.sequent/merge
+      ^{:fm/doc "variadic increment"
+        :fm/ret [::c]}
+      ([::a]
+       [(inc a)])
+      ([::a ::b]
+       [(inc (+ a b))]))
+    ::defaults
+    {:fm/throw!   nil
+     :fm/trace    nil
+     :fm/trace-fn `prn
+     :fm/handler  `identity}}
+   ::form/fn)
+
+  (form/->form
+   {::form/ns *ns*
+    ::definition
     '(^{:fm/doc "variadic increment"}
       ^:fm.sequent/conse
       ([::a] (inc a))
@@ -489,6 +507,20 @@
    {::form/ns *ns*
     ::definition
     '(^:fm.sequent/conse
+      [[::a]]
+      [[::b]]
+      {::b (inc a)})
+    ::defaults
+    {:fm/throw!   nil
+     :fm/trace    nil
+     :fm/trace-fn `prn
+     :fm/handler  `identity}}
+   ::form/fn)
+
+  (form/->form
+   {::form/ns *ns*
+    ::definition
+    '(^:fm.sequent/nonse
       [[::a]]
       [[::b]]
       {::b (inc a)})
@@ -534,6 +566,34 @@
       [::a]
       [[::b]]
       {::b (inc a)})
+    ::defaults
+    {:fm/throw!   nil
+     :fm/trace    nil
+     :fm/trace-fn `prn
+     :fm/handler  `identity}}
+   ::form/fn)
+
+  (form/->form
+   {::form/ns *ns*
+    ::definition
+    '(^:fm.sequent/merge
+      [::a]
+      [[::b]]
+      {::b (inc a)})
+    ::defaults
+    {:fm/throw!   nil
+     :fm/trace    nil
+     :fm/trace-fn `prn
+     :fm/handler  `identity}}
+   ::form/fn)
+
+  (form/->form
+   {::form/ns *ns*
+    ::definition
+    '(^:fm.sequent/merge
+      [[::a]]
+      [::b]
+      [(inc a)])
     ::defaults
     {:fm/throw!   nil
      :fm/trace    nil

@@ -266,14 +266,12 @@
 
 (defmethod ->metadata :fm.metadata/default
   [ctx tag]
-  (let [form (->form ctx [::metadata (get ctx ::ident) tag])]
-    (hash-map tag form)))
+  (->metadata ctx [(get ctx ::ident) tag]))
 
 (defmethod ->metadata :default ; NOTE: keep all metadata
   [ctx tag]
-  (let [ctx  (assoc ctx ::tag tag)
-        form (->form ctx [::metadata (get ctx ::ident) :default])]
-    (hash-map tag form)))
+  (let [ctx (assoc ctx ::tag tag)]
+    (->metadata ctx [(get ctx ::ident) :default])))
 
 
    ;;;
