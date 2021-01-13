@@ -328,7 +328,7 @@
                  (set? form) form
                  (not form)  (constantly false)
                  :else       (constantly true))]
-    (trace? tag)))
+    (trace? tag))) ; TODO: revisit defaults
 
 (defn conform? [ctx tag]
   (swap! form/trace-atom conj ["conform?" tag])
@@ -358,7 +358,7 @@
 
 
    ;;;
-   ;;; NOTE: [[Intro]] everything in this file is demand-driven by this method
+   ;;; NOTE: [[Intro]] everything in this file is demand-driven by these methods
    ;;;
 
 

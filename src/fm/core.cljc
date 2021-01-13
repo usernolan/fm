@@ -102,7 +102,7 @@
                      :fm/trace    *trace*
                      :fm/trace-fn *trace-fn*
                      :fm/handler  *anomaly-handler*}}
-   ::form/fn)) ; TODO: `defaults`; NOTE: dynvars
+   ::form/fn)) ; TODO: revisit `defaults`
 
 (defmacro defn [& definition]
   (form/->form
