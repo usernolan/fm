@@ -8,17 +8,6 @@
 
 
    ;;;
-   ;;; NOTE: dynamic variables; default configuration
-   ;;;
-
-
-(def ^:dynamic *throw!* nil)
-(def ^:dynamic *trace* nil)
-(def ^:dynamic *trace-fn* `prn)
-(def ^:dynamic *anomaly-handler* `identity)
-
-
-   ;;;
    ;;; NOTE: predicates
    ;;;
 
@@ -91,6 +80,18 @@
 
 
    ;;;
+   ;;; NOTE: dynamic variables; default configuration
+   ;;; TODO: rework
+   ;;;
+
+
+(def ^:dynamic *throw!* nil)
+(def ^:dynamic *trace* nil)
+(def ^:dynamic *trace-fn* `prn)
+(def ^:dynamic *anomaly-handler* `identity)
+
+
+   ;;;
    ;;; NOTE: macros
    ;;;
 
@@ -103,7 +104,7 @@
                      :fm/trace    *trace*
                      :fm/trace-fn *trace-fn*
                      :fm/handler  *anomaly-handler*}}
-   ::form/fn)) ; TODO: revisit `defaults`
+   ::form/fn))
 
 (defmacro defn [& definition]
   (form/->form
