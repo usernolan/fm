@@ -5,186 +5,6 @@
    [fm.lib :as lib]))
 
 
-  ;; NOTE: `spec2` requires symbolic specs, otherwise wrap `s/spec`
-  ;; NOTE: `spec2` may alter symbolic predicate style preferences
-  ;; TODO: revisit `lib/conform-throw!`
-  ;; TODO: revisit `ctx` identifier
-  ;; TODO: revisit `::defaults`
-  ;; TODO: revisit tags
-  ;; TODO: `:fm/ignore`, runtime `*ignore*`, `s/*compile-asserts*`, etc.
-  ;; TODO: `:fm/memoize`
-  ;; TODO: global spec form deduplication; `registry`, `bind!`
-  ;; ALT: reader literals; (vector ,,,) vs. [,,,], `into`
-  ;; ALT: qualify positional tags e.g. (s/cat :fm.signature/0 ,,,)
-  ;; ALT: `core.match`; [tag x]
-
-
-   ;;;
-   ;;; NOTE: predicates, specs
-   ;;;
-
-
-(def fn-symbol?
-  (comp lib/fn? deref resolve))
-
-(s/def ::bound-fn
-  (s/and
-   symbol?
-   resolve
-   fn-symbol?)) ; NOTE: `requiring-resolve`?
-
-(def bound-fn?
-  (partial s/valid? ::bound-fn))
-
-(def first-bound-fn?
-  (comp bound-fn? first))
-
-(s/def ::fn-form
-  (s/and
-   seq?
-   not-empty
-   first-bound-fn?))
-
-(def fn-form?
-  (partial s/valid? ::fn-form))
-
-(def first-symbol?
-  (comp symbol? first))
-
-(def first-resolves?
-  (comp resolve first)) ; ALT: boolean
-
-(def first-spec-namespace?
-  (comp
-   (hash-set
-    (namespace `s/*))
-   namespace
-   symbol
-   resolve
-   first)) ; TODO: revisit
-
-(s/def ::spec-form
-  (s/and
-   seq?
-   not-empty
-   first-symbol?
-   first-resolves?
-   first-spec-namespace?))
-
-(def spec-form?
-  (partial s/valid? ::spec-form))
-
-(def ^:dynamic *regex-op-symbol-set*
-  (hash-set
-   `s/cat
-   `s/alt
-   `s/*
-   `s/+
-   `s/?
-   `s/&))
-
-  ;; NOTE: `comp` evaluates set, breaks rebinding
-(defn first-regex-op-symbol?
-  [spec-form]
-  (*regex-op-symbol-set*
-   (symbol
-    (resolve
-     (first spec-form)))))
-
-(s/def ::regex-op-form
-  (s/and
-   ::spec-form
-   first-regex-op-symbol?))
-
-(def regex-op-form?
-  (partial s/valid? ::regex-op-form))
-
-  ;; TODO: test-only generators
-  ;; NOTE: `s/get-spec` contributes to disambiguation
-(s/def ::s/registry-keyword
-  (s/and
-   qualified-keyword?
-   s/get-spec))
-
-(s/def ::positional-binding-map
-  (s/map-of
-   ::s/registry-keyword
-   ::core.specs/binding-form
-   :count 1))
-
-(s/def ::positional-binding-form
-  (s/or
-   ::s/registry-keyword ::s/registry-keyword
-   ::positional-binding-map ::positional-binding-map
-   ::core.specs/binding-form ::core.specs/binding-form))
-
-  ;; NOTE: see `::core.specs/param-list`
-(s/def ::positional-param-list
-  (s/cat
-   :params (s/* ::positional-binding-form)
-   :var-params (s/? (s/cat
-                     :ampersand #{'&}
-                     :var-form ::positional-binding-form))
-   :as-form (s/? (s/cat
-                  :as #{:as}
-                  :as-sym ::core.specs/local-name))))
-
-(s/def ::nominal-binding-map
-  (s/map-of
-   keyword?
-   ::core.specs/binding-form))
-
-(s/def ::nominal-binding-form
-  (s/or
-   :keyword keyword? ; NOTE: `:req-un`
-   ::nominal-binding-map ::nominal-binding-map))
-
-(s/def ::nominal-param-list
-  (s/cat
-   :params (s/* ::nominal-binding-form)
-   :as-form (s/? (s/cat
-                  :as #{:as}
-                  :as-sym ::core.specs/local-name))))
-
-(s/def ::specv
-  (s/and
-   vector?
-   (s/or
-    :fm.context/nominal (s/tuple ::nominal-param-list)
-    :fm.context/positional ::positional-param-list)))
-
-
-   ;;;
-   ;;; NOTE: internal concepts, shapes
-   ;;;
-
-
-(comment
-
-  (s/def ::ident
-    qualified-keyword?)
-
-  (s/def ::ns
-    (partial instance? clojure.lang.Namespace))
-
-  (s/def ::bindings
-    (s/map-of
-     qualified-ident?
-     (s/or
-      ::binding 'binding-data?
-      ::bindings 'deep-contains-binding-data?)))
-
-  (s/def ::ctx
-    (s/keys
-     :opt
-     [::ident
-      ::ns
-      ::bindings]))
-
-  ;;;
-  )
-
-
    ;;;
    ;;; NOTE: top-level multimethods, hierarchies
    ;;;
@@ -334,3 +154,183 @@
 (defmethod ->binding :default
   [ctx tag]
   (default-binding ctx tag))
+
+
+   ;;;
+   ;;; NOTE: low-level predicates, specs
+   ;;;
+
+
+(def fn-symbol?
+  (comp lib/fn? deref resolve))
+
+(s/def ::bound-fn
+  (s/and
+   symbol?
+   resolve
+   fn-symbol?)) ; NOTE: `requiring-resolve`?
+
+(def bound-fn?
+  (partial s/valid? ::bound-fn))
+
+(def first-bound-fn?
+  (comp bound-fn? first))
+
+(s/def ::fn-form
+  (s/and
+   seq?
+   not-empty
+   first-bound-fn?))
+
+(def fn-form?
+  (partial s/valid? ::fn-form))
+
+(def first-symbol?
+  (comp symbol? first))
+
+(def first-resolves?
+  (comp resolve first)) ; ALT: boolean
+
+(def first-spec-namespace?
+  (comp
+   (hash-set
+    (namespace `s/*))
+   namespace
+   symbol
+   resolve
+   first)) ; TODO: revisit
+
+(s/def ::spec-form
+  (s/and
+   seq?
+   not-empty
+   first-symbol?
+   first-resolves?
+   first-spec-namespace?))
+
+(def spec-form?
+  (partial s/valid? ::spec-form))
+
+(def spec-form-hierarchy-atom
+  (atom
+   (->
+    (make-hierarchy)
+    (derive `s/cat ::s/regex-op)
+    (derive `s/alt ::s/regex-op)
+    (derive `s/* ::s/regex-op)
+    (derive `s/+ ::s/regex-op)
+    (derive `s/? ::s/regex-op)
+    (derive `s/& ::s/regex-op))))
+
+  ;; NOTE: `comp` evaluates set, breaks rebinding
+(defn first-regex-op-symbol?
+  [spec-form]
+  (isa? @spec-form-hierarchy-atom
+        (first spec-form)
+        ::s/regex-op))
+
+(s/def ::regex-op-form
+  (s/and
+   ::spec-form
+   first-regex-op-symbol?))
+
+(def regex-op-form?
+  (partial s/valid? ::regex-op-form))
+
+  ;; TODO: test-only generators
+  ;; NOTE: `s/get-spec` contributes to disambiguation
+(s/def ::s/registry-keyword
+  (s/and
+   qualified-keyword?
+   s/get-spec))
+
+(s/def ::positional-binding-map
+  (s/map-of
+   ::s/registry-keyword
+   ::core.specs/binding-form
+   :count 1))
+
+(s/def ::positional-binding-form
+  (s/or
+   ::s/registry-keyword ::s/registry-keyword
+   ::positional-binding-map ::positional-binding-map
+   ::core.specs/binding-form ::core.specs/binding-form))
+
+  ;; NOTE: see `::core.specs/param-list`
+(s/def ::positional-param-list
+  (s/cat
+   :params (s/* ::positional-binding-form)
+   :var-params (s/? (s/cat
+                     :ampersand #{'&}
+                     :var-form ::positional-binding-form))
+   :as-form (s/? (s/cat
+                  :as #{:as}
+                  :as-sym ::core.specs/local-name))))
+
+(s/def ::nominal-binding-map
+  (s/map-of
+   keyword?
+   ::core.specs/binding-form))
+
+(s/def ::nominal-binding-form
+  (s/or
+   :keyword keyword? ; NOTE: `:req-un`
+   ::nominal-binding-map ::nominal-binding-map))
+
+(s/def ::nominal-param-list
+  (s/cat
+   :params (s/* ::nominal-binding-form)
+   :as-form (s/? (s/cat
+                  :as #{:as}
+                  :as-sym ::core.specs/local-name))))
+
+(s/def ::specv
+  (s/and
+   vector?
+   (s/or
+    :fm.context/nominal (s/tuple ::nominal-param-list)
+    :fm.context/positional ::positional-param-list)))
+
+
+   ;;;
+   ;;; NOTE: internal concepts, shapes
+   ;;;
+
+
+(comment
+
+  (s/def ::ident
+    qualified-keyword?)
+
+  (s/def ::ns
+    (partial instance? clojure.lang.Namespace))
+
+  (s/def ::bindings
+    (s/map-of
+     qualified-ident?
+     (s/or
+      ::binding 'binding-data?
+      ::bindings 'deep-contains-binding-data?)))
+
+  (s/def ::ctx
+    (s/keys
+     :opt
+     [::ident
+      ::ns
+      ::bindings]))
+
+  ;;;
+  )
+
+  ;; NOTE: `spec2` requires symbolic specs, otherwise wrap `s/spec`
+  ;; NOTE: `spec2` may alter symbolic predicate style preferences
+  ;; TODO: revisit `lib/conform-throw!`
+  ;; TODO: revisit `ctx` identifier
+  ;; TODO: revisit `::defaults`
+  ;; TODO: revisit tags
+  ;; TODO: `:fm/ignore`, runtime `*ignore*`, `s/*compile-asserts*`, etc.
+  ;; TODO: `:fm/memoize`
+  ;; TODO: global spec form deduplication; `registry`, `bind!`
+  ;; ALT: reader literals; (vector ,,,) vs. [,,,], `into`
+  ;; ALT: qualify positional tags e.g. (s/cat :fm.signature/0 ,,,)
+  ;; ALT: `core.match`; [tag x]
