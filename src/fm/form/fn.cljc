@@ -731,7 +731,7 @@
         throws    (form/->form ctx ::indexed-throw!-booleans)
         tags      (map (comp keyword str) (range (count-signatures ctx)))
         tag       (if (every? true? throws)
-                    [::dispatch ::combined-argxs :fm.signature/singular]
+                    [::dispatch form-tag :fm.signature/singular]
                     [::try :fm/sequent ::signature])
         forms     (map (fn [index]
                          (let [ctx (assoc ctx ::signature-index index)]
