@@ -638,10 +638,10 @@
        ~body
        (catch Throwable thrown#
          (~handler
-          {:fm/ident        ~ident
-           ::anomaly/ident  ::anomaly/thrown
-           ::anomaly/args   ~args
-           ::anomaly/thrown thrown#})))))
+          {:fm/ident           ~ident
+           ::anomaly/ident     ::anomaly/thrown
+           ::anomaly/args      ~args
+           ::anomaly/throwable thrown#})))))
 
 (defmethod form/->form [::try :fm/sequent]
   [ctx _]
@@ -1244,7 +1244,7 @@
         anomaly   (form/->form ctx tag)]
     `(let [~@bindings1]
        (if (get ~throws ~index false)
-         (throw (get ~data ::anomaly/thrown ~thrown))
+         (throw (get ~data ::anomaly/throwable ~thrown))
          (let [~@bindings2]
            (~handler ~anomaly))))))
 
@@ -1257,10 +1257,10 @@
         data   (form/->form ctx [::form/binding ::form/fn ::ex-data])]
     `(if (anomaly/anomaly? ~data)
        ~data
-       {:fm/ident        ~ident
-        ::anomaly/ident  ::anomaly/thrown
-        ::anomaly/args   (vec ~argxs)
-        ::anomaly/thrown ~thrown})))
+       {:fm/ident           ~ident
+        ::anomaly/ident     ::anomaly/thrown
+        ::anomaly/args      (vec ~argxs)
+        ::anomaly/throwable ~thrown})))
 
 (defmethod form/->form [::catch-body :fm/sequent ::signature]
   [ctx tag]
@@ -1280,11 +1280,11 @@
         args   (form/->form ctx [::form/binding ::form/fn ::combined-argxs])
         thrown (form/->form ctx [::form/binding ::form/fn ::thrown])
         index  (signature-index ctx)]
-    {:fm/ident         ident
-     ::anomaly/ident   ::anomaly/thrown
-     ::anomaly/args    args
-     ::anomaly/thrown  thrown
-     ::signature-index index}))
+    {:fm/ident           ident
+     ::anomaly/ident     ::anomaly/thrown
+     ::anomaly/args      args
+     ::anomaly/throwable thrown
+     ::signature-index   index}))
 
 (defmethod form/->form ::indexed-handler-symbols
   [ctx _]
