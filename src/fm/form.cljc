@@ -2,7 +2,6 @@
   (:require
    [clojure.core.specs.alpha :as core.specs]
    [clojure.spec.alpha :as s]
-   [fm.anomaly :as anomaly]
    [fm.lib :as lib]))
 
 
@@ -172,7 +171,7 @@
     (s/map-of
      qualified-ident?
      (s/or
-      ::binding binding-data?
+      ::binding 'binding-data?
       ::bindings 'deep-contains-binding-data?)))
 
   (s/def ::ctx

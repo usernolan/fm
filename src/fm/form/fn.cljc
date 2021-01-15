@@ -469,7 +469,7 @@
     (hash-map tag form)))
 
 (defmethod form/->metadata [::var-metadata :fm.metadata/default]
-  [ctx _]
+  [_ _]
   nil) ; NOTE: exclude recognized metadata tags on var by default
 
 (defmethod form/->metadata [::var-metadata :default]
@@ -535,7 +535,7 @@
    (vector ::form/bindings tag)))
 
 (defmethod form/->binding :fm.binding/implicitly-bound
-  [ctx tag]
+  [_ tag]
   (let [sym (gensym (name tag))]
     (hash-map ::form/destructure sym ::form/symbol sym)))
 
@@ -1027,7 +1027,7 @@
     `[~@params ~@var-form]))
 
 (defmethod form/->form [::metadata :fm/doc]
-  [ctx [_ meta-tag]]
+  [ctx _]
   (let [ctx (assoc ctx ::form/tag :fm/doc)]
     (form/->form ctx [::metadata :default])))
 
