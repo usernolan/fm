@@ -1,80 +1,62 @@
 (ns fm.anomaly
   (:require
-   [clojure.alpha.spec :as s]
+   [clojure.spec.alpha :as s]
    [fm.lib :as lib]))
 
-(s/def ::args
-  (s/and
-   map?
-   (fn [{::keys [spec]}]
-     (= spec ::args))))
 
-(s/def ::ret
-  (s/and
-   map?
-   (fn [{::keys [spec]}]
-     (= spec ::ret))))
+   ;;;
+   ;;; NOTE: multimethods, hierarchies
+   ;;;
 
-(s/def ::nonse
-  (s/and
-   map?
-   (fn [{::keys [spec]}]
-     (= spec ::nonse))))
 
-(s/def ::rel
-  (s/and
-   map?
-   (fn [{::keys [spec]}]
-     (= spec ::rel))))
+(def indicator-hierarchy-atom
+  (atom
+   (make-hierarchy)))
 
-(s/def ::throw
-  (s/and
-   map?
-   (fn [{::keys [spec data]}]
-     (and
-      (= spec ::throw)
-      (instance? Throwable data)))))
 
-(defn contains-anomaly?*
-  [recur? xs]
-  (lib/reduce*
-   recur?
-   (fn [acc x]
-     (if (or
-          (true? acc)
-          (s/valid?
-           (s/or
-            ::args  ::args
-            ::ret   ::ret
-            ::nonse ::nonse
-            ::rel   ::rel
-            ::throw ::throw)
-           x))
-       (reduced true)
-       false))
-   false
-   xs))
+   ;;;
+   ;;; NOTE: predicates, specs
+   ;;;
 
-(defn recd-recur?
-  [_ x]
-  (vector? x))
 
-(def recd-anomaly?*
-  (partial
-   contains-anomaly?*
-   recd-recur?))
-
-(s/def ::received
-  (s/and
-   vector?
-   not-empty
-   recd-anomaly?*))
+(defn contains-indicator? [m]
+  (lib/geta @indicator-hierarchy-atom m ::ident))
 
 (s/def :fm/anomaly
+  (s/and
+   map?
+   contains-indicator?))
+
+(def anomaly?
+  (partial s/valid? :fm/anomaly))
+
+(def deep-anomaly?
+  (comp boolean (partial lib/deep-some anomaly?)))
+
+(s/def :fm/deep-anomaly
+  (s/and
+   coll?
+   deep-anomaly?))
+
+(s/def :fm/anomalous
   (s/or
-   ::args     ::args
-   ::ret      ::ret
-   ::nonse    ::nonse
-   ::rel      ::rel
-   ::throw    ::throw
-   ::received ::received))
+   :fm/anomaly :fm/anomaly
+   :fm/deep-anomaly :fm/deep-anomaly))
+
+(def anomalous?
+  (partial s/valid? :fm/anomalous))
+
+
+   ;;;
+   ;;; NOTE: anomaly helpers
+   ;;;
+
+
+(defn geta [m k]
+  (lib/geta @indicator-hierarchy-atom m k)) ; ALT: partial apply
+
+(defn geta-in [m path]
+  (lib/geta-in @indicator-hierarchy-atom m path))
+
+(defn finda [m k]
+  (lib/finda @indicator-hierarchy-atom m k))

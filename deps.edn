@@ -1,7 +1,2 @@
-{:deps
- {org.clojure/clojure {:mvn/version "1.10.1"},
-  org.clojure/alpha.spec
-  {:git/url "https://github.com/clojure/spec-alpha2.git",
-   :sha "8a5f96513582343c68e64686e2f0bd2c44adbe94"},
-  org.clojure/test.check {:mvn/version "0.10.0"}},
+{:deps  {org.clojure/clojure {:mvn/version "1.10.0"}}
  :paths ["src"]}

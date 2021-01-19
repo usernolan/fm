@@ -1,247 +1,336 @@
 (ns fm.form
   (:require
-   [clojure.alpha.spec :as s]
-   [fm.anomaly :as anomaly]
-   [fm.meta :as meta]
-   [fm.form.lib :as form.lib]))
+   [clojure.core.specs.alpha :as core.specs]
+   [clojure.spec.alpha :as s]
+   [fm.lib :as lib]))
 
-(defn cond-form
-  [{::keys [sym bindings args-syms args]
-    :or    {args args-syms}}]
 
-  (let [args-sym     (get-in bindings [::args-sym          ::form.lib/sym] args)
-        ret-sym      (get-in bindings [::ret-sym           ::form.lib/sym])
-        conf-ret-sym (get-in bindings [::conformed-ret-sym ::form.lib/sym])
-        ret-spec-sym (get-in bindings [:fm/ret             ::form.lib/sym])
-        rel-spec-sym (get-in bindings [:fm/rel             ::form.lib/sym])
-        ret?         (contains? bindings :fm/ret)
-        rel?         (contains? bindings :fm/rel)
-        conform-ret? (contains? bindings ::conformed-ret-sym)]
+   ;;;
+   ;;; NOTE: top-level multimethods, hierarchies
+   ;;;
 
-    (if (or ret? rel?)
-      `(cond
 
-         ~@(when ret?
-             [(if conform-ret?
-                `(s/invalid? ~conf-ret-sym)
-                `(not (s/valid? ~ret-spec-sym ~ret-sym)))
+(def form-hierarchy-atom
+  "Specifies an ontology to concisely handle special cases of constructing and
+  combining forms across multimethods that specify it as with `:hierarchy`."
+  (atom
+   (make-hierarchy)))
 
-              #::anomaly{:spec ::anomaly/ret
-                         :sym  `'~sym
-                         :args args-sym
-                         :data `(s/explain-data ~ret-spec-sym ~ret-sym)}])
+(defmulti ->form
+  "Produces a form to be evaluated as with `eval` or combined with other forms"
+  (fn [_ctx tag] tag)
+  :hierarchy form-hierarchy-atom)
 
-         ~@(when rel?
-             (let [ret-sym  (if conform-ret? conf-ret-sym ret-sym)
-                   rel-data #:fm.rel{:args args-sym :ret ret-sym}]
-               [`(not (s/valid? ~rel-spec-sym ~rel-data))
+(defmulti ->forms
+  "Produces a sequence of forms to be spliced as with `~@`"
+  (fn [_ctx tag] tag)
+  :hierarchy form-hierarchy-atom)
 
-                #::anomaly{:spec ::anomaly/rel
-                           :sym  `'~sym
-                           :args args-sym
-                           :data `(s/explain-data ~rel-spec-sym ~rel-data)}]))
+(defmulti ->metadata
+  "Normalizes and combines metadata forms"
+  (fn [_ctx tag] tag)
+  :hierarchy form-hierarchy-atom)
 
-         :else ~(if conform-ret? conf-ret-sym ret-sym))
+(defmulti ->binding
+  "Produces binding data to be associated into the context"
+  (fn [_ctx tag] tag)
+  :hierarchy form-hierarchy-atom)
 
-      (if conform-ret? conf-ret-sym ret-sym))))
 
-(defn ret-binding-form
-  [{::keys [sym bindings body cond-form-fn]
-    :as    form-args
-    :or    {cond-form-fn cond-form}}]
+   ;;;
+   ;;; NOTE: form helpers
+   ;;;
 
-  (let [ret-sym      (gensym 'ret)
-        conf-ret-sym (gensym 'conformed-ret)
-        trace-sym    (get-in bindings [:fm/trace   ::form.lib/sym])
-        ret-spec-sym (get-in bindings [:fm/ret     ::form.lib/sym])
-        conform?     (get-in bindings [:fm/conform ::form.lib/form] #{})
-        body?        (seq body)
-        trace?       (contains? bindings :fm/trace)
-        conform-ret? (and
-                      (contains? bindings :fm/ret)
-                      (conform? :fm/ret))
-        ret-bindings (merge
-                      {::ret-sym {::form.lib/sym ret-sym}}
-                      (when conform-ret?
-                        {::conformed-ret-sym {::form.lib/sym conf-ret-sym}}))
-        form-args    (update form-args ::bindings merge ret-bindings)
-        cond-form    (cond-form-fn form-args)]
 
-    `(let [~ret-sym ~(when body? `(do ~@body))]
+(defn invalid-definition! [msg data]
+  (let [msg (str "\n:: Invalid definition ::\n\n" msg)]
+    (throw (ex-info msg data)))) ; TODO: `tools.logging`
 
-       ~@(when trace?
-           [`(~trace-sym #:fm.trace{:sym '~sym :ret ~ret-sym})])
+(def warn!
+  (comp prn (partial str "\n:: Warning ::\n\n"))) ; TODO: `tools.logging`
 
-       (if (s/valid? :fm/anomaly ~ret-sym)
-         ~ret-sym
+(defn geta [m k]
+  (lib/geta @form-hierarchy-atom m k)) ; ALT: partial apply
 
-         ~(if conform-ret?
-            `(let [~conf-ret-sym (s/conform ~ret-spec-sym ~ret-sym)]
+(defn geta-in [m path]
+  (lib/geta-in @form-hierarchy-atom m path))
 
-               ~@(when trace?
-                   [`(~trace-sym
-                      #:fm.trace{:sym '~sym :conformed-ret ~conf-ret-sym})])
+(defn finda [m k]
+  (lib/finda @form-hierarchy-atom m k))
 
-               ~cond-form)
 
-            cond-form)))))
+   ;;;
+   ;;; NOTE: default `->metadata` implementations
+   ;;;
 
-(defn args-anomaly-form
-  [{::keys [sym bindings ret-binding-form-fn]
-    :as    form-args
-    :or    {ret-binding-form-fn ret-binding-form}}]
 
-  (let [args-spec-sym (get-in bindings [:fm/args             ::form.lib/sym])
-        args-sym      (get-in bindings [::args-sym           ::form.lib/sym])
-        conf-args-sym (get-in bindings [::conformed-args-sym ::form.lib/sym])
-        conform-args? (contains? bindings ::conformed-args-sym)]
+(defmethod ->metadata :fm.metadata/default
+  [ctx tag]
+  (->metadata ctx [(get ctx ::ident) tag]))
 
-    `(if ~(if conform-args?
-            `(s/invalid? ~conf-args-sym)
-            `(not (s/valid? ~args-spec-sym ~args-sym)))
+(defmethod ->metadata :default ; NOTE: keep all metadata
+  [ctx tag]
+  (let [ctx (assoc ctx ::tag tag)]
+    (->metadata ctx [(get ctx ::ident) :default])))
 
-       #::anomaly{:spec ::anomaly/args
-                  :sym  '~sym
-                  :args ~args-sym
-                  :data (s/explain-data ~args-spec-sym ~args-sym)}
 
-       ~(ret-binding-form-fn form-args))))
+   ;;;
+   ;;; NOTE: binding helpers
+   ;;;
 
-(defn args-binding-form
-  [{::keys [sym bindings args-form args-syms args args-anomaly-form-fn
-            ret-binding-form-fn]
-    :as    form-args
-    :or    {args                 args-syms
-            args-anomaly-form-fn args-anomaly-form
-            ret-binding-form-fn  ret-binding-form}}]
 
-  (let [args-sym      (gensym 'args)
-        conf-args-sym (gensym 'conformed-args)
-        args-spec-sym (get-in bindings [:fm/args    ::form.lib/sym])
-        trace-sym     (get-in bindings [:fm/trace   ::form.lib/sym])
-        conform?      (get-in bindings [:fm/conform ::form.lib/form] #{})
-        trace?        (contains? bindings :fm/trace)
-        args?         (contains? bindings :fm/args)
-        conform-args? (and args? (conform? :fm/args))
-        args-bindings (merge
-                       {::args-sym {::form.lib/sym args-sym}}
-                       (when conform-args?
-                         {::conformed-args-sym {::form.lib/sym conf-args-sym}}))
-        form-args     (update form-args ::bindings merge args-bindings)
-        nested-form   (if args?
-                        (args-anomaly-form-fn form-args)
-                        (ret-binding-form-fn form-args))]
+(defn bind [ctx tags]
+  (reduce
+   (fn [ctx tag]
+     (let [binding (->binding ctx tag)]
+       (update ctx ::bindings assoc tag binding))) ; ALT: `into`, `merge`
+   ctx
+   tags))
 
-    `(let [~args-sym ~args
+(def binding-data?
+  (every-pred map? ::destructure ::form)) ; ALT: include `::symbol`
 
-           ~@(when conform-args?
-               [conf-args-sym `(s/conform ~args-spec-sym ~args-sym)])]
+(def binding-data->tuple
+  (juxt ::destructure ::form))
 
-       ~@(when (and trace? conform-args?)
-           [`(~trace-sym
-              #:fm.trace{:sym '~sym :conformed-args ~conf-args-sym})])
+(def bindings->tuples
+  (partial
+   lib/rreduce
+   (fn recur? [_acc x]
+     (and
+      (coll? x)
+      (not (binding-data? x))))
+   (fn rf [acc x]
+     (if (binding-data? x)
+       (conj acc (binding-data->tuple x))
+       acc))
+   (vector)))
 
-       ~(if conform-args?
-          `(let [~args-form ~conf-args-sym]
-             ~nested-form)
+(defn bindings [ctx tags]
+  (mapcat
+   (fn [tag]
+     (when-let [b (get-in ctx [::bindings tag])]
+       (if (binding-data? b)
+         (binding-data->tuple b)
+         (mapcat identity (distinct (bindings->tuples b))))))
+   tags))
 
-          nested-form))))
+(defn form->binding-data [ctx form]
+  (lib/rreduce
+   (fn recur? [_acc x]
+     (if (and (binding-data? x)
+              (= (get x ::form) form))
+       (reduced x)
+       (coll? x)))
+   (constantly nil)
+   nil
+   (get ctx ::bindings)))
 
-(defn received-anomaly-form
-  [{::keys [args-syms args args-binding-form-fn]
-    :as    form-args
-    :or    {args                 args-syms
-            args-binding-form-fn args-binding-form}}]
+(defn destructure->symbol [destructure]
+  (cond
+    (vector? destructure) (when (some #{:as} destructure) (last destructure))
+    (map? destructure)    (:as destructure)
+    :else                 destructure))
 
-  `(if (anomaly/recd-anomaly?* ~args-syms)
-     ~args
-     ~(args-binding-form-fn form-args)))
+(defn default-binding [ctx tag]
+  (let [form-tag    (lib/positional-combine [::binding (get ctx ::ident) tag])
+        form        (->form ctx form-tag)
+        extant      (form->binding-data ctx form)
+        destructure (cond
+                      (some? extant) (get extant ::symbol)
+                      (ident? form)  form
+                      :else          (gensym (name (first (lib/ensure-sequential tag)))))
+        sym         (destructure->symbol destructure)]
+    (if (or (some? extant) (ident? form))
+      (hash-map ::destructure destructure ::symbol sym)
+      (hash-map ::destructure destructure ::symbol sym ::form form)))) ; ALT: `::core.specs/local-name`, `:local-name`, etc.
 
-(defn try-form
-  [{::keys [sym bindings args-syms args received-anomaly-form-fn
-            ret-binding-form-fn]
-    :as    form-args
-    :or    {args                     args-syms
-            received-anomaly-form-fn received-anomaly-form
-            ret-binding-form-fn      ret-binding-form}}]
 
-  (let [trace-sym   (get-in bindings [:fm/trace ::form.lib/sym])
-        trace?      (contains? bindings :fm/trace)
-        nested-form (if (seq args-syms)
-                      (received-anomaly-form-fn form-args)
-                      (ret-binding-form-fn form-args))]
+   ;;;
+   ;;; NOTE: default `->binding` implementations
+   ;;;
 
-    `(try
-       ~@(when trace?
-           [`(~trace-sym #:fm.trace{:sym '~sym :args ~args})])
 
-       ~nested-form
+(defmethod ->binding :default
+  [ctx tag]
+  (default-binding ctx tag))
 
-       (catch Throwable throw#
-         #::anomaly{:spec ::anomaly/throw
-                    :sym  '~sym
-                    :args ~args
-                    :data throw#}))))
 
-(defn fn-form
-  [{::keys [sym metadata bindings args-form try-form-fn]
-    :as    form-args
-    :or    {try-form-fn try-form}}]
+   ;;;
+   ;;; NOTE: low-level predicates, specs
+   ;;;
 
-  (let [handler-sym (get-in bindings [:fm/handler ::form.lib/sym] `identity)
-        metadata    (into
-                     (hash-map)
-                     (map
-                      (fn [[k v]]
-                        (if (contains? bindings k)
-                          [k (get-in bindings [k ::form.lib/sym])]
-                          [k v])))
-                     metadata)]
 
-    `(with-meta
+(def fn-symbol?
+  (comp lib/fn? deref resolve))
 
-       (fn ~@(when sym [(symbol (name sym))])
-         ~args-form
+(s/def ::bound-fn
+  (s/and
+   symbol?
+   resolve
+   fn-symbol?)) ; NOTE: `requiring-resolve`?
 
-         (let [res# ~(try-form-fn form-args)]
-           (if (s/valid? :fm/anomaly res#)
-             (~handler-sym res#)
-             res#)))
+(def bound-fn?
+  (partial s/valid? ::bound-fn))
 
-       ~metadata)))
+(def first-bound-fn?
+  (comp bound-fn? first))
 
-(defn binding-form
-  [{::keys [bindings nested-form-fn]
-    :as    form-args
-    :or    {nested-form-fn fn-form}}]
+(s/def ::fn-form
+  (s/and
+   seq?
+   not-empty
+   first-bound-fn?))
 
-  (let [f        (fn [[_ v]] (contains? v ::form.lib/sym))
-        bindings (into {} (filter f) bindings)
-        bindings (interleave
-                  (map ::form.lib/sym  (vals bindings))
-                  (map ::form.lib/form (vals bindings)))]
+(def fn-form?
+  (partial s/valid? ::fn-form))
 
-    `(let [~@bindings]
-       ~(nested-form-fn form-args))))
+(def first-symbol?
+  (comp symbol? first))
 
-(defn fm
-  [{::keys [sym args-form]
-    :as    form-args}]
+(def first-resolves?
+  (comp resolve first)) ; ALT: boolean
 
-  (let [metadata  (into
-                   (hash-map)
-                   (map meta/fn-xf)
-                   (merge (meta args-form) {:fm/sym sym}))
-        bindings  (into
-                   (hash-map)
-                   (map form.lib/binding-xf) metadata)
-        args-form (form.lib/args-form->form args-form)
-        args-syms (form.lib/args-form->syms args-form)
-        form-args (merge
-                   form-args
-                   {::metadata  metadata
-                    ::bindings  bindings
-                    ::args-form args-form
-                    ::args-syms args-syms})]
+(def first-spec-namespace?
+  (comp
+   (hash-set
+    (namespace `s/*))
+   namespace
+   symbol
+   resolve
+   first)) ; TODO: revisit
 
-    (binding-form form-args)))
+(s/def ::spec-form
+  (s/and
+   seq?
+   not-empty
+   first-symbol?
+   first-resolves?
+   first-spec-namespace?))
+
+(def spec-form?
+  (partial s/valid? ::spec-form))
+
+(def spec-form-hierarchy-atom
+  (atom
+   (->
+    (make-hierarchy)
+    (derive `s/cat ::s/regex-op)
+    (derive `s/alt ::s/regex-op)
+    (derive `s/* ::s/regex-op)
+    (derive `s/+ ::s/regex-op)
+    (derive `s/? ::s/regex-op)
+    (derive `s/& ::s/regex-op))))
+
+  ;; NOTE: `comp` evaluates set, breaks rebinding
+(defn first-regex-op-symbol?
+  [spec-form]
+  (isa? @spec-form-hierarchy-atom
+        (first spec-form)
+        ::s/regex-op))
+
+(s/def ::regex-op-form
+  (s/and
+   ::spec-form
+   first-regex-op-symbol?))
+
+(def regex-op-form?
+  (partial s/valid? ::regex-op-form))
+
+  ;; TODO: test-only generators
+  ;; NOTE: `s/get-spec` contributes to disambiguation
+(s/def ::s/registry-keyword
+  (s/and
+   qualified-keyword?
+   s/get-spec))
+
+(s/def ::positional-binding-map
+  (s/map-of
+   ::s/registry-keyword
+   ::core.specs/binding-form
+   :count 1))
+
+(s/def ::positional-binding-form
+  (s/or
+   ::s/registry-keyword ::s/registry-keyword
+   ::positional-binding-map ::positional-binding-map
+   ::core.specs/binding-form ::core.specs/binding-form))
+
+  ;; NOTE: see `::core.specs/param-list`
+(s/def ::positional-param-list
+  (s/cat
+   :params (s/* ::positional-binding-form)
+   :var-params (s/? (s/cat
+                     :ampersand #{'&}
+                     :var-form ::positional-binding-form))
+   :as-form (s/? (s/cat
+                  :as #{:as}
+                  :as-sym ::core.specs/local-name))))
+
+(s/def ::nominal-binding-map
+  (s/map-of
+   keyword?
+   ::core.specs/binding-form))
+
+(s/def ::nominal-binding-form
+  (s/or
+   :keyword keyword? ; NOTE: `:req-un`
+   ::nominal-binding-map ::nominal-binding-map))
+
+(s/def ::nominal-param-list
+  (s/cat
+   :params (s/* ::nominal-binding-form)
+   :as-form (s/? (s/cat
+                  :as #{:as}
+                  :as-sym ::core.specs/local-name))))
+
+(s/def ::specv
+  (s/and
+   vector?
+   (s/or
+    :fm.context/nominal (s/tuple ::nominal-param-list)
+    :fm.context/positional ::positional-param-list)))
+
+
+   ;;;
+   ;;; NOTE: internal concepts, shapes
+   ;;;
+
+
+(comment
+
+  (s/def ::ident
+    qualified-keyword?)
+
+  (s/def ::ns
+    (partial instance? clojure.lang.Namespace))
+
+  (s/def ::bindings
+    (s/map-of
+     qualified-ident?
+     (s/or
+      ::binding 'binding-data?
+      ::bindings 'deep-contains-binding-data?)))
+
+  (s/def ::ctx
+    (s/keys
+     :opt
+     [::ident
+      ::ns
+      ::bindings]))
+
+  ;;;
+  )
+
+  ;; NOTE: `spec2` requires symbolic specs, otherwise wrap `s/spec`
+  ;; NOTE: `spec2` may alter symbolic predicate style preferences
+  ;; TODO: revisit `lib/conform-throw!`
+  ;; TODO: revisit `ctx` identifier
+  ;; TODO: revisit `::defaults`
+  ;; TODO: revisit tags
+  ;; TODO: `:fm/ignore`, runtime `*ignore*`, `s/*compile-asserts*`, etc.
+  ;; TODO: `:fm/memoize`
+  ;; TODO: global spec form deduplication; `registry`, `bind!`
+  ;; ALT: reader literals; (vector ,,,) vs. [,,,], `into`
+  ;; ALT: qualify positional tags e.g. (s/cat :fm.signature/0 ,,,)
+  ;; ALT: `core.match`; [tag x]
