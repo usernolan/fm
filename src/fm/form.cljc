@@ -2,7 +2,8 @@
   (:require
    [clojure.core.specs.alpha :as core.specs]
    [clojure.spec.alpha :as s]
-   [fm.lib :as lib]))
+   [fm.lib :as lib]
+   #?@(:cljs [[fm.cljs]])))
 
 
    ;;;
@@ -162,9 +163,7 @@
 
 
 (s/def ::s/registry-keyword
-  (s/and
-   qualified-keyword?
-   s/get-spec)) ; NOTE: `s/get-spec` contributes to disambiguation
+   qualified-keyword?)
 
 (s/def ::positional-binding-map
   (s/map-of
