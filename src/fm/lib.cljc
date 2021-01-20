@@ -10,10 +10,15 @@
 
 
 (def multifn?
-  (partial instance? clojure.lang.MultiFn))
+  (partial
+   instance?
+   #?(:clj clojure.lang.MultiFn
+      :cljs cljs.core/MultiFn)))
 
 (def fn?
-  (some-fn clojure.core/fn? multifn?))
+  (some-fn
+   clojure.core/fn?
+   multifn?))
 
 (def singular? ; ALT: `singleton?`
   (every-pred

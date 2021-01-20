@@ -236,7 +236,7 @@
 (defn conformed-definition [ctx]
   (try
     (lib/conform-throw! ::definition (get ctx ::definition))
-    (catch Throwable t
+    (catch #?(:clj Throwable :cljs :default) t
       (let [msg  (str "Are all positional spec params in the registry?\n\n"
                       (ex-message t))
             data (merge ctx (ex-data t))]
