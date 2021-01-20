@@ -161,88 +161,10 @@
    ;;;
 
 
-(def fn-symbol?
-  (comp lib/fn? deref resolve))
-
-(s/def ::bound-fn
-  (s/and
-   symbol?
-   resolve
-   fn-symbol?)) ; NOTE: `requiring-resolve`?
-
-(def bound-fn?
-  (partial s/valid? ::bound-fn))
-
-(def first-bound-fn?
-  (comp bound-fn? first))
-
-(s/def ::fn-form
-  (s/and
-   seq?
-   not-empty
-   first-bound-fn?))
-
-(def fn-form?
-  (partial s/valid? ::fn-form))
-
-(def first-symbol?
-  (comp symbol? first))
-
-(def first-resolves?
-  (comp resolve first)) ; ALT: boolean
-
-(def first-spec-namespace?
-  (comp
-   (hash-set
-    (namespace `s/*))
-   namespace
-   symbol
-   resolve
-   first)) ; TODO: revisit
-
-(s/def ::spec-form
-  (s/and
-   seq?
-   not-empty
-   first-symbol?
-   first-resolves?
-   first-spec-namespace?))
-
-(def spec-form?
-  (partial s/valid? ::spec-form))
-
-(def spec-form-hierarchy-atom
-  (atom
-   (->
-    (make-hierarchy)
-    (derive `s/cat ::s/regex-op)
-    (derive `s/alt ::s/regex-op)
-    (derive `s/* ::s/regex-op)
-    (derive `s/+ ::s/regex-op)
-    (derive `s/? ::s/regex-op)
-    (derive `s/& ::s/regex-op))))
-
-  ;; NOTE: `comp` evaluates set, breaks rebinding
-(defn first-regex-op-symbol?
-  [spec-form]
-  (isa? @spec-form-hierarchy-atom
-        (first spec-form)
-        ::s/regex-op))
-
-(s/def ::regex-op-form
-  (s/and
-   ::spec-form
-   first-regex-op-symbol?))
-
-(def regex-op-form?
-  (partial s/valid? ::regex-op-form))
-
-  ;; TODO: test-only generators
-  ;; NOTE: `s/get-spec` contributes to disambiguation
 (s/def ::s/registry-keyword
   (s/and
    qualified-keyword?
-   s/get-spec))
+   s/get-spec)) ; NOTE: `s/get-spec` contributes to disambiguation
 
 (s/def ::positional-binding-map
   (s/map-of
@@ -331,6 +253,7 @@
   ;; TODO: `:fm/ignore`, runtime `*ignore*`, `s/*compile-asserts*`, etc.
   ;; TODO: `:fm/memoize`
   ;; TODO: global spec form deduplication; `registry`, `bind!`
+  ;; TODO: test generators
   ;; ALT: reader literals; (vector ,,,) vs. [,,,], `into`
   ;; ALT: qualify positional tags e.g. (s/cat :fm.signature/0 ,,,)
   ;; ALT: `core.match`; [tag x]

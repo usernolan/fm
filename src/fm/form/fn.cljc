@@ -37,8 +37,8 @@
 
 
 (s/def ::metadata-fn-form
-  (s/or ::form/bound-fn ::form/bound-fn
-        ::form/fn-form ::form/fn-form)) ; ALT: `fm../sum` spec-op; `s/or-of` spec2 wiki example
+  (s/or :list list?
+        :symbol symbol?))
 
 (s/def ::metadata-specv-form
   (s/or :fm.context/nominal (s/tuple vector?)
@@ -46,7 +46,6 @@
 
 (s/def ::metadata-spec-form
   (s/or ::s/registry-keyword ::s/registry-keyword
-        ::form/spec-form ::form/spec-form
         ::metadata-fn-form ::metadata-fn-form
         ::metadata-specv-form ::metadata-specv-form))
 
@@ -846,7 +845,7 @@
         (when-let [form (or (get-in ctx [::metadata :fm/trace index])
                             (get-in ctx [::defaults :fm/trace]))]
           (let [pred? (some-fn true? set?)
-                fn?   (some-fn form/fn-form? form/bound-fn?)]
+                fn?   (some-fn list? symbol?)]
             (cond
               (pred? form)  (get-in ctx [::defaults :fm/trace-fn])
               (fn? form)    form
@@ -859,7 +858,7 @@
   (let [index (signature-index ctx)]
     (or (get-in ctx [::form/bindings :fm/handler index ::form/symbol])
         (let [form (get-in ctx [::metadata :fm/handler index])
-              fn?  (some-fn form/fn-form? form/bound-fn?)]
+              fn?  (some-fn list? symbol?)]
           (cond
             (fn? form) form
             :else      (get-in ctx [::defaults :fm/handler])))))) ; TODO: nil handler case
@@ -1340,8 +1339,7 @@
       (form/->form ctx (conj tag t)))))
 
 (defmethod form/->form [::s/form :fm/spec ::s/registry-keyword] [k _] k)
-(defmethod form/->form [::s/form :fm/spec ::form/spec-form] [form _] form)
-(defmethod form/->form [::s/form :fm/spec ::metadata-fn-form] [f _] f) ; NOTE: may require `s/spec` in spec2
+(defmethod form/->form [::s/form :fm/spec ::metadata-fn-form] [form _] form) ; NOTE: may require `s/spec` in spec2
 (defmethod form/->form [::s/form :fm/spec ::metadata-specv-form]
   [ctx [_ spec-tag _ :as tag]]
   (let [specv       (get ctx spec-tag)
