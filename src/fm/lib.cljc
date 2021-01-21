@@ -128,7 +128,7 @@
      (if (pred x)
        (reduced x)
        (coll? x)))
-   (constantly false)
+   (constantly nil)
    xs))
 
 (defn evolve [xf x]
