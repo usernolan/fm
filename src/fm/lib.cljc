@@ -49,6 +49,13 @@
         (s/explain-data spec x)))
       c)))
 
+(defn conform-tag
+  [spec x]
+  (let [c (s/conform spec x)]
+    (if (s/invalid? c)
+      (vector c x)
+      c)))
+
 
    ;;;
    ;;; NOTE: data transformations
