@@ -76,8 +76,8 @@
    ;;;
 
 
-(def ->form form/->form)
-(def ->metadata form/->metadata)
+(def form form/form)
+(def metadata form/metadata)
 
 
    ;;;
@@ -98,7 +98,7 @@
 
 
 (defmacro fn [& definition]
-  (form/->form
+  (form/form
    {::fn/definition definition
     ::form/ns       *ns*
     ::fn/defaults   {:fm/throw!   *throw!*
@@ -108,7 +108,7 @@
    ::form/fn))
 
 (defmacro defn [& definition]
-  (form/->form
+  (form/form
    {::fn/definition definition
     ::form/ns       *ns*
     ::fn/defaults   {:fm/throw!   *throw!*
