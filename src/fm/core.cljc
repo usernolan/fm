@@ -24,6 +24,7 @@
 
 (def conform-explain lib/conform-explain)
 (def conform-throw! lib/conform-throw!)
+(def conform-tag lib/conform-tag)
 
 
    ;;;
