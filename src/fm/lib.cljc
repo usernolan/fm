@@ -221,17 +221,17 @@
   (if (sequential? x) x (vector x)))
 
 (defn positional-combine
-  ([args ret] (into args ret))
-  ([argxs]
-   (if (and (singular? argxs) (sequential? (first argxs)))
-     (if (vector? (first argxs))
-       (first argxs)
-       (vec (first argxs)))
-     (into (vector) (mapcat ensure-sequential) argxs))))
+  ([x1 x2] (into x1 x2))
+  ([xs]
+   (if (and (singular? xs) (sequential? (first xs)))
+     (if (vector? (first xs))
+       (first xs)
+       (vec (first xs)))
+     (into (vector) (mapcat ensure-sequential) xs))))
 
 (defn nominal-combine
-  ([args ret] (into args ret))
-  ([argxs]
-   (if (and (singular? argxs) (map? (first argxs)))
-     (first argxs)
-     (into (hash-map) argxs))))
+  ([x1 x2] (into x1 x2))
+  ([xs]
+   (if (and (singular? xs) (map? (first xs)))
+     (first xs)
+     (into (hash-map) xs))))
