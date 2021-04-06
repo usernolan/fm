@@ -67,8 +67,10 @@
 
 
 (def anomaly? anomaly/anomaly?)
+(def deep-anomaly anomaly/deep-anomaly)
 (def deep-anomaly? anomaly/deep-anomaly?)
 (def anomalous? anomaly/anomalous?)
+(def unwrap-anomaly anomaly/unwrap)
 
 
    ;;;
@@ -78,6 +80,15 @@
 
 (def form form/form)
 (def metadata form/metadata)
+
+
+   ;;;
+   ;;; NOTE: `fm.core` api
+   ;;;
+
+
+(def ident
+  (comp :fm/ident meta))
 
 
    ;;;
