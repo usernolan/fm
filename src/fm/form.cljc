@@ -72,8 +72,11 @@
 
 (defmethod metadata :default ; NOTE: keep all metadata
   [ctx tag]
-  (let [ctx (assoc ctx ::tag tag)]
-    (metadata ctx [(get ctx ::ident) :default])))
+  (let [ctx (assoc ctx ::tag tag)
+        t   (lib/ensure-sequential [(get ctx ::ident) tag])]
+    (if (contains? (methods metadata) t)
+      (metadata ctx t)
+      (metadata ctx (lib/ensure-sequential [(get ctx ::ident) :default])))))
 
 
    ;;;

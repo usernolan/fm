@@ -344,6 +344,18 @@
   [_ _]
   nil) ; NOTE: exclude recognized metadata tags on var by default
 
+(defmethod form/metadata [::var-metadata :line]
+  [ctx _]
+  (let [data (get-in ctx [::metadata :line])
+        form (if (sequential? data) (first data) data)]
+    (hash-map :line form))) ; NOTE: `:line` is a vector in cljs
+
+(defmethod form/metadata [::var-metadata :column]
+  [ctx _]
+  (let [data (get-in ctx [::metadata :column])
+        form (if (sequential? data) (first data) data)]
+    (hash-map :column form))) ; NOTE: `:column` is a vector in cljs
+
 (defmethod form/metadata [::var-metadata :default]
   [ctx _]
   (let [tag  (get ctx ::form/tag)
