@@ -4,7 +4,8 @@
    [fm.anomaly :as anomaly]
    [fm.form :as form]
    [fm.form.fn :as fn]
-   [fm.lib :as lib]))
+   [fm.lib :as lib])
+  #?(:cljs (:require-macros fm.core)))
 
 
    ;;;

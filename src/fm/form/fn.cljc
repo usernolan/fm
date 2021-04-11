@@ -924,7 +924,7 @@
   [ctx [_ sequent-tag _ :as tag]]
   (let [data (get-in ctx [::outer-metadata sequent-tag])
         form (if (true? data)
-               (let [tag (assoc tag (dec (count tag)) ::signature)]
+               (let [tag [::metadata sequent-tag ::signature]]
                  (form/form ctx tag))
                data)]
     (vector form)))
