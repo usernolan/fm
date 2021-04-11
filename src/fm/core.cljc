@@ -15,6 +15,7 @@
 (def multifn? lib/multifn?)
 (def fn? lib/fn?)
 (def singular? lib/singular?)
+(def throwable? lib/throwable?)
 
 
    ;;;

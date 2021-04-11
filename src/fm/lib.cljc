@@ -26,6 +26,10 @@
    (comp some? first)
    (comp nil? next)))
 
+(def throwable?
+  #?(:clj (partial instance? Throwable)
+     :cljs (partial instance? js/Error)))
+
 
    ;;;
    ;;; NOTE: compound spec operations
