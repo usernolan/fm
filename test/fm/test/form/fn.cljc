@@ -22,7 +22,7 @@
      ([a ::b & ::cs] [a b cs])))
 
     ;; TODO: eliminate redundant argv binding
-  (form/->form
+  (form/form
    {::form/ns *ns*
     ::definition
     '(^:fm/throw! [a] (inc a))
@@ -33,7 +33,7 @@
      :fm/handler  `identity}}
    ::form/fn)
 
-  (form/->form
+  (form/form
    {::form/ns *ns*
     ::definition
     '([a] (inc a))
@@ -44,7 +44,7 @@
      :fm/handler  `identity}}
    ::form/fn)
 
-  (form/->form
+  (form/form
    {::form/ns *ns*
     ::definition
     '([::a] (inc a))
@@ -55,7 +55,7 @@
      :fm/handler  `identity}}
    ::form/fn)
 
-  (form/->form
+  (form/form
    {::form/ns *ns*
     ::definition
     '(([a] (inc a))
@@ -67,7 +67,7 @@
      :fm/handler  `identity}}
    ::form/fn)
 
-  (form/->form
+  (form/form
    {::form/ns *ns*
     ::definition
     '(([::a] (inc a))
@@ -79,7 +79,7 @@
      :fm/handler  `identity}}
    ::form/fn)
 
-  (form/->form
+  (form/form
    {::form/ns *ns*
     ::definition
     '(([::a] (inc a))
@@ -91,7 +91,7 @@
      :fm/handler  `identity}}
    ::form/fn)
 
-  (form/->form
+  (form/form
    {::form/ns *ns*
     ::definition
     '(([::a] (inc a))
@@ -103,7 +103,7 @@
      :fm/handler  `identity}}
    ::form/fn)
 
-  (form/->form
+  (form/form
    {::form/ns *ns*
     ::definition
     '(^:fm/conform
@@ -116,7 +116,7 @@
      :fm/handler  `identity}}
    ::form/fn)
 
-  (form/->form
+  (form/form
    {::form/ns *ns*
     ::definition
     '(^{:fm/ret int?}
@@ -129,7 +129,7 @@
      :fm/handler  `identity}}
    ::form/fn)
 
-  (form/->form
+  (form/form
    {::form/ns *ns*
     ::definition
     '([:fm/anomaly]
@@ -143,7 +143,7 @@
 
   (s/def ::anom1 :fm/anomaly)
 
-  (form/->form
+  (form/form
    {::form/ns *ns*
     ::definition
     '([::anom1]
@@ -161,7 +161,7 @@
     ;; TODO: eliminate redundant args binding
     ;; TODO: warn unbound `h1`; explicate defaults
     ;; ALT: phased analysis, rewrite
-  (form/->form
+  (form/form
    {::form/ns *ns*
     ::definition
     '(^{:fm/handler h1}
@@ -174,7 +174,7 @@
      :fm/handler  `identity}}
    ::form/fn)
 
-  (form/->form
+  (form/form
    {::form/ns *ns*
     ::definition
     '(^{:fm/handler h1}
@@ -191,7 +191,7 @@
 
   (def h2 (constantly :bummer))
 
-  (form/->form
+  (form/form
    {::form/ns *ns*
     ::definition
     '((^{:fm/handler h1}
@@ -209,7 +209,7 @@
 
     ;; TODO: shrink, isolate test cases
     ;; TODO: eliminate redundancy in `args`
-  (form/->form
+  (form/form
    {::form/ns *ns*
     ::definition
     '(^{:fm/doc "fn1" :fm/throw! true}
@@ -228,7 +228,7 @@
     (apply + nil nil)
     (apply + 0 nil nil))
 
-  (form/->form
+  (form/form
    {::form/ns *ns*
     ::definition
     '(^{:fm/doc "fn1" :fm/handler (fn [a] a)}
@@ -241,7 +241,7 @@
      :fm/handler  `identity}}
    ::form/fn)
 
-  (form/->form
+  (form/form
    {::form/ns *ns*
     ::definition
     '([& ::cs]
@@ -253,7 +253,7 @@
      :fm/handler  `identity}}
    ::form/fn)
 
-  (form/->form
+  (form/form
    {::form/ns *ns*
     ::definition
     '(^{:fm/doc "variadic increment"}
@@ -268,7 +268,7 @@
      :fm/handler  `identity}}
    ::form/fn)
 
-  (form/->form
+  (form/form
    {::form/ns *ns*
     ::definition
     '(^{:fm/doc "variadic increment"}
@@ -284,10 +284,10 @@
    ::form/fn)
 
     ;; TODO: analyze case where `::x` is in the registry in the following
-    ;; `form/->form` invocation
+    ;; `form/form` invocation
   (s/def ::x int?)
 
-  (form/->form
+  (form/form
    {::form/ns *ns*
     ::definition
     '(^{:fm/doc "variadic increment"}
@@ -312,7 +312,7 @@
      :fm/handler  `identity}}
    ::form/fn)
 
-  (form/->form
+  (form/form
    {::form/ns *ns*
     ::definition
     '([[::a]] (inc a))
@@ -324,7 +324,7 @@
    ::form/fn)
 
     ;; NOTE: irreconcilable nominal context ambiguity
-  (form/->form
+  (form/form
    {::form/ns *ns*
     ::definition
     '(^{:fm/doc "variadic increment"}
@@ -339,7 +339,7 @@
    ::form/fn)
 
     ;; NOTE: locally unhandleable arity exception
-  (form/->form
+  (form/form
    {::form/ns *ns*
     ::definition
     '(^{:fm/doc "variadic increment"}
@@ -352,7 +352,7 @@
    ::form/fn)
 
     ;; TODO: fallback ret spec
-  (form/->form
+  (form/form
    {::form/ns *ns*
     ::definition
     '(^:fm.sequent/conse
@@ -366,7 +366,7 @@
      :fm/handler  `identity}}
    ::form/fn)
 
-  (form/->form
+  (form/form
    {::form/ns *ns*
     ::definition
     '(^:fm.sequent/conse
@@ -381,7 +381,7 @@
    ::form/fn)
 
     ;; NOTE: arity immunity
-  (form/->form
+  (form/form
    {::form/ns *ns*
     ::definition
     '(^:fm.sequent/conse
@@ -398,7 +398,7 @@
      :fm/handler  `identity}}
    ::form/fn)
 
-  (form/->form
+  (form/form
    {::form/ns *ns*
     ::definition
     '(^:fm.sequent/conse
@@ -417,7 +417,7 @@
      :fm/handler  `identity}}
    ::form/fn)
 
-  (form/->form
+  (form/form
    {::form/ns *ns*
     ::definition
     '(^:fm.sequent/conse
@@ -437,7 +437,7 @@
    ::form/fn)
 
     ;; TODO: capture default
-  (form/->form
+  (form/form
    {::form/ns *ns*
     ::definition
     '(^:fm.sequent/conse
@@ -456,7 +456,7 @@
    ::form/fn)
 
     ;; NOTE: sequent metadata fallback/fill
-  (form/->form
+  (form/form
    {::form/ns *ns*
     ::definition
     '(^{:fm/doc "variadic increment"}
@@ -472,7 +472,7 @@
      :fm/handler  `identity}}
    ::form/fn)
 
-  (form/->form
+  (form/form
    {::form/ns *ns*
     ::definition
     '(^:fm.sequent/merge
@@ -489,7 +489,7 @@
      :fm/handler  `identity}}
    ::form/fn)
 
-  (form/->form
+  (form/form
    {::form/ns *ns*
     ::definition
     '(^{:fm/doc "variadic increment"}
@@ -503,7 +503,7 @@
      :fm/handler  `identity}}
    ::form/fn)
 
-  (form/->form
+  (form/form
    {::form/ns *ns*
     ::definition
     '(^:fm.sequent/conse
@@ -517,7 +517,7 @@
      :fm/handler  `identity}}
    ::form/fn)
 
-  (form/->form
+  (form/form
    {::form/ns *ns*
     ::definition
     '(^:fm.sequent/nonse
@@ -531,7 +531,7 @@
      :fm/handler  `identity}}
    ::form/fn)
 
-  (form/->form
+  (form/form
    {::form/ns *ns*
     ::definition
     '(^:fm.sequent/merge
@@ -545,7 +545,7 @@
      :fm/handler  `identity}}
    ::form/fn)
 
-  (form/->form
+  (form/form
    {::form/ns *ns*
     ::definition
     '(^:fm.sequent/conse
@@ -559,7 +559,7 @@
      :fm/handler  `identity}}
    ::form/fn)
 
-  (form/->form
+  (form/form
    {::form/ns *ns*
     ::definition
     '(^:fm.sequent/nonse
@@ -573,7 +573,7 @@
      :fm/handler  `identity}}
    ::form/fn)
 
-  (form/->form
+  (form/form
    {::form/ns *ns*
     ::definition
     '(^:fm.sequent/merge
@@ -587,7 +587,7 @@
      :fm/handler  `identity}}
    ::form/fn)
 
-  (form/->form
+  (form/form
    {::form/ns *ns*
     ::definition
     '(^:fm.sequent/merge
@@ -601,7 +601,7 @@
      :fm/handler  `identity}}
    ::form/fn)
 
-  (form/->form
+  (form/form
    {::form/ns *ns*
     ::definition
     '(^:fm.sequent/merge
@@ -615,7 +615,7 @@
      :fm/handler  `identity}}
    ::form/fn)
 
-  (form/->form
+  (form/form
    {::form/ns *ns*
     ::definition
     '(^:fm.sequent/merge
@@ -631,7 +631,7 @@
 
     ;; NOTE: locally deduplicated spec forms
     ;; NOTE: essentially `:fm.sequent/iso`
-  (form/->form
+  (form/form
    {::form/ns *ns*
     ::definition
     '(^:fm.sequent/conse
@@ -648,7 +648,7 @@
      :fm/handler  `identity}}
    ::form/fn)
 
-  (form/->form
+  (form/form
    {::form/ns *ns*
     ::definition
     '((^:fm.sequent/conse
@@ -667,7 +667,7 @@
    ::form/fn)
 
     ;; NOTE: nominal context disambiguation; most specific first
-  (form/->form
+  (form/form
    {::form/ns *ns*
     ::definition
     '(^:fm.sequent/merge
@@ -687,7 +687,7 @@
      :fm/handler  `identity}}
    ::form/fn)
 
-  (form/->form
+  (form/form
    {::form/ns *ns*
     ::definition
     '(^:fm/throw!
@@ -701,7 +701,7 @@
      :fm/handler  `identity}}
    ::form/defn)
 
-  (form/->form
+  (form/form
    {::form/ns *ns*
     ::definition
     '(^:fm/throw!
