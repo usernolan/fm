@@ -4,7 +4,8 @@
    [fm.anomaly :as anomaly]
    [fm.form :as form]
    [fm.form.fn :as fn]
-   [fm.lib :as lib]))
+   [fm.lib :as lib])
+  #?(:cljs (:require-macros fm.core)))
 
 
    ;;;
@@ -15,6 +16,7 @@
 (def multifn? lib/multifn?)
 (def fn? lib/fn?)
 (def singular? lib/singular?)
+(def throwable? lib/throwable?)
 
 
    ;;;
@@ -67,8 +69,10 @@
 
 
 (def anomaly? anomaly/anomaly?)
+(def deep-anomaly anomaly/deep-anomaly)
 (def deep-anomaly? anomaly/deep-anomaly?)
 (def anomalous? anomaly/anomalous?)
+(def unwrap-anomaly anomaly/unwrap)
 
 
    ;;;
@@ -78,6 +82,15 @@
 
 (def form form/form)
 (def metadata form/metadata)
+
+
+   ;;;
+   ;;; NOTE: `fm.core` api
+   ;;;
+
+
+(def ident
+  (comp :fm/ident meta))
 
 
    ;;;

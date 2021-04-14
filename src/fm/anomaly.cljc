@@ -20,7 +20,8 @@
 
 
 (defn contains-indicator? [m]
-  (lib/geta @indicator-hierarchy-atom m ::ident))
+  (boolean
+   (lib/geta @indicator-hierarchy-atom m ::ident)))
 
 (s/def :fm/anomaly
   (s/and
@@ -30,8 +31,11 @@
 (def anomaly?
   (partial s/valid? :fm/anomaly))
 
+(def deep-anomaly
+  (partial lib/deep-some anomaly?))
+
 (def deep-anomaly?
-  (comp boolean (partial lib/deep-some anomaly?)))
+  (comp boolean deep-anomaly))
 
 (s/def :fm/deep-anomaly
   (s/and
@@ -60,3 +64,17 @@
 
 (defn finda [m k]
   (lib/finda @indicator-hierarchy-atom m k))
+
+
+   ;;;
+   ;;; NOTE: anomaly api
+   ;;;
+
+
+(defn unwrap [anomaly]
+  (loop [a anomaly]
+    (if-let [v (get-in a [::s/explain-data ::s/value])]
+      (if-let [nested (deep-anomaly (lib/ensure-sequential v))]
+        (recur nested)
+        a)
+      a)))

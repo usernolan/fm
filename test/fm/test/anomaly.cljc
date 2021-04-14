@@ -24,37 +24,3 @@
 
   ;;;
   )
-
-(comment ; NOTE: extending anomaly indication
-
-  (ns example.ns1
-    (:require
-     [fm.anomaly :as anomaly]))
-
-    ;; NOTE: https://github.com/cognitect-labs/anomalies/blob/master/src/cognitect/anomalies.cljc
-  (def indicator-hierarchy
-    (swap!
-     anomaly/indicator-hierarchy-atom
-     (fn [hierarchy]
-       (->
-        hierarchy
-        (derive :cognitect.anomalies/category ::anomaly/ident)))))
-
-  (defmulti handler
-    (fn [anomaly]
-      (anomaly/geta anomaly ::anomaly/ident))
-    #_:hierarchy #_some-other-hierarchy-ref)
-
-  (defmethod handler :fm.anomaly/args
-    [anomaly]
-    "args!")
-
-  (defmethod handler :cognitect.anomalies/unavailable
-    [anomaly]
-    "unavailable!")
-
-  (handler {::anomaly/ident ::anomaly/args})
-  (handler {:cognitect.anomalies/category :cognitect.anomalies/unavailable})
-
-  ;;;
-  )
