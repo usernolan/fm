@@ -20,15 +20,17 @@
    clojure.core/fn?
    multifn?))
 
-(def singular? ; ALT: `singleton?`
+(def singular?
   (every-pred
    seqable?
    (comp some? first)
    (comp nil? next)))
 
 (def throwable?
-  #?(:clj (partial instance? Throwable)
-     :cljs (partial instance? js/Error)))
+  (partial
+   instance?
+   #?(:clj Throwable
+      :cljs js/Error)))
 
 
    ;;;
@@ -43,7 +45,7 @@
       (s/explain spec x)
       c)))
 
-(defn conform-throw!
+(defn conform-throw
   [spec x]
   (let [c (s/conform spec x)]
     (if (s/invalid? c)
@@ -59,6 +61,15 @@
     (if (s/invalid? c)
       (vector c x)
       c)))
+
+(defn tag [spec x]
+  (let [c (s/conform spec x)]
+    (if (s/invalid? c)
+      (vector c x)
+      (vector (first c) x))))
+
+(def which
+  (comp first conform-tag))
 
 
    ;;;
@@ -128,7 +139,7 @@
             (reduced r) ; NOTE: ensures termination of all nested reductions
             r))))
     init
-    xs)))
+    xs))) ; TODO: CPS
 
 (def rreduce
   (comp unreduced -rreduce))
@@ -153,7 +164,22 @@
                           (update acc k (partial evolve xf))
                           acc))
                       x
-                      xf))) ; ALT: `extend-protocol`
+                      xf)))
+
+(defn evolve-xf [xf]
+  (map (partial evolve xf)))
+
+
+   ;;;
+   ;;; NOTE: function transformations
+   ;;;
+
+
+(defn rotate
+  ([f]
+   (fn [& args] (apply f (last args) (butlast args))))
+  ([n f]
+   (fn [& args] (apply f (concat (take-last n args) (drop-last n args))))))
 
 
    ;;;
@@ -217,7 +243,7 @@
 
 
    ;;;
-   ;;; NOTE: default sequent combinators
+   ;;; NOTE: default context combinators, helpers
    ;;;
 
 
@@ -238,4 +264,4 @@
   ([xs]
    (if (and (singular? xs) (map? (first xs)))
      (first xs)
-     (into (hash-map) xs))))
+     (into (hash-map) xs)))) ; TODO: fix (nominal-combine '(1))

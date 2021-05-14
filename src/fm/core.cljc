@@ -1,11 +1,15 @@
 (ns fm.core
-  (:refer-clojure :exclude [fn? fn defn])
+  (:refer-clojure :exclude [or cat keys fn? fn defn select-keys])
   (:require
    [fm.anomaly :as anomaly]
-   [fm.form :as form]
-   [fm.form.fn :as fn]
-   [fm.lib :as lib])
-  #?(:cljs (:require-macros fm.core)))
+   [fm.lib :as lib]
+   [fm.sequent :as sequent]
+   [fm.spec :as spec]
+   #?@(:clj
+       [[fm.form :as form]
+        [fm.form.fn]]))
+  #?(:cljs
+     (:require-macros fm.core)))
 
 
    ;;;
@@ -25,8 +29,10 @@
 
 
 (def conform-explain lib/conform-explain)
-(def conform-throw! lib/conform-throw!)
+(def conform-throw lib/conform-throw)
 (def conform-tag lib/conform-tag)
+(def tag lib/tag)
+(def which lib/which)
 
 
    ;;;
@@ -41,6 +47,7 @@
 (def rreduce lib/rreduce)
 (def deep-some lib/deep-some)
 (def evolve lib/evolve)
+(def evolve-xf lib/evolve-xf)
 
 
    ;;;
@@ -73,6 +80,7 @@
 (def deep-anomaly? anomaly/deep-anomaly?)
 (def anomalous? anomaly/anomalous?)
 (def unwrap-anomaly anomaly/unwrap)
+(def throw-anomaly anomaly/throw)
 
 
    ;;;
@@ -80,12 +88,37 @@
    ;;;
 
 
-(def form form/form)
-(def metadata form/metadata)
+#?(:clj (def form form/form))
+#?(:clj (def metadata form/metadata))
+
+
+   ;;;
+   ;;; NOTE: `fm.spec` api, macros
+   ;;;
+
+
+(def select-keys spec/select-keys)
+#?(:clj (defmacro or [& definition] `(spec/or ~@definition)))
+#?(:clj (defmacro cat [& definition] `(spec/cat ~@definition)))
+#?(:clj (defmacro alt [& definition] `(spec/alt ~@definition)))
+#?(:clj (defmacro keys [& definition] `(spec/keys ~@definition)))
+#?(:clj (defmacro keys* [& definition] `(spec/keys* ~@definition)))
+
+
+   ;;;
+   ;;; NOTE: `fm.sequent` api
+   ;;;
+
+
+(def nominal? sequent/nominal?)
+(def positional? sequent/positional?)
+(def combine sequent/combine)
+(def effect sequent/effect)
 
 
    ;;;
    ;;; NOTE: `fm.core` api
+   ;;; ALT: `fm.analysis` ns
    ;;;
 
 
@@ -94,15 +127,15 @@
 
 
    ;;;
-   ;;; NOTE: dynamic variables; default configuration
-   ;;; TODO: rework
+   ;;; NOTE: default `fm.form` configuration
    ;;;
 
 
-(def ^:dynamic *throw!* nil)
-(def ^:dynamic *trace* nil)
-(def ^:dynamic *trace-fn* `prn)
-(def ^:dynamic *anomaly-handler* `identity)
+(def defaults-atom
+  (atom
+   {:fm/trace    nil
+    :fm/trace-fn prn
+    :fm/handler  anomaly/throw}))
 
 
    ;;;
@@ -110,22 +143,18 @@
    ;;;
 
 
-(defmacro fn [& definition]
-  (form/form
-   {::fn/definition definition
-    ::form/ns       *ns*
-    ::fn/defaults   {:fm/throw!   *throw!*
-                     :fm/trace    *trace*
-                     :fm/trace-fn *trace-fn*
-                     :fm/handler  *anomaly-handler*}}
-   ::form/fn))
+#?(:clj (defmacro fn [& definition]
+          (form/form
+           {:fm.form.fn/defaults   @defaults-atom
+            :fm.form.fn/definition definition
+            :fm.form/env           &env
+            :fm.form/ns            *ns*}
+           :fm.form/fn)))
 
-(defmacro defn [& definition]
-  (form/form
-   {::fn/definition definition
-    ::form/ns       *ns*
-    ::fn/defaults   {:fm/throw!   *throw!*
-                     :fm/trace    *trace*
-                     :fm/trace-fn *trace-fn*
-                     :fm/handler  *anomaly-handler*}}
-   ::form/defn))
+#?(:clj (defmacro defn [& definition]
+          (form/form
+           {:fm.form.fn/defaults   @defaults-atom
+            :fm.form.fn/definition definition
+            :fm.form/env           &env
+            :fm.form/ns            *ns*}
+           :fm.form/defn)))

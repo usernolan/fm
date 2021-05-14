@@ -4,7 +4,9 @@
    [clojure.spec.alpha :as s]
    [fm.anomaly :as anomaly]
    [fm.form :as form]
-   [fm.lib :as lib]))
+   [fm.lib :as lib]
+   [fm.spec :as spec]
+   [fm.specs :as specs]))
 
 
    ;;;
@@ -14,8 +16,8 @@
 
 (s/def ::signature
   (s/cat
-   ::argv ::form/specv
-   ::retv (s/? ::form/specv)
+   ::argv ::specs/specv
+   ::retv (s/? ::specs/specv)
    ::body (s/+ any?))) ; ALT: `s/*`
 
 (s/def ::signatures
@@ -36,18 +38,9 @@
    ;;;
 
 
-(s/def ::metadata-fn-form
-  (s/or :list list?
-        :symbol symbol?))
-
 (s/def ::metadata-specv-form
   (s/or :fm.context/nominal (s/tuple vector?)
         :fm.context/positional vector?))
-
-(s/def ::metadata-spec-form
-  (s/or ::s/registry-keyword ::s/registry-keyword
-        ::metadata-fn-form ::metadata-fn-form
-        ::metadata-specv-form ::metadata-specv-form))
 
 
    ;;;
@@ -62,28 +55,21 @@
      (->
       hierarchy
       (derive :fm/ident                      :fm.metadata/default)
+      (derive :fm/sequent                    :fm.metadata/default)
       (derive :fm.metadata/signature-indexed :fm.metadata/default)
       (derive :fm.metadata/var-metadata      :fm.metadata/default)
       (derive :fm/arglists                   :fm.metadata/signature-indexed)
-      (derive :fm/throw!                     :fm.metadata/signature-indexed)
       (derive :fm/args                       :fm.metadata/signature-indexed)
       (derive :fm/ret                        :fm.metadata/signature-indexed)
       (derive :fm/rel                        :fm.metadata/signature-indexed)
       (derive :fm/trace                      :fm.metadata/signature-indexed)
       (derive :fm/conform                    :fm.metadata/signature-indexed)
       (derive :fm/handler                    :fm.metadata/signature-indexed)
-      (derive :fm/sequent                    :fm.metadata/signature-indexed)
-      (derive :fm.sequent/combine            :fm.metadata/signature-indexed)
-      #_(derive :fm/ignore                     :fm.metadata/signature-indexed)
-      #_(derive :fm/memoize                    :fm.metadata/signature-indexed)
       (derive :fm/arglists                   :fm.metadata/var-metadata)
       (derive :fm/doc                        :fm.metadata/var-metadata)
       (derive :fm/args                       :fm/spec)
       (derive :fm/ret                        :fm/spec)
       (derive :fm/rel                        :fm/spec)
-      (derive :fm.sequent/conse              :fm/sequent)
-      (derive :fm.sequent/nonse              :fm/sequent)
-      (derive :fm.sequent/merge              :fm/sequent)
       (derive ::args                         :fm.form.fn/argx)
       (derive ::combined-argxs               :fm.form.fn/argx)
       (derive ::argxs                        :fm.binding/implicitly-bound)
@@ -95,10 +81,10 @@
       (derive ::ex-handler                   :fm.binding/default)
       (derive :fm.form.fn/argx               :fm.binding/default)
       (derive :fm.binding/implicitly-bound   :fm.binding/default)
-      (derive :fm.throw/none                 :fm.throw/default)
-      (derive :fm.throw/plural               :fm.throw/default)
       (derive :fm.handler/singular           :fm.handler/default)
-      (derive :fm.handler/plural             :fm.handler/default)))))
+      (derive :fm.handler/plural             :fm.handler/default)
+      (derive :fm/handler                    :fm.defaults/default)
+      (derive :fm/trace-fn                   :fm.defaults/default)))))
 
 
    ;;;
@@ -108,11 +94,10 @@
 
 (defn conformed-definition [ctx]
   (try
-    (lib/conform-throw! ::definition (get ctx ::definition))
-    (catch #?(:clj Throwable :cljs :default) t
-      (let [msg  (str "Are all positional spec params in the registry?\n\n"
-                      (ex-message t))
-            data (merge ctx (ex-data t))]
+    (lib/conform-throw ::definition (get ctx ::definition))
+    (catch Throwable t
+      (let [msg  (ex-message t)
+            data (ex-data t)]
         (form/invalid-definition! msg data)))))
 
 (defn signature-tag [ctx]
@@ -193,7 +178,7 @@
                  (set? form) form
                  (not form)  (constantly false)
                  :else       (constantly true))]
-    (trace? tag))) ; TODO: revisit defaults
+    (trace? tag)))
 
 (defn conform? [ctx tag]
   (let [form     (or (get-in ctx [::metadata :fm/conform (signature-index ctx)])
@@ -204,37 +189,27 @@
                    :else       (constantly true))]
     (conform? tag)))
 
-(defn throw? [ctx]
-  (let [form   (or (get-in ctx [::metadata :fm/throw! (signature-index ctx)])
-                   (get-in ctx [::defaults :fm/throw!]))
-        throw? (boolean form)]
-    throw?))
-
 (defn sequent? [ctx]
-  (or (get-in ctx [::metadata :fm/sequent])
-      (get-in ctx [::defaults :fm/sequent])))
-
-(defn sequent-tag [ctx]
-  (get-in ctx [::metadata :fm/sequent (signature-index ctx)
-               :fm.sequent/ident]))
+  (boolean (or (get-in ctx [::metadata :fm/sequent])
+               (get-in ctx [::defaults :fm/sequent]))))
 
 
    ;;;
-   ;;; NOTE: [[Intro]] everything in this file is demand-driven by these methods
+   ;;; NOTE: everything in this file is demand-driven by these methods
    ;;;
 
 
 (defmethod form/form ::form/fn
   [ctx tag]
   (let [ctx        (ensure-ctx (assoc ctx ::form/ident tag))
-        tags       (vector :fm/args :fm/ret :fm/rel :fm/trace :fm/handler
-                           :fm.sequent/combine)
+        tags       (vector :fm/args :fm/ret :fm/rel :fm/trace :fm/handler)
         ctx        (form/bind ctx tags)
         bindings   (form/bindings ctx tags)
         sym        (form/form ctx ::simple-symbol)
         definition (form/forms ctx ::definition)
         metadata   (form/form ctx ::metadata)
-        body       `(with-meta (fn ~sym ~@definition) ~metadata)
+        fn-form    `(fn ~sym ~@definition)
+        body       (if (seq metadata) `(with-meta ~fn-form ~metadata) fn-form)
         form       (if (seq bindings) `(let [~@bindings] ~body) body)]
     form))
 
@@ -255,18 +230,13 @@
   (hash-set
    :fm.context/nominal
    ::s/registry-keyword
-   ::form/positional-binding-map))
+   ::specs/positional-binding-map))
 
 
    ;;;
    ;;; NOTE: `form/metadata` implementations
    ;;;
 
-
-(defmethod form/metadata [::form/fn :fm/sequent]
-  [ctx [_ sequent-tag]]
-  (let [form (form/form ctx [::metadata sequent-tag])]
-    (hash-map :fm/sequent form))) ; NOTE: normalize tag
 
 (defmethod form/metadata [::form/fn :fm.metadata/default]
   [ctx [_ tag]]
@@ -478,11 +448,19 @@
   (let [f (fn [x] (if (= x '&) x `any?))]
     (partial mapv f)))
 
-(def plural-combine-warning
-  (str
-   "Multiple `:fm.sequent/combine` forms specified; "
-   "all `:fm.sequent/combine` single-arities must be compatible."
-   "\n\nChoosing one at random..."))
+(defn plural-args-contexts? [ctx]
+  (let [contexts      (get ctx ::signature-contexts)
+        args-contexts (into (hash-set) (map :fm/args) contexts)]
+    (not (lib/singular? args-contexts))))
+
+(defn invalid-args-contexts! [ctx]
+  (let [ident    (get-in ctx [::metadata :fm/ident])
+        contexts (into (vector) (map :fm/args) (get ctx ::signature-contexts))
+        msg      (str "Multiple args contexts specified in sequent (" (symbol ident) "). "
+                      "This is currently unsupported due to unspecified combination semantics.\n\n"
+                      "Args contexts:\n" contexts)
+        data     (select-keys ctx [::signature-contexts])]
+    (form/invalid-definition! msg data)))
 
 
    ;;;
@@ -509,22 +487,16 @@
 
 (defmethod form/form ::body
   [ctx _]
-  (let [arglist (get-in ctx [::metadata :fm/arglists (signature-index ctx)])]
-    (cond
-      (not (throw? ctx)) (form/form ctx ::try)
-      (seq arglist)      (form/form ctx [::bind ::args])
-      :else              (form/form ctx [::bind ::ret]))))
+  (form/form ctx ::try))
 
 (defmethod form/form [::body :fm/sequent]
   [ctx _]
-  (let [throws (form/form ctx ::indexed-throw!-booleans)]
-    (if (every? true? throws)
-      (form/form ctx [::bind ::combined-argxs])
-      (form/form ctx [::try :fm/sequent]))))
+  (form/form ctx [::try :fm/sequent]))
 
 (defmethod form/form ::try
   [ctx _]
-  (let [args    (form/form ctx [::form/binding ::form/fn ::args])
+  (let [env     (get ctx ::form/env)
+        args    (form/form ctx [::form/binding ::form/fn ::args])
         args?   (or (symbol? args) (and (sequential? args) (seq args)))
         body    (if args?
                   (form/form ctx [::bind ::args])
@@ -533,22 +505,26 @@
         ident   (form/form ctx [::metadata :fm/ident])]
     `(try
        ~body
-       (catch Throwable thrown#
-         (~handler
-          {:fm/ident           ~ident
-           ::anomaly/ident     ::anomaly/thrown
-           ::anomaly/args      ~args
-           ::anomaly/throwable thrown#})))))
+       (catch ~(if (form/cljs? env) 'js/Object 'Throwable) thrown#
+         (let [ex-data# (ex-data thrown#)]
+           (~handler
+            (if (anomaly/anomaly? ex-data#)
+              ex-data#
+              {:fm/ident           ~ident
+               ::anomaly/ident     ::anomaly/thrown
+               ::anomaly/args      ~args
+               ::anomaly/throwable thrown#})))))))
 
 (defmethod form/form [::try :fm/sequent]
   [ctx _]
-  (let [body       (form/form ctx [::bind ::combined-argxs])
+  (let [env        (get ctx ::form/env)
+        body       (form/form ctx [::bind ::combined-argxs])
         ctx        (form/bind ctx [::thrown])
         thrown     (form/form ctx [::form/binding ::form/fn ::thrown])
         catch-body (form/form ctx [::catch-body :fm/sequent])]
     `(try
        ~body
-       (catch Throwable ~thrown
+       (catch ~(if (form/cljs? env) 'js/Object 'Throwable) ~thrown
          ~catch-body))))
 
 (defmethod form/form [::bind :fm.form.fn/argx]
@@ -625,27 +601,24 @@
 (defmethod form/form [::dispatch :fm.form.fn/argx :fm.signature/plural]
   [ctx [_ form-tag _]]
   (let [conformed (form/form ctx [::form/binding ::form/fn form-tag ::s/conformed])
-        throws    (form/form ctx ::indexed-throw!-booleans)
         tags      (map (comp keyword str) (range (count-signatures ctx)))
-        tag       (if (every? true? throws)
-                    [::dispatch form-tag :fm.signature/singular]
-                    [::try :fm/sequent ::signature])
         forms     (map (fn [index]
                          (let [ctx (assoc ctx ::signature-index index)]
-                           (form/form ctx tag)))
+                           (form/form ctx [::try :fm/sequent ::signature])))
                        (range (count-signatures ctx)))]
     `(case (first ~conformed)
        ~@(interleave tags forms))))
 
 (defmethod form/form [::try :fm/sequent ::signature]
   [ctx _]
-  (let [body       (form/form ctx [::dispatch ::combined-argxs :fm.signature/singular])
+  (let [env        (get ctx ::form/env)
+        body       (form/form ctx [::dispatch ::combined-argxs :fm.signature/singular])
         ctx        (form/bind ctx [::thrown])
         thrown     (form/form ctx [::form/binding ::form/fn ::thrown])
         catch-body (form/form ctx [::catch-body :fm/sequent ::signature])]
     `(try
        ~body
-       (catch Throwable ~thrown
+       (catch ~(if (form/cljs? env) 'js/Object 'Throwable) ~thrown
          ~catch-body))))
 
 (defmethod form/form [::bind :fm.form.fn/argx ::s/conformed]
@@ -662,7 +635,9 @@
   (let [ctx      (form/bind ctx [::ret])
         bindings (form/bindings ctx [::ret])
         trace    (when (trace? ctx :fm/ret) (form/forms ctx [::trace ::ret]))
+        ident    (form/form ctx [::metadata :fm/ident])
         handler  (form/form ctx [::form/binding ::form/fn :fm/handler])
+        args     (form/form ctx [::form/binding ::form/fn ::args])
         ret      (form/form ctx [::form/binding ::form/fn ::ret])
         body     (cond
                    (metadata? ctx :fm/ret) (form/form ctx [::validate ::ret])
@@ -671,7 +646,7 @@
     `(let [~@bindings]
        ~@trace
        (if (anomaly/anomaly? ~ret)
-         (~handler ~ret)
+         (~handler (merge {:fm/ident ~ident ::anomaly/args ~args} ~ret))
          ~body))))
 
 (defmethod form/form [::validate ::ret]
@@ -689,7 +664,7 @@
         body      (cond
                     (conform? ctx :fm/ret)  (form/form ctx [::bind ::ret ::s/conformed])
                     (metadata? ctx :fm/rel) (form/form ctx [::validate ::rel])
-                    :else                   (form/form ctx ::retx))]
+                    :else                   ret)]
     `(let [~@bindings]
        ~@trace
        (if (s/invalid? ~conformed)
@@ -712,16 +687,17 @@
 
 (defmethod form/form [::validate ::rel]
   [ctx _]
-  (let [ident (form/form ctx [::metadata :fm/ident])
-        rel   (form/form ctx [::form/binding ::form/fn :fm/rel])
-        args  (form/form ctx [::form/binding ::form/fn ::args])
-        ret   (form/form ctx [::form/binding ::form/fn ::ret])
-        retx  (form/form ctx ::retx)]
+  (let [ident   (form/form ctx [::metadata :fm/ident])
+        handler (form/form ctx [::form/binding ::form/fn :fm/handler])
+        rel     (form/form ctx [::form/binding ::form/fn :fm/rel])
+        args    (form/form ctx [::form/binding ::form/fn ::args])
+        ret     (form/form ctx [::form/binding ::form/fn ::ret])]
     `(if (s/valid? ~rel {:args ~args :ret ~ret})
-       ~retx
-       {:fm/ident        ~ident
-        ::anomaly/ident  ::anomaly/rel
-        ::s/explain-data (s/explain-data ~rel {:args ~args :ret ~ret})})))
+       ~ret
+       (~handler
+        {:fm/ident        ~ident
+         ::anomaly/ident  ::anomaly/rel
+         ::s/explain-data (s/explain-data ~rel {:args ~args :ret ~ret})}))))
 
 
   ;;
@@ -742,30 +718,26 @@
     (or (get-in ctx [::form/bindings :fm/trace index ::core.specs/local-name])
         (when-let [form (or (get-in ctx [::metadata :fm/trace index])
                             (get-in ctx [::defaults :fm/trace]))]
-          (let [pred? (some-fn true? set?)
-                fn?   (some-fn list? symbol?)]
+          (let [pred?        (some-fn true? set?)
+                fn?          (some-fn list? symbol?)
+                default-form (form/form ctx [::default :fm/trace-fn])]
             (cond
-              (pred? form)  (get-in ctx [::defaults :fm/trace-fn])
+              (pred? form)  default-form
               (fn? form)    form
               (false? form) nil ; ALT: `form`, `false`
-              :else         `(partial ~(get-in ctx [::defaults :fm/trace-fn]) ~form)))))))
+              :else         `(partial ~default-form ~form)))))))
 
   ;; ALT: anomaly map literal when `nil`
 (defmethod form/form [::form/binding ::form/fn :fm/handler]
   [ctx _]
   (let [index (signature-index ctx)]
     (or (get-in ctx [::form/bindings :fm/handler index ::core.specs/local-name])
-        (let [form (get-in ctx [::metadata :fm/handler index])
-              fn?  (some-fn list? symbol?)]
+        (let [form         (get-in ctx [::metadata :fm/handler index])
+              fn?          (some-fn list? symbol?)
+              default-form (form/form ctx [::default :fm/handler])]
           (cond
             (fn? form) form
-            :else      (get-in ctx [::defaults :fm/handler])))))) ; TODO: nil handler case
-
-(defmethod form/form [::form/binding ::form/fn :fm.sequent/combine]
-  [ctx _]
-  (let [index (signature-index ctx)]
-    (or (get-in ctx [::form/bindings :fm.sequent/combine index ::core.specs/local-name])
-        (get-in ctx [::metadata :fm/sequent index :fm.sequent/combine]))))
+            :else      default-form))))) ; TODO: nil handler case
 
 (defmethod form/form [::form/binding ::form/fn :fm.binding/default]
   [ctx [_ _ form-tag]]
@@ -793,7 +765,15 @@
     (name
      (or
       (get-in ctx [::conformed-definition :fm.definition/simple-symbol])
-      (gensym (name (get ctx ::form/ident)))))))) ; TODO: sequent
+      (and (get-in ctx [::metadata :fm/sequent]) (gensym 'sequent))
+      (gensym (name (get ctx ::form/ident))))))))
+
+(defmethod form/form [::metadata :fm/sequent]
+  [ctx _]
+  (let [outer    (get-in ctx [::outer-metadata :fm/sequent])
+        inners   (map :fm/sequent (get ctx ::inner-metadatas))
+        sequent? (boolean (or outer (some boolean inners)))]
+    sequent?))
 
 (defmethod form/form [::metadata :fm/arglists :fm.signature/singular]
   [ctx _]
@@ -815,8 +795,7 @@
                     :fm.context/nominal    (first data))]
     (form/form conformed tag)))
 
-(defmethod form/form [::metadata :fm/arglist ::form/conformed-param-list
-                      :fm.context/positional]
+(defmethod form/form [::metadata :fm/arglist ::form/conformed-param-list :fm.context/positional]
   [conformed tag]
   (let [params     (when-let [params (get conformed :params)]
                      (form/forms params (conj tag :params)))
@@ -824,8 +803,7 @@
                      (form/forms var-params (conj tag :var-params)))]
     `[~@params ~@var-params]))
 
-(defmethod form/form [::metadata :fm/arglist ::form/conformed-param-list
-                      :fm.context/nominal]
+(defmethod form/form [::metadata :fm/arglist ::form/conformed-param-list :fm.context/nominal]
   [conformed tag]
   (let [map-destructure (if-let [params (get conformed :params)]
                           (form/form params (conj tag :params))
@@ -835,8 +813,7 @@
                           map-destructure)]
     `[~map-destructure]))
 
-(defmethod form/form [::metadata :fm/arglist ::form/conformed-param-list
-                      :fm.context/nominal :params]
+(defmethod form/form [::metadata :fm/arglist ::form/conformed-param-list :fm.context/nominal :params]
   [params _]
   (into (hash-map) (map arglist-metadata) params))
 
@@ -844,7 +821,7 @@
   [k _]
   (symbol (name k)))
 
-(defmethod form/form [::metadata :fm/arglist ::form/positional-binding-map]
+(defmethod form/form [::metadata :fm/arglist ::specs/positional-binding-map]
   [m _]
   (normalized-arglist-metadata (first m)))
 
@@ -857,7 +834,7 @@
   (let [sym (symbol (name k))]
     (hash-map sym k)))
 
-(defmethod form/form [::metadata :fm/arglist ::form/nominal-binding-map]
+(defmethod form/form [::metadata :fm/arglist ::specs/nominal-binding-map]
   [m _]
   (into (hash-map) (map (juxt normalized-arglist-metadata first)) m))
 
@@ -892,8 +869,8 @@
 (defmethod form/form [::metadata :fm/spec :keyword] [k _] k)
 (defmethod form/form [::metadata :fm/spec ::s/registry-keyword] [k _] k)
 (defmethod form/form [::metadata :fm/spec ::core.specs/binding-form] [_ _] `any?) ; TODO: additional inference
-(defmethod form/form [::metadata :fm/spec ::form/positional-binding-map] [m _] (first (keys m)))
-(defmethod form/form [::metadata :fm/spec ::form/nominal-binding-map] [m _] (keys m))
+(defmethod form/form [::metadata :fm/spec ::specs/positional-binding-map] [m _] (first (keys m)))
+(defmethod form/form [::metadata :fm/spec ::specs/nominal-binding-map] [m _] (keys m))
 (defmethod form/form [::metadata :fm/spec ::form/conformed-specv]
   [[context data] [form-tag spec-tag _]]
   (let [tag       [form-tag spec-tag ::form/conformed-param-list context]
@@ -902,15 +879,13 @@
                     :fm.context/nominal    (first data))]
     (form/form conformed tag)))
 
-(defmethod form/form [::metadata :fm/spec ::form/conformed-param-list
-                      :fm.context/positional]
+(defmethod form/form [::metadata :fm/spec ::form/conformed-param-list :fm.context/positional]
   [conformed [form-tag spec-tag data-tag _]]
   (form/form conformed [form-tag spec-tag data-tag]))
 
-(defmethod form/form [::metadata :fm/spec ::form/conformed-param-list
-                      :fm.context/nominal]
+(defmethod form/form [::metadata :fm/spec ::form/conformed-param-list :fm.context/nominal]
   [conformed [form-tag spec-tag data-tag _]]
-  (vector ; NOTE: retain outer `[]` ; ALT: `hash-set` "keyset"
+  (vector ; NOTE: retain outer `[]`
    (vec
     (sort
      (form/form conformed [form-tag spec-tag data-tag])))))
@@ -928,47 +903,9 @@
   (let [ctx (assoc ctx ::form/tag :fm/doc)]
     (form/form ctx [::metadata :default])))
 
-(defmethod form/form [::metadata :fm/sequent]
+(defmethod form/form [::metadata :fm.metadata/default]
   [ctx tag]
   (form/form ctx (conj tag (signature-tag ctx))))
-
-(defmethod form/form [::metadata :fm/sequent :fm.signature/singular]
-  [ctx [_ sequent-tag _ :as tag]]
-  (let [data (get-in ctx [::outer-metadata sequent-tag])
-        form (if (true? data)
-               (let [tag [::metadata sequent-tag ::signature]]
-                 (form/form ctx tag))
-               data)]
-    (vector form)))
-
-(defmethod form/form [::metadata :fm/sequent :fm.signature/plural]
-  [ctx _]
-  (let [outer  (form/finda (get ctx ::outer-metadata) :fm/sequent)
-        inners (map
-                (fn [metadata] (form/finda metadata :fm/sequent))
-                (get ctx ::inner-metadatas))
-        forms  (map-indexed
-                (fn fallback [i inner]
-                  (let [[sequent-tag data] (or inner outer (rand-nth (filter some? inners)))]
-                    (if (true? data)
-                      (let [ctx (assoc ctx ::signature-index i)
-                            tag [::metadata sequent-tag ::signature]]
-                        (form/form ctx tag))
-                      data)))
-                inners)]
-    (vec forms))) ; TODO: `warn!` unspecified sequent signature
-
-  ;; TODO: warn unspecified mismatch ret context in `:fm.sequent/merge`
-  ;; TODO: `normalized-sequent-ident`
-(defmethod form/form [::metadata :fm/sequent ::signature]
-  [ctx [_ sequent-tag _]]
-  (let [context (get-in ctx [::signature-contexts (signature-index ctx) :fm/args])
-        combine (case context
-                  :fm.context/positional `lib/positional-combine
-                  :fm.context/nominal    `lib/nominal-combine)]
-    (hash-map
-     :fm.sequent/ident sequent-tag
-     :fm.sequent/combine combine)))
 
 (defmethod form/form [::metadata :fm.metadata/signature-indexed :fm.signature/plural]
   [ctx [_ meta-tag _]]
@@ -981,10 +918,6 @@
   [ctx [_ meta-tag _]]
   (let [metadata (get-in ctx [::outer-metadata meta-tag])]
     (vector metadata))) ; NOTE: vector for signature indexing
-
-(defmethod form/form [::metadata :fm.metadata/default]
-  [ctx tag]
-  (form/form ctx (conj tag (signature-tag ctx))))
 
 (defmethod form/form [::metadata :default]
   [ctx tag]
@@ -1030,12 +963,13 @@
 
 (defmethod form/form ::combined-argxs
   [ctx _]
-  (let [bindings (get-in ctx [::form/bindings :fm.sequent/combine])
-        bindings (map ::core.specs/local-name bindings)
-        _        (when-not (lib/singular? (set bindings))
-                   (form/warn! plural-combine-warning))
-        combine  (rand-nth bindings)
-        argxs    (form/form ctx [::form/binding ::form/fn ::argxs])]
+  (when (plural-args-contexts? ctx)
+    (invalid-args-contexts! ctx))
+  (let [context (get-in ctx [::signature-contexts 0 :fm/args]) ; ALT: `rand-nth`
+        combine (case context
+                  :fm.context/positional `lib/positional-combine
+                  :fm.context/nominal    `lib/nominal-combine)
+        argxs   (form/form ctx [::form/binding ::form/fn ::argxs])]
     `(~combine ~argxs)))
 
 (defmethod form/form [:fm.form.fn/argx ::s/conformed]
@@ -1056,97 +990,35 @@
         ret  (form/form ctx [::form/binding ::form/fn ::ret])]
     `(s/conform ~spec ~ret)))
 
-(defmethod form/form ::retx
-  [ctx _]
-  (let [t (or (sequent-tag ctx) :fm.sequent/conse)]
-    (form/form ctx [::retx t])))
-
-(defmethod form/form [::retx :fm.sequent/conse]
-  [ctx _]
-  (form/form ctx [::form/binding ::form/fn ::ret]))
-
-(defmethod form/form [::retx :fm.sequent/nonse]
-  [ctx _]
-  (form/form ctx [::form/binding ::form/fn ::args]))
-
-(defmethod form/form [::retx :fm.sequent/merge]
-  [ctx _]
-  (let [combine (get-in ctx [::metadata :fm/sequent (signature-index ctx)
-                             :fm.sequent/combine])
-        args    (form/form ctx [::form/binding ::form/fn ::args])
-        ret     (form/form ctx [::form/binding ::form/fn ::ret])]
-    `(~combine ~args ~ret)))
-
 (defmethod form/form [::catch-body :fm/sequent]
   [ctx tag]
-  (let [handlers          (form/form ctx ::indexed-handler-symbols)
-        throws            (form/form ctx ::indexed-throw!-booleans)
-        none-throw?       (every? (complement boolean) throws)
-        handler-singular? (lib/singular? (set handlers))
-        t                 (vector
-                           (if none-throw? :fm.throw/none :fm.throw/plural)
-                           (if handler-singular? :fm.handler/singular :fm.handler/plural))
-        tag               (lib/positional-combine [tag t])]
+  (let [handlers (form/form ctx ::indexed-handler-symbols)
+        t        (if (lib/singular? (set handlers)) :fm.handler/singular :fm.handler/plural)
+        tag      (lib/positional-combine [tag t])]
     (form/form ctx tag)))
 
-(defmethod form/form [::catch-body :fm/sequent :fm.throw/none :fm.handler/singular]
+(defmethod form/form [::catch-body :fm/sequent :fm.handler/singular]
   [ctx tag]
   (let [handler  (form/form ctx [::form/binding ::form/fn :fm/handler])
         ctx      (form/bind ctx [::ex-data])
         bindings (form/bindings ctx [::ex-data])
-        tag      (lib/positional-combine [tag ::anomaly ::anomaly/thrown])
+        tag      (lib/positional-combine [tag ::anomaly])
         anomaly  (form/form ctx tag)]
     `(let [~@bindings]
        (~handler ~anomaly))))
 
-(defmethod form/form [::catch-body :fm/sequent :fm.throw/none :fm.handler/plural]
+(defmethod form/form [::catch-body :fm/sequent :fm.handler/plural]
   [ctx tag]
   (let [tags     (vector ::ex-data ::ex-signature-index ::ex-handler)
         ctx      (form/bind ctx tags)
         bindings (form/bindings ctx tags)
         handler  (form/form ctx [::form/binding ::form/fn ::ex-handler])
-        tag      (lib/positional-combine [tag ::anomaly ::anomaly/thrown])
+        tag      (lib/positional-combine [tag ::anomaly])
         anomaly  (form/form ctx tag)]
     `(let [~@bindings]
        (~handler ~anomaly))))
 
-(defmethod form/form [::catch-body :fm/sequent :fm.throw/plural :fm.handler/singular]
-  [ctx tag]
-  (let [tags     (vector ::ex-data ::ex-signature-index)
-        ctx      (form/bind ctx tags)
-        bindings (form/bindings ctx tags)
-        handler  (form/form ctx [::form/binding ::form/fn :fm/handler])
-        thrown   (form/form ctx [::form/binding ::form/fn ::thrown])
-        data     (form/form ctx [::form/binding ::form/fn ::ex-data])
-        index    (form/form ctx [::form/binding ::form/fn ::ex-signature-index])
-        throws   (form/form ctx ::indexed-throw!-booleans)
-        tag      (lib/positional-combine [tag ::anomaly ::anomaly/thrown])
-        anomaly  (form/form ctx tag)]
-    `(let [~@bindings]
-       (if (get ~throws ~index false)
-         (throw (get ~data ::anomaly/thrown ~thrown))
-         (~handler ~anomaly)))))
-
-(defmethod form/form [::catch-body :fm/sequent :fm.throw/plural :fm.handler/plural]
-  [ctx tag]
-  (let [ctx       (form/bind ctx [::ex-data ::ex-signature-index ::ex-handler])
-        bindings1 (form/bindings ctx [::ex-data ::ex-signature-index])
-        thrown    (form/form ctx [::form/binding ::form/fn ::thrown])
-        data      (form/form ctx [::form/binding ::form/fn ::ex-data])
-        index     (form/form ctx [::form/binding ::form/fn ::ex-signature-index])
-        throws    (form/form ctx ::indexed-throw!-booleans)
-        bindings2 (form/bindings ctx [::ex-handler])
-        handler   (form/form ctx [::form/binding ::form/fn ::ex-handler])
-        tag       (lib/positional-combine [tag ::anomaly ::anomaly/thrown])
-        anomaly   (form/form ctx tag)]
-    `(let [~@bindings1]
-       (if (get ~throws ~index false)
-         (throw (get ~data ::anomaly/throwable ~thrown))
-         (let [~@bindings2]
-           (~handler ~anomaly))))))
-
-(defmethod form/form [::catch-body :fm/sequent :fm.throw/default :fm.handler/default
-                      ::anomaly ::anomaly/thrown]
+(defmethod form/form [::catch-body :fm/sequent :fm.handler/default ::anomaly]
   [ctx _]
   (let [ident  (form/form ctx [::metadata :fm/ident])
         argxs  (form/form ctx [::form/binding ::form/fn ::argxs])
@@ -1160,28 +1032,24 @@
         ::anomaly/throwable ~thrown})))
 
 (defmethod form/form [::catch-body :fm/sequent ::signature]
-  [ctx tag]
-  (let [handler (form/form ctx [::form/binding ::form/fn :fm/handler])
-        throws  (form/form ctx ::indexed-throw!-booleans)
-        tag     (lib/positional-combine [tag ::anomaly ::anomaly/thrown])
-        anomaly (form/form ctx tag)
-        form    (if (get throws (signature-index ctx))
-                  `(throw (ex-info (str ::anomaly/thrown) ~anomaly))
-                  `(~handler ~anomaly))]
-    form))
-
-(defmethod form/form [::catch-body :fm/sequent ::signature
-                      ::anomaly ::anomaly/thrown]
   [ctx _]
-  (let [ident  (form/form ctx [::metadata :fm/ident])
-        args   (form/form ctx [::form/binding ::form/fn ::combined-argxs])
-        thrown (form/form ctx [::form/binding ::form/fn ::thrown])
-        index  (signature-index ctx)]
-    {:fm/ident           ident
-     ::anomaly/ident     ::anomaly/thrown
-     ::anomaly/args      args
-     ::anomaly/throwable thrown
-     ::signature-index   index}))
+  (let [ctx      (form/bind ctx [::ex-data])
+        bindings (form/bindings ctx [::ex-data])
+        ident    (form/form ctx [::metadata :fm/ident])
+        handler  (form/form ctx [::form/binding ::form/fn :fm/handler])
+        args     (form/form ctx [::form/binding ::form/fn ::combined-argxs])
+        thrown   (form/form ctx [::form/binding ::form/fn ::thrown])
+        data     (form/form ctx [::form/binding ::form/fn ::ex-data])
+        index    (signature-index ctx)]
+    `(let [~@bindings]
+       (~handler
+        (if (anomaly/anomaly? ~data)
+          ~data
+          {:fm/ident           ~ident
+           ::anomaly/ident     ::anomaly/thrown
+           ::anomaly/args      ~args
+           ::anomaly/throwable ~thrown
+           ::signature-index   ~index})))))
 
 (defmethod form/form ::indexed-handler-symbols
   [ctx _]
@@ -1189,16 +1057,6 @@
    (vector)
    (map ::core.specs/local-name)
    (get-in ctx [::form/bindings :fm/handler])))
-
-(defmethod form/form ::indexed-throw!-booleans
-  [ctx _]
-  (if-let [forms (seq (get-in ctx [::metadata :fm/throw!]))]
-    (into (vector) (map boolean) forms)
-    (let [b (boolean (get-in ctx [::defaults :fm/throw!]))]
-      (into
-       (vector)
-       (map (constantly b))
-       (range (count-signatures ctx))))))
 
 (defmethod form/form ::ex-data
   [ctx _]
@@ -1214,7 +1072,7 @@
   [ctx _]
   (let [handlers (form/form ctx ::indexed-handler-symbols)
         index    (form/form ctx [::form/binding ::form/fn ::ex-signature-index])
-        fallback (first (remove nil? handlers))]
+        fallback (first (remove nil? handlers))] ; TODO: `outer` handler
     `(get ~handlers ~index ~fallback)))
 
 (defmethod form/form ::var-symbol
@@ -1231,34 +1089,25 @@
 
 (defmethod form/form [::s/form :fm/spec]
   [ctx [_ spec-tag :as tag]]
-  (when-let [data (get-in ctx [::metadata spec-tag (signature-index ctx)])]
-    (let [[t _] (lib/conform-throw! ::metadata-spec-form data)
-          ctx   (if (= t ::metadata-specv-form) (assoc ctx spec-tag data) data)]
-      (form/form ctx (conj tag t)))))
+  (when-let [data (get-in ctx [::metadata spec-tag (signature-index ctx)])] ; NOTE: optional, e.g. no `:fm/ret` specified
+    (if (vector? data)
+      (let [ctx     (assoc ctx spec-tag data)
+            context (lib/which ::metadata-specv-form data)
+            tag     (into tag [::metadata-specv-form context])]
+        (form/form ctx tag))
+      data)))
 
-(defmethod form/form [::s/form :fm/spec ::s/registry-keyword] [k _] k)
-(defmethod form/form [::s/form :fm/spec ::metadata-fn-form] [form _] form) ; NOTE: may require `s/spec` in spec2
-(defmethod form/form [::s/form :fm/spec ::metadata-specv-form]
-  [ctx [_ spec-tag _ :as tag]]
-  (let [specv       (get ctx spec-tag)
-        [context _] (lib/conform-throw! ::metadata-specv-form specv)
-        ctx         (case context
-                      :fm.context/positional specv
-                      :fm.context/nominal    ctx)]
-    (form/form ctx (conj tag context))))
-
-(defmethod form/form [::s/form :fm/spec ::metadata-specv-form
-                      :fm.context/positional]
-  [specv tag]
-  (let [parts      (partition-by (hash-set '&) specv)
+(defmethod form/form [::s/form :fm/spec ::metadata-specv-form :fm.context/positional]
+  [ctx [_ spec-tag _ _ :as tag]]
+  (let [specv      (get ctx spec-tag)
+        parts      (partition-by (hash-set '&) specv)
         var?       (> (count parts) 1)
         var-only?  (= (count parts) 2)
         params     (when (not var-only?) (form/forms (first parts) (conj tag :params)))
         var-params (when var? (form/forms (first (last parts)) (conj tag :var-params)))]
     `(s/cat ~@params ~@var-params)))
 
-(defmethod form/form [::s/form :fm/spec ::metadata-specv-form
-                      :fm.context/nominal]
+(defmethod form/form [::s/form :fm/spec ::metadata-specv-form :fm.context/nominal]
   [ctx [_ spec-tag _ _]]
   (let [default-ns     (str (get ctx ::form/ns))
         ks             (first (get ctx spec-tag))
@@ -1269,7 +1118,7 @@
                          (let [xf     (comp (partial keyword default-ns) name)
                                req-un (into (vector) (map xf) req-un)]
                            `(:req-un ~req-un)))]
-    `(s/keys ~@req-forms ~@req-un-forms)))
+    `(spec/keys ~@req-forms ~@req-un-forms)))
 
 (defmethod form/form [::s/form :fm/args :fm/sequent]
   [ctx tag]
@@ -1284,21 +1133,25 @@
   (let [tag-fn  (comp keyword str)
         form-fn (fn [index]
                   (let [ctx (assoc ctx ::signature-index index)]
-                    (or
-                     (form/form ctx [::s/form spec-tag])
-                     (let [arglist (get-in ctx [::normalized-arglists index])
-                           anys    (mapv-any? arglist)
-                           ctx     (assoc ctx spec-tag anys)
-                           tag     [::s/form spec-tag ::metadata-specv-form]]
-                       (form/form ctx tag)))))
-        tagged  (mapcat
-                 (juxt tag-fn form-fn)
-                 (range (count-signatures ctx)))]
-    `(s/or ~@tagged))) ; ALT: `fm../sum` spec-op; `s/or-of` spec2 wiki example
+                    (or (form/form ctx [::s/form spec-tag])
+                        (let [anys (mapv-any? (get-in ctx [::normalized-arglists index]))
+                              ctx  (assoc ctx spec-tag anys)
+                              tag  [::s/form spec-tag ::metadata-specv-form :fm.context/positional]]
+                          (form/form ctx tag)))))
+        forms   (mapcat (juxt tag-fn form-fn)
+                        (range (count-signatures ctx)))]
+    `(s/or ~@forms)))
 
 (defmethod form/form [::s/form :fm/spec :fm/sequent]
-  [ctx [_ spec-tag _ _]]
+  [ctx [_ spec-tag _]]
   (form/form ctx [::s/form spec-tag]))
+
+(defmethod form/form [::default :fm.defaults/default]
+  [ctx [_ default-tag]]
+  (let [env (get ctx ::form/env)]
+    (if (form/cljs? env)
+      `(get @fm.core/defaults-atom ~default-tag)
+      (get-in ctx [::defaults default-tag]))))
 
 
    ;;;
@@ -1337,24 +1190,20 @@
         body  (form/form ctx [::body :fm/sequent])]
     `([& ~argxs] ~body)))
 
-(defmethod form/forms [::metadata :fm/arglist ::form/conformed-param-list
-                       :fm.context/positional :params]
+(defmethod form/forms [::metadata :fm/arglist ::form/conformed-param-list :fm.context/positional :params]
   [params _]
   (map arglist-metadata params))
 
-(defmethod form/forms [::metadata :fm/arglist ::form/conformed-param-list
-                       :fm.context/positional :var-params]
+(defmethod form/forms [::metadata :fm/arglist ::form/conformed-param-list :fm.context/positional :var-params]
   [var-params _]
   (let [var-form (arglist-metadata (get var-params :var-form))]
     `(& ~var-form)))
 
-(defmethod form/forms [::metadata :fm/spec ::form/conformed-param-list
-                       :params]
+(defmethod form/forms [::metadata :fm/spec ::form/conformed-param-list :params]
   [params _]
   (mapcat (comp lib/ensure-sequential args-metadata) params))
 
-(defmethod form/forms [::metadata :fm/spec ::form/conformed-param-list
-                       :var-params]
+(defmethod form/forms [::metadata :fm/spec ::form/conformed-param-list :var-params]
   [var-params _]
   (let [var-form (args-metadata (get var-params :var-form))]
     `(& ~var-form)))
@@ -1379,15 +1228,13 @@
         forms (list form)]
     forms))
 
-(defmethod form/forms [::s/form :fm/spec ::metadata-specv-form
-                       :fm.context/positional :params]
+(defmethod form/forms [::s/form :fm/spec ::metadata-specv-form :fm.context/positional :params]
   [params _]
   (let [ixf (fn [i param] (vector (keyword (str i)) param))
         xf  (comp (map-indexed ixf) cat)]
-    (into (vector) xf params))) ; ALT: (map-indexed (evolve [f identity]))
+    (into (vector) xf params))) ; TODO: wrap regex-ops in `s/spec`
 
-(defmethod form/forms [::s/form :fm/spec ::metadata-specv-form
-                       :fm.context/positional :var-params]
+(defmethod form/forms [::s/form :fm/spec ::metadata-specv-form :fm.context/positional :var-params]
   [var-params _]
   (if (= var-params `any?)
     `(:& (s/* ~var-params))
@@ -1404,8 +1251,7 @@
   (s/def ::defaults
     (s/keys
      :opt
-     [:fm/throw!
-      :fm/trace
+     [:fm/trace
       :fm/trace-fn
       :fm/handler]))
 
@@ -1442,11 +1288,6 @@
      ::definition string?
      ::signature-indexed (s/* (s/alt :fm/doc :fm/doc :nil nil?))))
 
-  (s/def :fm/throw!
-    (s/or
-     ::definition boolean?
-     ::signature-indexed (s/* (s/alt :fm/throw! :fm/throw! :nil nil?))))
-
   (s/def :fm/args
     (s/or
      ::definition ::metadata-spec-form
@@ -1478,10 +1319,7 @@
      ::definition ::metadata-fn-form
      ::signature-indexed (s/* (s/alt :fm/handler :fm/handler :nil nil?))))
 
-  (s/def :fm/sequent
-    (s/or
-     ::definition (s/keys :req [:fm.sequent/ident :fm.sequent/combine])
-     ::signature-indexed (s/* (s/alt :fm/sequent :fm/sequent :nil nil?)))) ; TODO: revisit; full definition
+  (s/def :fm/sequent boolean?)
 
   (s/def ::metadata
     (s/keys
@@ -1489,16 +1327,13 @@
      [:fm/ident
       :fm/arglists
       :fm/doc
-      :fm/throw!
       :fm/args
       :fm/ret
       :fm/rel
       :fm/trace
       :fm/conform
       :fm/handler
-      :fm/sequent
-      #_:fm/ignore
-      #_:fm/memoize]))
+      :fm/sequent]))
 
   (s/def ::outer-metadata (s/or ::metadata ::metadata :nil nil?))
   (s/def ::inner-metadatas (s/* ::outer-metadata)) ; ALT: inner-metadata

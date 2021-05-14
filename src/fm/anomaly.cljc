@@ -15,18 +15,31 @@
 
 
    ;;;
+   ;;; NOTE: anomaly helpers
+   ;;;
+
+
+(defn geta [m k]
+  (lib/geta @indicator-hierarchy-atom m k))
+
+(defn geta-in [m path]
+  (lib/geta-in @indicator-hierarchy-atom m path))
+
+(defn finda [m k]
+  (lib/finda @indicator-hierarchy-atom m k))
+
+(defn contains-indicator? [m]
+  (boolean
+   (geta m ::ident)))
+
+
+   ;;;
    ;;; NOTE: predicates, specs
    ;;;
 
 
-(defn contains-indicator? [m]
-  (boolean
-   (lib/geta @indicator-hierarchy-atom m ::ident)))
-
 (s/def :fm/anomaly
-  (s/and
-   map?
-   contains-indicator?))
+  (s/and map? contains-indicator?))
 
 (def anomaly?
   (partial s/valid? :fm/anomaly))
@@ -38,9 +51,7 @@
   (comp boolean deep-anomaly))
 
 (s/def :fm/deep-anomaly
-  (s/and
-   coll?
-   deep-anomaly?))
+  (s/and coll? deep-anomaly?))
 
 (s/def :fm/anomalous
   (s/or
@@ -49,21 +60,6 @@
 
 (def anomalous?
   (partial s/valid? :fm/anomalous))
-
-
-   ;;;
-   ;;; NOTE: anomaly helpers
-   ;;;
-
-
-(defn geta [m k]
-  (lib/geta @indicator-hierarchy-atom m k)) ; ALT: partial apply
-
-(defn geta-in [m path]
-  (lib/geta-in @indicator-hierarchy-atom m path))
-
-(defn finda [m k]
-  (lib/finda @indicator-hierarchy-atom m k))
 
 
    ;;;
@@ -78,3 +74,7 @@
         (recur nested)
         a)
       a)))
+
+(defn throw [anomaly]
+  (let [msg (pr-str ((juxt :fm/ident ::ident) anomaly))]
+    (throw (ex-info msg anomaly))))
