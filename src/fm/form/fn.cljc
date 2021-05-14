@@ -657,6 +657,7 @@
        ~body)))
 
   ;; TODO: `:fm.anomaly/deep-detect`, `:fm/ignore`
+  ;; TODO: unify `::ret`, `::retx`
 (defmethod form/form [::bind ::ret]
   [ctx _]
   (let [ctx      (form/bind ctx [::ret])
@@ -667,6 +668,7 @@
         body     (cond
                    (metadata? ctx :fm/ret) (form/form ctx [::validate ::ret])
                    (metadata? ctx :fm/rel) (form/form ctx [::validate ::rel])
+                   (sequent? ctx)          (form/form ctx ::retx)
                    :else                   ret)]
     `(let [~@bindings]
        ~@trace

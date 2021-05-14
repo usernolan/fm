@@ -715,5 +715,18 @@
      :fm/handler  `identity}}
    ::form/defn)
 
+  (form/form
+   {::form/ns *ns*
+    ::definition
+    '(^:fm.sequent/nonse
+      [a]
+      'b)
+    ::defaults
+    {:fm/throw!   nil
+     :fm/trace    nil
+     :fm/trace-fn `prn
+     :fm/handler  `identity}}
+   ::form/defn)
+
   ;;;
   )
