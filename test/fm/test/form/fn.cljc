@@ -699,7 +699,7 @@
      :fm/trace    nil
      :fm/trace-fn `prn
      :fm/handler  `identity}}
-   ::form/defn)
+   ::form/fn)
 
   (form/form
    {::form/ns *ns*
@@ -713,7 +713,7 @@
      :fm/trace    nil
      :fm/trace-fn `prn
      :fm/handler  `identity}}
-   ::form/defn)
+   ::form/fn)
 
   (form/form
    {::form/ns *ns*
@@ -726,7 +726,60 @@
      :fm/trace    nil
      :fm/trace-fn `prn
      :fm/handler  `identity}}
-   ::form/defn)
+   ::form/fn)
+
+    ;; NOTE: `s/keys` validates all qualified keys
+  (form/form
+   {::form/ns *ns*
+    ::definition
+    '(^{:fm/args [(s/keys :req [::a ::b])]}
+      [m]
+      m)
+    ::defaults
+    {:fm/throw!   nil
+     :fm/trace    nil
+     :fm/trace-fn `prn
+     :fm/handler  `identity}}
+   ::form/fn)
+
+  (form/form
+   {::form/ns *ns*
+    ::definition
+    '(^{:fm/ret (s/keys :req [::a ::b])}
+      [x]
+      {::a 1 ::b 2 ::c 'y}) ; NOTE: invalid `::c`
+    ::defaults
+    {:fm/throw!   nil
+     :fm/trace    nil
+     :fm/trace-fn `prn
+     :fm/handler  `identity}}
+   ::form/fn)
+
+    ;; NOTE: `select-keys` intuition patchwork for spec sugar
+  (form/form
+   {::form/ns *ns*
+    ::definition
+    '([[::a ::b :as m]]
+      m)
+    ::defaults
+    {:fm/throw!   nil
+     :fm/trace    nil
+     :fm/trace-fn `prn
+     :fm/handler  `identity}}
+   ::form/fn)
+
+  (form/form
+   {::form/ns *ns*
+    ::definition
+    '([x]
+      [[::a ::b]]
+      {::a 1 ::b 2 ::c 'y}) ; NOTE: `::c` is ignored
+    ::defaults
+    {:fm/throw!   nil
+     :fm/trace    nil
+     :fm/trace-fn `prn
+     :fm/handler  `identity}}
+   ::form/fn)
 
   ;;;
   )
