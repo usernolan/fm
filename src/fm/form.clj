@@ -3,8 +3,7 @@
   (:require
    [clojure.core.specs.alpha :as core.specs]
    [clojure.spec.alpha :as s]
-   [fm.lib :as lib]
-   #?@(:cljs [[fm.cljs]])))
+   [fm.lib :as lib]))
 
 
    ;;;
@@ -46,19 +45,13 @@
 
 (defn invalid-definition! [msg data]
   (let [msg (str "\n:: Invalid definition ::\n\n" msg)]
-    (throw (ex-info msg data)))) ; TODO: `tools.logging`
+    (throw (ex-info msg data))))
 
 (def warn!
-  (comp prn (partial str "\n:: Warning ::\n\n"))) ; TODO: `tools.logging`
+  (comp prn (partial str "\n:: Warning ::\n\n")))
 
-(defn geta [m k]
-  (lib/geta @form-hierarchy-atom m k)) ; ALT: partial apply
-
-(defn geta-in [m path]
-  (lib/geta-in @form-hierarchy-atom m path))
-
-(defn finda [m k]
-  (lib/finda @form-hierarchy-atom m k))
+(def cljs?
+  (comp boolean :ns)) ; NOTE: takes `&env`
 
 
    ;;;
@@ -138,11 +131,14 @@
         binding-form (cond
                        (some? extant) (get extant ::symbol)
                        (ident? form)  form
+                       (lib/fn? form) form
                        :else          (gensym (name (first (lib/ensure-sequential tag)))))
-        local-name   (local-name-for binding-form)]
-    (if (or (some? extant) (ident? form))
-      (hash-map ::core.specs/binding-form binding-form ::core.specs/local-name local-name)
-      (hash-map ::core.specs/binding-form binding-form ::core.specs/local-name local-name ::form form))))
+        local-name   (local-name-for binding-form)
+        binding      (hash-map ::core.specs/binding-form binding-form
+                               ::core.specs/local-name local-name)]
+    (if (or (some? extant) (ident? form) (lib/fn? form))
+      binding
+      (assoc binding ::form form))))
 
 
    ;;;
@@ -153,62 +149,6 @@
 (defmethod binding :default
   [ctx tag]
   (default-binding ctx tag))
-
-
-   ;;;
-   ;;; NOTE: low-level predicates, specs
-   ;;;
-
-
-(s/def ::s/registry-keyword
-   qualified-keyword?)
-
-(s/def ::positional-binding-map
-  (s/map-of
-   ::s/registry-keyword
-   ::core.specs/binding-form
-   :count 1))
-
-(s/def ::positional-binding-form
-  (s/or
-   ::s/registry-keyword ::s/registry-keyword
-   ::positional-binding-map ::positional-binding-map
-   ::core.specs/binding-form ::core.specs/binding-form))
-
-  ;; NOTE: see `::core.specs/param-list`
-(s/def ::positional-param-list
-  (s/cat
-   :params (s/* ::positional-binding-form)
-   :var-params (s/? (s/cat
-                     :ampersand #{'&}
-                     :var-form ::positional-binding-form))
-   :as-form (s/? (s/cat
-                  :as #{:as}
-                  :as-sym ::core.specs/local-name))))
-
-(s/def ::nominal-binding-map
-  (s/map-of
-   keyword?
-   ::core.specs/binding-form))
-
-(s/def ::nominal-binding-form
-  (s/or
-   :keyword keyword? ; NOTE: `:req-un`
-   ::nominal-binding-map ::nominal-binding-map))
-
-(s/def ::nominal-param-list
-  (s/cat
-   :params (s/* ::nominal-binding-form)
-   :as-form (s/? (s/cat
-                  :as #{:as}
-                  :as-sym ::core.specs/local-name))))
-
-(s/def ::specv
-  (s/and
-   vector?
-   (s/or
-    :fm.context/nominal (s/tuple ::nominal-param-list)
-    :fm.context/positional ::positional-param-list)))
 
 
    ;;;
@@ -240,17 +180,3 @@
 
   ;;;
   )
-
-  ;; NOTE: `spec2` requires symbolic specs, otherwise wrap `s/spec`
-  ;; NOTE: `spec2` may alter symbolic predicate style preferences
-  ;; TODO: revisit `lib/conform-throw!`
-  ;; TODO: revisit `ctx` identifier
-  ;; TODO: revisit `::defaults`
-  ;; TODO: revisit tags
-  ;; TODO: `:fm/ignore`, runtime `*ignore*`, `s/*compile-asserts*`, etc.
-  ;; TODO: `:fm/memoize`
-  ;; TODO: global spec form deduplication; `registry`, `bind!`
-  ;; TODO: test generators
-  ;; ALT: reader literals; (vector ,,,) vs. [,,,], `into`
-  ;; ALT: qualify positional tags e.g. (s/cat :fm.signature/0 ,,,)
-  ;; ALT: `core.match`; [tag x]

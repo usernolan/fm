@@ -7,7 +7,7 @@
   (rand-nth
    (combinatorics/cartesian-product
     #{:function :failure :formal :frequency :fix :free :functor :form}
-    #{:metadata :mode :method :modulation :merge :monad :map :markup
+    #{:meaning :metadata :mode :method :modulation :merge :monad :map :markup
       :medium :multi :meta :manifold :monoid :modulus :morphism :meron}
     ;; sometimes #{:language}
     )))
