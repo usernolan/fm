@@ -511,6 +511,7 @@
             (if (anomaly/anomaly? ex-data#)
               ex-data#
               {:fm/ident           ~ident
+               :fm/f               ~(symbol (name ident))
                ::anomaly/ident     ::anomaly/thrown
                ::anomaly/args      ~args
                ::anomaly/throwable thrown#})))))))
@@ -570,6 +571,7 @@
        (if (s/invalid? ~conformed)
          (~handler
           {:fm/ident        ~ident
+           :fm/f            ~(symbol (name ident))
            ::anomaly/ident  ::anomaly/args
            ::s/explain-data (s/explain-data ~args-spec ~args)})
          ~body))))
@@ -646,7 +648,12 @@
     `(let [~@bindings]
        ~@trace
        (if (anomaly/anomaly? ~ret)
-         (~handler (merge {:fm/ident ~ident ::anomaly/args ~args} ~ret))
+         (~handler
+          (merge
+           {:fm/ident      ~ident
+            :fm/f          ~(symbol (name ident))
+            ::anomaly/args ~args}
+           ~ret))
          ~body))))
 
 (defmethod form/form [::validate ::ret]
@@ -670,6 +677,7 @@
        (if (s/invalid? ~conformed)
          (~handler
           {:fm/ident        ~ident
+           :fm/f            ~(symbol (name ident))
            ::anomaly/ident  ::anomaly/ret
            ::anomaly/args   ~args
            ::s/explain-data (s/explain-data ~ret-spec ~ret)})
@@ -696,6 +704,7 @@
        ~ret
        (~handler
         {:fm/ident        ~ident
+         :fm/f            ~(symbol (name ident))
          ::anomaly/ident  ::anomaly/rel
          ::s/explain-data (s/explain-data ~rel {:args ~args :ret ~ret})}))))
 
@@ -1027,6 +1036,7 @@
     `(if (anomaly/anomaly? ~data)
        ~data
        {:fm/ident           ~ident
+        :fm/f               ~(symbol (name ident))
         ::anomaly/ident     ::anomaly/thrown
         ::anomaly/args      (vec ~argxs)
         ::anomaly/throwable ~thrown})))
@@ -1046,6 +1056,7 @@
         (if (anomaly/anomaly? ~data)
           ~data
           {:fm/ident           ~ident
+           :fm/f               ~(symbol (name ident))
            ::anomaly/ident     ::anomaly/thrown
            ::anomaly/args      ~args
            ::anomaly/throwable ~thrown

@@ -32,6 +32,9 @@
   (boolean
    (geta m ::ident)))
 
+(defn ident [m]
+  (geta m ::ident))
+
 
    ;;;
    ;;; NOTE: predicates, specs
@@ -75,6 +78,7 @@
         a)
       a)))
 
+;; TODO: cljs?
 (defn throw [anomaly]
   (let [msg (pr-str ((juxt :fm/ident ::ident) anomaly))]
     (throw (ex-info msg anomaly))))
