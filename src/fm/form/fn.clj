@@ -573,6 +573,7 @@
           {:fm/ident        ~ident
            :fm/f            ~(symbol (name ident))
            ::anomaly/ident  ::anomaly/args
+           ::anomaly/args   ~args
            ::s/explain-data (s/explain-data ~args-spec ~args)})
          ~body))))
 
@@ -728,7 +729,7 @@
         (when-let [form (or (get-in ctx [::metadata :fm/trace index])
                             (get-in ctx [::defaults :fm/trace]))]
           (let [pred?        (some-fn true? set?)
-                fn?          (some-fn list? symbol?)
+                fn?          (some-fn list? symbol? keyword?)
                 default-form (form/form ctx [::default :fm/trace-fn])]
             (cond
               (pred? form)  default-form
@@ -742,7 +743,7 @@
   (let [index (signature-index ctx)]
     (or (get-in ctx [::form/bindings :fm/handler index ::core.specs/local-name])
         (let [form         (get-in ctx [::metadata :fm/handler index])
-              fn?          (some-fn list? symbol?)
+              fn?          (some-fn list? symbol? keyword?)
               default-form (form/form ctx [::default :fm/handler])]
           (cond
             (fn? form) form
