@@ -1,18 +1,11 @@
 # fm
 
 ```clojure
-(require '[clojure.math.combinatorics :as combinatorics])
+(s/def ::a int?)
+(s/def ::b int?)
 
-(def fm
-  (rand-nth
-   (combinatorics/cartesian-product
-    #{:function :failure :formal :frequency :fix :free :functor :form}
-    #{:meaning :metadata :mode :method :modulation :merge :monad :map :markup
-      :medium :multi :meta :manifold :monoid :modulus :morphism :meron}
-    ;; sometimes #{:language}
-    )))
-
-  ;; NOTE: I don't know what any of these words mean
+(fm/defn add [::a ::b]
+  (+ a b))
 ```
 
 # 
